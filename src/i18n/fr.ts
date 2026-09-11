@@ -24,7 +24,6 @@ export const fr: Dictionary = {
 
   app: {
     title: "ProPresenter Garage",
-    tagline: "Comparer et analyser les listes de médias",
     schema: "schéma {version}",
     offline: "fonctionne hors ligne",
     offlineHelp: "Les fichiers sont lus dans votre navigateur. Rien n'est envoyé.",
@@ -36,16 +35,6 @@ export const fr: Dictionary = {
     footnoteAfter: "(non officiel). Sans lien avec Renewed Vision.",
   },
 
-  slots: {
-    baseline: "Référence",
-    compare: "Comparer avec",
-    baselineHint: "Déposez votre fichier Media ici, ou cliquez pour le choisir",
-    compareHint: "Facultatif — déposez un second fichier Media pour voir les différences",
-    replace: "Remplacer",
-    items: ["{n} élément", "{n} éléments"],
-    playlists: ["{n} liste", "{n} listes"],
-    appOn: "ProPresenter {version} · {platform}",
-  },
 
   fidelity: {
     identical: "sans perte",
@@ -63,31 +52,18 @@ export const fr: Dictionary = {
     empty: "Ce fichier est vide.",
     notProtobuf:
       "Ce n'est pas un fichier de liste ProPresenter (échec du décodage protobuf : {reason})",
-    wrongPlaylistType:
-      "Il s'agit d'une liste {type}, pas d'une liste de médias. Choisissez le fichier nommé « Media » dans votre dossier ProPresenter.",
+    wrongPlaylistType: "Il s'agit d'une liste {actual}, pas d'une liste {expected}.",
     playlistType: {
       unknown: "inconnue",
       presentation: "de présentations",
       media: "de médias",
       audio: "audio",
     },
+    pickFileHint:
+      "Choisissez le fichier nommé « {filename} » dans votre dossier ProPresenter.",
   },
 
-  start: {
-    heading: "Chargez un fichier de liste de médias pour commencer",
-    whereWindows: "Sous Windows il se trouve dans",
-    whereMac: "sous macOS dans",
-    noExtension: "Il n'a pas d'extension.",
-    oneOrTwo: "Un fichier donne une analyse. Deux fichiers donnent une comparaison.",
-  },
 
-  tabs: {
-    diff: "Différences",
-    audit: "Analyse",
-    browse: "Parcourir",
-    diffDisabled: "Chargez un second fichier pour comparer",
-    baselineSuffix: "(référence)",
-  },
 
   diff: {
     summary: "Résumé",
@@ -231,6 +207,41 @@ export const fr: Dictionary = {
     system: "Système",
     light: "Clair",
     dark: "Sombre",
+  },
+
+  tools: {
+    mediaBin: {
+      name: "Médias",
+      tagline: "Comparer et analyser les listes de médias",
+
+      baseline: "Référence",
+      compare: "Comparer avec",
+      baselineHint: "Déposez votre fichier Media ici, ou cliquez pour le choisir",
+      compareHint:
+        "Facultatif — déposez un second fichier Media pour voir les différences",
+      baselineSuffix: "(référence)",
+      pickFileHint:
+        "Choisissez le fichier nommé « Media » dans votre dossier ProPresenter.",
+
+      startHeading: "Chargez un fichier de liste de médias pour commencer",
+      whereWindows: "Sous Windows il se trouve dans",
+      whereMac: "sous macOS dans",
+      noExtension: "Il n'a pas d'extension.",
+      oneOrTwo:
+        "Un fichier donne une analyse. Deux fichiers donnent une comparaison.",
+
+      replace: "Remplacer",
+      items: ["{n} élément", "{n} éléments"],
+      playlists: ["{n} liste", "{n} listes"],
+      appOn: "ProPresenter {version} · {platform}",
+
+      diffDisabled: "Chargez un second fichier pour comparer",
+      tabs: {
+        diff: "Différences",
+        audit: "Analyse",
+        browse: "Parcourir",
+      },
+    },
   },
 
   units: {

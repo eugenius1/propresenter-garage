@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Eusebius Ngemera
 
-import { enumLabel, type RawDoc } from "./decode";
+import { decodeDocument, enumLabel, type RawDoc } from "./decode";
 
 /**
  * A normalised view of a media-bin playlist document.
@@ -323,6 +323,16 @@ function rawItems(raw: any): any[] {
 function externalRootLabel(external: any): string {
   const volume = external.macos?.volume_name ?? external.win32?.volume_name ?? external.win32?.drive_letter;
   return volume ? `EXTERNAL:${String(volume).toLowerCase()}` : "EXTERNAL";
+}
+
+/**
+ * Decode a media-bin document, rejecting any other playlist kind.
+ *
+ * The kind lives here rather than at each call site: `decodeDocument` is shared
+ * by every tool, and this is the Media Bin's own entry point into it.
+ */
+export function decodeMediaDocument(bytes: Uint8Array): RawDoc {
+  return decodeDocument(bytes, "media");
 }
 
 export function buildLibrary(doc: RawDoc): MediaLibrary {

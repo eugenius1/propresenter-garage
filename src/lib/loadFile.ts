@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Eusebius Ngemera
 
-import { checkFidelity, DecodeError, decodeDocument, type Fidelity } from "./decode";
-import { buildLibrary, type MediaLibrary } from "./model";
+import { checkFidelity, DecodeError, type Fidelity } from "./decode";
+import { buildLibrary, decodeMediaDocument, type MediaLibrary } from "./model";
 import type { I18n } from "../i18n/core";
 
 export interface LoadedFile {
@@ -18,7 +18,7 @@ export async function loadMediaFile(file: File): Promise<LoadedFile> {
   const buffer = new Uint8Array(await file.arrayBuffer());
   if (buffer.length === 0) throw new DecodeError("empty");
 
-  const doc = decodeDocument(buffer);
+  const doc = decodeMediaDocument(buffer);
   const { fidelity, exportSafe } = checkFidelity(buffer);
 
   return {

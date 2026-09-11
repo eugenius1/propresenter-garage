@@ -10,8 +10,20 @@ export const PROTO_VERSION = protoVersion;
 const root = protobuf.Root.fromJSON(descriptor as protobuf.INamespace);
 const PlaylistDocument = root.lookupType("rv.data.PlaylistDocument");
 
-/** ProPresenter writes this on media-bin playlist files. */
-const TYPE_MEDIA = 2;
+/**
+ * The playlist kinds a tool can ask for.
+ *
+ * `PlaylistDocument` is one message serving all of them, distinguished only by
+ * its `type` field -- so every tool decodes through the same path and states
+ * which kind it expects.
+ */
+export type PlaylistKind = "presentation" | "media" | "audio";
+
+const KIND_TYPE: Record<PlaylistKind, number> = {
+  presentation: 1,
+  media: 2,
+  audio: 3,
+};
 
 export type RawDoc = protobuf.Message<{}> & Record<string, any>;
 
@@ -36,15 +48,24 @@ export class DecodeError extends Error {
   }
 }
 
-export function decodeDocument(bytes: Uint8Array): RawDoc {
+/**
+ * Decode a playlist document, rejecting it unless it is the expected kind.
+ *
+ * The error names both the expected and the actual kind, so the interface can
+ * say what was wanted rather than hardcoding one tool's advice.
+ */
+export function decodeDocument(bytes: Uint8Array, expected: PlaylistKind): RawDoc {
   let doc: RawDoc;
   try {
     doc = PlaylistDocument.decode(bytes) as RawDoc;
   } catch (e) {
     throw new DecodeError("notProtobuf", { reason: (e as Error).message });
   }
-  if (doc.type !== TYPE_MEDIA) {
-    throw new DecodeError("wrongPlaylistType", { type: playlistTypeKey(doc.type) });
+  if (doc.type !== KIND_TYPE[expected]) {
+    throw new DecodeError("wrongPlaylistType", {
+      expected,
+      actual: playlistTypeKey(doc.type),
+    });
   }
   return doc;
 }
@@ -114,6 +135,11 @@ function canonical(bytes: Uint8Array): string {
   return JSON.stringify(PlaylistDocument.toObject(msg, TO_OBJECT));
 }
 
+/** Decode without checking the kind -- for fidelity work, where it is irrelevant. */
+function decodeAnyKind(bytes: Uint8Array): RawDoc {
+  return PlaylistDocument.decode(bytes) as RawDoc;
+}
+
 /**
  * The safety gate on the export feature.
  *
@@ -124,7 +150,7 @@ function canonical(bytes: Uint8Array): string {
  * so a merely non-canonical original is not mistaken for data loss.
  */
 export function checkFidelity(bytes: Uint8Array): FidelityReport {
-  const reEncoded = encodeDocument(PlaylistDocument.decode(bytes) as RawDoc);
+  const reEncoded = encodeDocument(decodeAnyKind(bytes));
 
   const sameBytes =
     reEncoded.length === bytes.length && reEncoded.every((b, i) => b === bytes[i]);

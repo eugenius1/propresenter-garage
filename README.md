@@ -170,8 +170,18 @@ English/French localisation, and light/dark/system appearance.
 
 Not yet implemented: reorganising and exporting. The gate above is the
 prerequisite, and it passes on real files — so the remaining work is the
-editing UI, not the file writing. The app is also still a single tool rather
-than a shell with several; navigation arrives with the second tool.
+editing UI, not the file writing.
+
+`App.tsx` is the shell — title, appearance and language controls, licence —
+and renders the active tool; `src/tools/MediaBin.tsx` owns everything specific
+to that tool, including its own file state. Tool strings live under
+`tools.mediaBin` in the dictionaries, and `decodeDocument(bytes, kind)` takes
+the playlist kind the caller wants rather than assuming Media.
+
+Tool selection, routing and a registry are deliberately absent: those are
+answers to questions the second tool has not asked, and inventing extension
+points for one tool tends to produce extension points the second one works
+around.
 
 ## Licence
 

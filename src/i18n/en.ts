@@ -20,7 +20,6 @@ export const en = {
 
   app: {
     title: "ProPresenter Garage",
-    tagline: "Compare and audit media-bin playlists",
     schema: "schema {version}",
     offline: "runs offline",
     offlineHelp: "Files are read in your browser. Nothing is uploaded.",
@@ -32,16 +31,6 @@ export const en = {
     footnoteAfter: "(unofficial). Not affiliated with Renewed Vision.",
   },
 
-  slots: {
-    baseline: "Baseline",
-    compare: "Compare against",
-    baselineHint: "Drop your Media file here, or click to pick it",
-    compareHint: "Optional — drop a second Media file to see what changed",
-    replace: "Replace",
-    items: ["{n} item", "{n} items"],
-    playlists: ["{n} playlist", "{n} playlists"],
-    appOn: "ProPresenter {version} · {platform}",
-  },
 
   fidelity: {
     identical: "lossless",
@@ -57,31 +46,18 @@ export const en = {
   errors: {
     empty: "That file is empty.",
     notProtobuf: "Not a ProPresenter playlist file (protobuf decode failed: {reason})",
-    wrongPlaylistType:
-      'This is a {type} playlist, not a media playlist. Pick the file named "Media" from your ProPresenter folder.',
+    wrongPlaylistType: "This is a {actual} playlist, not a {expected} playlist.",
     playlistType: {
       unknown: "unknown",
       presentation: "presentation",
       media: "media",
       audio: "audio",
     },
+    /** Appended by a tool that knows which file it wants. */
+    pickFileHint: 'Pick the file named "{filename}" from your ProPresenter folder.',
   },
 
-  start: {
-    heading: "Load a Media playlist file to begin",
-    whereWindows: "On Windows it lives in",
-    whereMac: "on macOS in",
-    noExtension: "It has no file extension.",
-    oneOrTwo: "One file gives you an audit. Two files give you a diff.",
-  },
 
-  tabs: {
-    diff: "Diff",
-    audit: "Audit",
-    browse: "Browse",
-    diffDisabled: "Load a second file to compare",
-    baselineSuffix: "(baseline)",
-  },
 
   diff: {
     summary: "Summary",
@@ -222,6 +198,38 @@ export const en = {
     system: "System",
     light: "Light",
     dark: "Dark",
+  },
+
+  tools: {
+    mediaBin: {
+      name: "Media Bin",
+      tagline: "Compare and audit media-bin playlists",
+
+      baseline: "Baseline",
+      compare: "Compare against",
+      baselineHint: "Drop your Media file here, or click to pick it",
+      compareHint: "Optional — drop a second Media file to see what changed",
+      baselineSuffix: "(baseline)",
+      pickFileHint: 'Pick the file named "Media" from your ProPresenter folder.',
+
+      startHeading: "Load a Media playlist file to begin",
+      whereWindows: "On Windows it lives in",
+      whereMac: "on macOS in",
+      noExtension: "It has no file extension.",
+      oneOrTwo: "One file gives you an audit. Two files give you a diff.",
+
+      replace: "Replace",
+      items: ["{n} item", "{n} items"],
+      playlists: ["{n} playlist", "{n} playlists"],
+      appOn: "ProPresenter {version} · {platform}",
+
+      diffDisabled: "Load a second file to compare",
+      tabs: {
+        diff: "Diff",
+        audit: "Audit",
+        browse: "Browse",
+      },
+    },
   },
 
   units: {

@@ -2,14 +2,14 @@
 // Copyright (C) 2026 Eusebius Ngemera
 
 import { beforeAll, describe, expect, it } from "vitest";
-import { decodeDocument, encodeDocument } from "../decode";
-import { buildLibrary } from "../model";
+import { encodeDocument } from "../decode";
+import { buildLibrary, decodeMediaDocument } from "../model";
 import { auditLibrary } from "../audit";
 import { diffLibraries } from "../diff";
 import { hasRealFile, readRealFile } from "./fixtures";
 
 function clone(bytes: Uint8Array) {
-  return decodeDocument(encodeDocument(decodeDocument(bytes)));
+  return decodeMediaDocument(encodeDocument(decodeMediaDocument(bytes)));
 }
 
 function rawNodes(raw: any, out: any[] = []): any[] {
@@ -37,7 +37,7 @@ describe.skipIf(!hasRealFile)("variants versus duplicates", () => {
   });
 
   it("treats the same file with different mirroring as separate entries", () => {
-    const lib = buildLibrary(decodeDocument(bytes));
+    const lib = buildLibrary(decodeMediaDocument(bytes));
     const mirrored = lib.items.filter((i) => i.modifications.flippedHorizontally);
     expect(mirrored.length).toBeGreaterThan(0);
 
@@ -52,7 +52,7 @@ describe.skipIf(!hasRealFile)("variants versus duplicates", () => {
   });
 
   it("does not report mirrored or filtered pairs as duplicates", () => {
-    const audit = auditLibrary(buildLibrary(decodeDocument(bytes)));
+    const audit = auditLibrary(buildLibrary(decodeMediaDocument(bytes)));
     const duplicates = [...audit.withinPlaylistDuplicates, ...audit.crossPlaylistDuplicates];
     for (const g of duplicates) {
       const fingerprints = new Set(g.items.map((i) => i.modifications.fingerprint));
@@ -61,7 +61,7 @@ describe.skipIf(!hasRealFile)("variants versus duplicates", () => {
   });
 
   it("surfaces those pairs as variants instead", () => {
-    const audit = auditLibrary(buildLibrary(decodeDocument(bytes)));
+    const audit = auditLibrary(buildLibrary(decodeMediaDocument(bytes)));
     expect(audit.variantGroups.length).toBeGreaterThan(0);
     for (const g of audit.variantGroups) {
       expect(g.variants.length).toBeGreaterThan(1);
@@ -79,7 +79,7 @@ describe.skipIf(!hasRealFile)("variants versus duplicates", () => {
     })!;
     drawingOf(target).scale_behavior = 2;
 
-    const before = buildLibrary(decodeDocument(bytes));
+    const before = buildLibrary(decodeMediaDocument(bytes));
     const after = buildLibrary(mutated);
 
     const beforeItem = before.items.find((i) => i.uuid === target.uuid.string)!;
@@ -99,7 +99,7 @@ describe.skipIf(!hasRealFile)("variants versus duplicates", () => {
     drawingOf(target).flipped_horizontally = true;
 
     const result = diffLibraries(
-      buildLibrary(decodeDocument(bytes)),
+      buildLibrary(decodeMediaDocument(bytes)),
       buildLibrary(mutated)
     );
     expect(result.counts.restyled).toBe(1);
@@ -123,7 +123,7 @@ describe.skipIf(!hasRealFile)("variants versus duplicates", () => {
     const effects = drawing.effects?.length ? drawing.effects : target.cue.actions.find((a: any) => a.media).media.effects;
     effects[0].enabled = false;
 
-    const result = diffLibraries(buildLibrary(decodeDocument(bytes)), buildLibrary(mutated));
+    const result = diffLibraries(buildLibrary(decodeMediaDocument(bytes)), buildLibrary(mutated));
     expect(result.counts.restyled).toBe(1);
     const detail = result.changes.find((c) => c.type === "restyled")!.detail;
     expect(detail.kind).toBe("mods");

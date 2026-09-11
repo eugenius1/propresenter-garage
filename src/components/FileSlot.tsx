@@ -9,6 +9,8 @@ import { useI18n, type I18n } from "../i18n";
 interface Props {
   role: string;
   hint: string;
+  /** Extra guidance shown when the file is the wrong kind of playlist. */
+  wrongKindHint?: string;
   file: LoadedFile | null;
   onLoad: (file: LoadedFile) => void;
   onClear: () => void;
@@ -26,8 +28,13 @@ function fidelityHelp({ t }: I18n, fidelity: Fidelity): string {
   }[fidelity];
 }
 
-/** Turn a thrown error into a sentence in the reader's language. */
-function errorMessage(i18n: I18n, error: unknown): string {
+/**
+ * Turn a thrown error into a sentence in the reader's language.
+ *
+ * `hint` is supplied by the tool, which is the only thing that knows which file
+ * it wanted; the shared error only knows which kind it got.
+ */
+function errorMessage(i18n: I18n, error: unknown, hint?: string): string {
   const { t, f } = i18n;
   if (error instanceof DecodeError) {
     switch (error.code) {
@@ -36,15 +43,21 @@ function errorMessage(i18n: I18n, error: unknown): string {
       case "notProtobuf":
         return f(t.errors.notProtobuf, { reason: error.params.reason ?? "" });
       case "wrongPlaylistType": {
-        const key = (error.params.type ?? "unknown") as keyof typeof t.errors.playlistType;
-        return f(t.errors.wrongPlaylistType, { type: t.errors.playlistType[key] });
+        const kinds = t.errors.playlistType;
+        const actual = (error.params.actual ?? "unknown") as keyof typeof kinds;
+        const expected = (error.params.expected ?? "unknown") as keyof typeof kinds;
+        const message = f(t.errors.wrongPlaylistType, {
+          actual: kinds[actual],
+          expected: kinds[expected],
+        });
+        return hint ? `${message} ${hint}` : message;
       }
     }
   }
   return (error as Error).message;
 }
 
-export function FileSlot({ role, hint, file, onLoad, onClear }: Props) {
+export function FileSlot({ role, hint, wrongKindHint, file, onLoad, onClear }: Props) {
   const i18n = useI18n();
   const { t, plural, f } = i18n;
   const input = useRef<HTMLInputElement>(null);
@@ -58,7 +71,7 @@ export function FileSlot({ role, hint, file, onLoad, onClear }: Props) {
     try {
       onLoad(await loadMediaFile(picked));
     } catch (e) {
-      setError(errorMessage(i18n, e));
+      setError(errorMessage(i18n, e, wrongKindHint));
     }
   }
 
@@ -97,13 +110,13 @@ export function FileSlot({ role, hint, file, onLoad, onClear }: Props) {
         </span>
       </div>
       <div className="slot-meta">
-        <span>{plural(t.slots.items, lib.items.length)}</span>
-        <span>{plural(t.slots.playlists, lib.playlists.length)}</span>
+        <span>{plural(t.tools.mediaBin.items, lib.items.length)}</span>
+        <span>{plural(t.tools.mediaBin.playlists, lib.playlists.length)}</span>
         <span>{formatBytes(file.bytes, i18n)}</span>
-        <span>{f(t.slots.appOn, { version: lib.appVersion, platform: lib.platform })}</span>
+        <span>{f(t.tools.mediaBin.appOn, { version: lib.appVersion, platform: lib.platform })}</span>
       </div>
       <div className="slot-actions">
-        <button className="btn" onClick={onClear}>{t.slots.replace}</button>
+        <button className="btn" onClick={onClear}>{t.tools.mediaBin.replace}</button>
       </div>
     </div>
   );

@@ -4,8 +4,8 @@
 // Print the audit for a Media file as plain text.
 //   npm run report -- /path/to/ProPresenter/Media [--lang=fr]
 import fs from "node:fs";
-import { checkFidelity, decodeDocument } from "./lib/decode";
-import { buildLibrary } from "./lib/model";
+import { checkFidelity } from "./lib/decode";
+import { buildLibrary, decodeMediaDocument } from "./lib/model";
 import { auditLibrary } from "./lib/audit";
 import { createI18n, detectLanguage, LANGUAGES, type Lang } from "./i18n/core";
 import { describeModsInline } from "./i18n/describe";
@@ -27,7 +27,7 @@ const i18n = createI18n(lang);
 const { t, f, num, quote, plural } = i18n;
 
 const bytes = new Uint8Array(fs.readFileSync(path));
-const lib = buildLibrary(decodeDocument(bytes));
+const lib = buildLibrary(decodeMediaDocument(bytes));
 const audit = auditLibrary(lib);
 const { fidelity } = checkFidelity(bytes);
 
@@ -40,8 +40,8 @@ console.log(
 );
 console.log(
   [
-    plural(t.slots.items, audit.totals.items),
-    plural(t.slots.playlists, audit.totals.playlists),
+    plural(t.tools.mediaBin.items, audit.totals.items),
+    plural(t.tools.mediaBin.playlists, audit.totals.playlists),
     `${num(audit.totals.video)} ${t.library.video}`,
     `${num(audit.totals.image)} ${t.library.image}`,
     `${num(audit.totals.modified)} ${t.library.modified}`,

@@ -2,15 +2,15 @@
 // Copyright (C) 2026 Eusebius Ngemera
 
 import { beforeAll, describe, expect, it } from "vitest";
-import { decodeDocument, encodeDocument } from "../decode";
-import { buildLibrary } from "../model";
+import { encodeDocument } from "../decode";
+import { buildLibrary, decodeMediaDocument } from "../model";
 import { diffLibraries } from "../diff";
 import { auditLibrary } from "../audit";
 import { hasRealFile, readRealFile } from "./fixtures";
 
 /** Deep-clone a decoded document by round-tripping it through the wire format. */
 function clone(bytes: Uint8Array) {
-  return decodeDocument(encodeDocument(decodeDocument(bytes)));
+  return decodeMediaDocument(encodeDocument(decodeMediaDocument(bytes)));
 }
 
 /** Depth-first walk over raw playlist nodes. */
@@ -32,7 +32,7 @@ describe.skipIf(!hasRealFile)("diff against a mutated copy of a real library", (
   });
 
   it("reports no changes when nothing changed", () => {
-    const a = buildLibrary(decodeDocument(bytes));
+    const a = buildLibrary(decodeMediaDocument(bytes));
     const b = buildLibrary(clone(bytes));
     const result = diffLibraries(a, b);
     expect(result.changes).toEqual([]);
@@ -44,7 +44,7 @@ describe.skipIf(!hasRealFile)("diff against a mutated copy of a real library", (
     const pl = playlistsWithItems(mutated)[0];
     const [dropped] = pl.items.items.splice(0, 1);
 
-    const result = diffLibraries(buildLibrary(decodeDocument(bytes)), buildLibrary(mutated));
+    const result = diffLibraries(buildLibrary(decodeMediaDocument(bytes)), buildLibrary(mutated));
     expect(result.counts.removed).toBe(1);
     expect(result.counts.added).toBe(0);
     expect(result.changes[0].item.uuid).toBe(dropped.uuid.string);
@@ -56,7 +56,7 @@ describe.skipIf(!hasRealFile)("diff against a mutated copy of a real library", (
     const [item] = from.items.items.splice(0, 1);
     to.items.items.push(item);
 
-    const result = diffLibraries(buildLibrary(decodeDocument(bytes)), buildLibrary(mutated));
+    const result = diffLibraries(buildLibrary(decodeMediaDocument(bytes)), buildLibrary(mutated));
     expect(result.counts.moved).toBe(1);
     expect(result.counts.added).toBe(0);
     expect(result.counts.removed).toBe(0);
@@ -71,7 +71,7 @@ describe.skipIf(!hasRealFile)("diff against a mutated copy of a real library", (
     const mutated = clone(bytes);
     playlistsWithItems(mutated)[0].items.items[0].name = "Renamed For Test";
 
-    const result = diffLibraries(buildLibrary(decodeDocument(bytes)), buildLibrary(mutated));
+    const result = diffLibraries(buildLibrary(decodeMediaDocument(bytes)), buildLibrary(mutated));
     expect(result.counts.renamed).toBe(1);
     expect(result.changes[0].detail).toMatchObject({ kind: "rename", to: "Renamed For Test" });
   });
@@ -82,7 +82,7 @@ describe.skipIf(!hasRealFile)("diff against a mutated copy of a real library", (
     item.cue.actions.find((a: any) => a.media).media.element.url.local.path =
       "Media/Assets/somewhere-else.mp4";
 
-    const result = diffLibraries(buildLibrary(decodeDocument(bytes)), buildLibrary(mutated));
+    const result = diffLibraries(buildLibrary(decodeMediaDocument(bytes)), buildLibrary(mutated));
     expect(result.counts.relinked).toBe(1);
     expect(result.changes[0].detail).toMatchObject({
       kind: "relink",
@@ -98,7 +98,7 @@ describe.skipIf(!hasRealFile)("diff against a mutated copy of a real library", (
     const media = item.cue.actions.find((a: any) => a.media).media;
     media.transition_duration = (media.transition_duration ?? 0) + 2.5;
 
-    const result = diffLibraries(buildLibrary(decodeDocument(bytes)), buildLibrary(mutated));
+    const result = diffLibraries(buildLibrary(decodeMediaDocument(bytes)), buildLibrary(mutated));
     expect(result.counts.retimed).toBe(1);
     expect(result.changes[0].detail).toMatchObject({
       kind: "playback",
@@ -111,7 +111,7 @@ describe.skipIf(!hasRealFile)("diff against a mutated copy of a real library", (
     const item = playlistsWithItems(mutated)[0].items.items[0];
     item.uuid.string = "00000000-0000-4000-8000-000000000abc";
 
-    const result = diffLibraries(buildLibrary(decodeDocument(bytes)), buildLibrary(mutated));
+    const result = diffLibraries(buildLibrary(decodeMediaDocument(bytes)), buildLibrary(mutated));
     expect(result.counts.added).toBe(0);
     expect(result.counts.removed).toBe(0);
     expect(result.changes.every((c) => c.fuzzy)).toBe(true);
@@ -125,7 +125,7 @@ describe.skipIf(!hasRealFile)("diff against a mutated copy of a real library", (
         if (url?.absolute_string) url.absolute_string = `D:\\NewLocation\\${url.local.path.replace(/\//g, "\\")}`;
       }
     }
-    const result = diffLibraries(buildLibrary(decodeDocument(bytes)), buildLibrary(mutated));
+    const result = diffLibraries(buildLibrary(decodeMediaDocument(bytes)), buildLibrary(mutated));
     expect(result.changes).toEqual([]);
   });
 
@@ -136,7 +136,7 @@ describe.skipIf(!hasRealFile)("diff against a mutated copy of a real library", (
     expect(itemCount).toBeGreaterThan(1);
     pl.name = `${pl.name} 2026`;
 
-    const result = diffLibraries(buildLibrary(decodeDocument(bytes)), buildLibrary(mutated));
+    const result = diffLibraries(buildLibrary(decodeMediaDocument(bytes)), buildLibrary(mutated));
     // A playlist rename is one structural change, not `itemCount` moves.
     expect(result.counts.moved).toBe(0);
     expect(result.counts.added).toBe(0);
@@ -152,21 +152,21 @@ describe.skipIf(!hasRealFile)("diff against a mutated copy of a real library", (
     to.items.items.push(item);
     to.name = `${to.name} renamed`;
 
-    const result = diffLibraries(buildLibrary(decodeDocument(bytes)), buildLibrary(mutated));
+    const result = diffLibraries(buildLibrary(decodeMediaDocument(bytes)), buildLibrary(mutated));
     expect(result.counts.moved).toBe(1);
   });
 
   it("detects a renamed playlist", () => {
     const mutated = clone(bytes);
     playlistsWithItems(mutated)[0].name = "Renamed Playlist";
-    const result = diffLibraries(buildLibrary(decodeDocument(bytes)), buildLibrary(mutated));
+    const result = diffLibraries(buildLibrary(decodeMediaDocument(bytes)), buildLibrary(mutated));
     expect(result.playlistChanges.some((c) => c.type === "renamed")).toBe(true);
   });
 });
 
 describe.skipIf(!hasRealFile)("audit", () => {
   it("separates within-playlist duplicates from cross-playlist ones", () => {
-    const audit = auditLibrary(buildLibrary(decodeDocument(readRealFile())));
+    const audit = auditLibrary(buildLibrary(decodeMediaDocument(readRealFile())));
     for (const g of audit.withinPlaylistDuplicates) expect(g.repeatedWithin.length).toBeGreaterThan(0);
     for (const g of audit.crossPlaylistDuplicates) expect(g.repeatedWithin).toEqual([]);
     expect(audit.totals.items).toBeGreaterThan(0);

@@ -6,8 +6,7 @@ import { en } from "../en";
 import { fr } from "../fr";
 import { createI18n, detectLanguage, DICTIONARIES, interpolate, LANGUAGES } from "..";
 import { describeModsInline } from "../describe";
-import { decodeDocument } from "../../lib/decode";
-import { buildLibrary } from "../../lib/model";
+import { buildLibrary, decodeMediaDocument } from "../../lib/model";
 import { auditLibrary } from "../../lib/audit";
 import { hasRealFile, readRealFile } from "../../lib/__tests__/fixtures";
 
@@ -39,7 +38,7 @@ describe("dictionaries", () => {
     // Proper nouns and format-only strings are legitimately shared.
     const allowed = new Set([
       "meta.localeTag", "meta.name", "meta.quoteOpen", "meta.quoteClose", "meta.colon",
-      "app.title", "app.footnoteLink", "slots.appOn",
+      "app.title", "app.footnoteLink", "tools.mediaBin.appOn",
       "library.image", "library.audio", "kinds.image", "kinds.audio",
       "errors.playlistType.audio", "playback.none",
     ]);
@@ -93,15 +92,15 @@ describe("plural rules", () => {
   it("uses the singular for zero in French but the plural in English", () => {
     // French treats zero as singular. An `n === 1` test would render
     // "0 éléments", which is wrong.
-    expect(FR.plural(FR.t.slots.items, 0)).toBe("0 élément");
-    expect(EN.plural(EN.t.slots.items, 0)).toBe("0 items");
+    expect(FR.plural(FR.t.tools.mediaBin.items, 0)).toBe("0 élément");
+    expect(EN.plural(EN.t.tools.mediaBin.items, 0)).toBe("0 items");
   });
 
   it("agrees on one and many", () => {
-    expect(FR.plural(FR.t.slots.items, 1)).toBe("1 élément");
-    expect(FR.plural(FR.t.slots.items, 2)).toBe("2 éléments");
-    expect(EN.plural(EN.t.slots.items, 1)).toBe("1 item");
-    expect(EN.plural(EN.t.slots.items, 2)).toBe("2 items");
+    expect(FR.plural(FR.t.tools.mediaBin.items, 1)).toBe("1 élément");
+    expect(FR.plural(FR.t.tools.mediaBin.items, 2)).toBe("2 éléments");
+    expect(EN.plural(EN.t.tools.mediaBin.items, 1)).toBe("1 item");
+    expect(EN.plural(EN.t.tools.mediaBin.items, 2)).toBe("2 items");
   });
 
   it("formats numbers for the locale", () => {
@@ -158,7 +157,7 @@ describe.skipIf(!hasRealFile)("language independence of analysis", () => {
     // The duplicate identity must never depend on the chosen language. An
     // earlier version built it from English display strings, which would have
     // made French readers see a different set of duplicates.
-    const lib = buildLibrary(decodeDocument(readRealFile()));
+    const lib = buildLibrary(decodeMediaDocument(readRealFile()));
     const modified = lib.items.filter((i) => i.modifications.descriptors.length > 0);
     expect(modified.length).toBeGreaterThan(0);
 
@@ -172,7 +171,7 @@ describe.skipIf(!hasRealFile)("language independence of analysis", () => {
   });
 
   it("renders the same modifications differently per language while the identity holds", () => {
-    const lib = buildLibrary(decodeDocument(readRealFile()));
+    const lib = buildLibrary(decodeMediaDocument(readRealFile()));
     const mirrored = lib.items.find((i) => i.modifications.flippedHorizontally);
     expect(mirrored).toBeDefined();
 
@@ -182,18 +181,18 @@ describe.skipIf(!hasRealFile)("language independence of analysis", () => {
     expect(describeModsInline(EN, descriptors)).not.toEqual(describeModsInline(FR, descriptors));
 
     // Same input, same identity, whichever language rendered it.
-    const again = buildLibrary(decodeDocument(readRealFile()));
+    const again = buildLibrary(decodeMediaDocument(readRealFile()));
     const same = again.items.find((i) => i.uuid === mirrored!.uuid)!;
     expect(same.modifications.fingerprint).toBe(mirrored!.modifications.fingerprint);
   });
 
   it("groups variants consistently across languages", () => {
-    const audit = auditLibrary(buildLibrary(decodeDocument(readRealFile())));
+    const audit = auditLibrary(buildLibrary(decodeMediaDocument(readRealFile())));
     expect(audit.variantGroups.length).toBeGreaterThan(0);
   });
 
   it("gives every variant a path so it can be found on disk", () => {
-    const audit = auditLibrary(buildLibrary(decodeDocument(readRealFile())));
+    const audit = auditLibrary(buildLibrary(decodeMediaDocument(readRealFile())));
     for (const group of audit.variantGroups) {
       expect(group.path).toBeTruthy();
       for (const variant of group.variants) {
