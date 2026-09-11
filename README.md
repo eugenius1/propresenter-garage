@@ -14,7 +14,7 @@ ProPresenter folder. Load one file to audit it; load two to see exactly what
 changed between them.
 
 Planned: reorganising and exporting (see [the export safety gate](#the-export-safety-gate)),
-then service playlists and the library.
+then presentation playlists and the library.
 
 ## Why
 
@@ -146,7 +146,7 @@ rated `lossy`, and must emit a new file rather than overwrite the original.
 
 ## Testing against real files
 
-Real ProPresenter files are a church's actual media library and are not
+Real ProPresenter files are somebody's actual media library and are not
 committed. Point the suite at one:
 
 ```bash

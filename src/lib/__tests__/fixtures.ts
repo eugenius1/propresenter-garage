@@ -6,7 +6,7 @@ import os from "node:os";
 import path from "node:path";
 
 /**
- * Real ProPresenter files are not committed -- they are a church's actual media
+ * Real ProPresenter files are not committed -- they are somebody's actual media
  * library. Point PP_MEDIA_FILE at one to run the round-trip and parity tests.
  */
 export const REAL_FILE =
