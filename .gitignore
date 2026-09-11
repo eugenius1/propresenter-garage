@@ -7,5 +7,7 @@ dev-dist
 # Generated at build time from proto/ -- never hand-edited.
 src/generated/
 
-# Real ProPresenter files are a church's actual media library. Never commit one.
-public/__dev-sample*
+# Real ProPresenter files are somebody's actual media library. Never commit one.
+# The pattern is deliberately broad: it used to name one filename, which left
+# every other scratch copy dropped in here unprotected.
+public/__dev-*

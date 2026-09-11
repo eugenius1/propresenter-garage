@@ -138,9 +138,12 @@ body {
   border-radius: 7px; border: 1px solid var(--border-strong);
   background: var(--surface); color: var(--text); cursor: pointer;
 }
-.btn:hover { background: var(--surface-2); }
+.btn:hover:not(:disabled) { background: var(--surface-2); }
 .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
-.btn.primary:hover { filter: brightness(1.08); }
+.btn.primary:hover:not(:disabled) { filter: brightness(1.08); }
+/* Without this a disabled button looks perfectly clickable -- "Apply and
+   export" sat in full accent blue while nothing was selected. */
+.btn:disabled { opacity: .4; cursor: not-allowed; }
 
 /* ---------- tabs ---------- */
 
@@ -443,3 +446,9 @@ select.mini { max-width: 9em; }
 }
 .info-head strong { display: inline; margin: 0; font-size: 15px; }
 .info-icon { color: var(--accent); flex: none; }
+
+/* Playlist-structure rows carry the same selection affordance as item rows. */
+.playlist-change { display: flex; align-items: baseline; gap: 8px; }
+.playlist-change .change-select { align-self: center; margin: 0; }
+.playlist-change .tag { flex: none; }
+.playlist-change .change-select:disabled { opacity: .3; }
