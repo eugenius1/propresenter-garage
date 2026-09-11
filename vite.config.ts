@@ -36,7 +36,11 @@ export default defineConfig({
     }),
   ],
   test: {
+    // Node by default: the analysis suites are the bulk of the tests and need
+    // no DOM. Component tests opt in with a `@vitest-environment jsdom`
+    // docblock, which keeps the fast path fast.
     environment: "node",
-    include: ["src/**/*.test.ts"],
+    include: ["src/**/*.test.{ts,tsx}"],
+    setupFiles: ["src/__tests__/setup.ts"],
   },
 });

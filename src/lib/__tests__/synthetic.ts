@@ -257,6 +257,32 @@ const DOCUMENT = {
   live_video_playlist: { uuid: uuid(4000), name: "Live Video", items: { items: [] } },
 };
 
+/**
+ * A document of a different playlist kind.
+ *
+ * Lets the wrong-kind path be exercised without needing a real Library file,
+ * and stands in for the presentation tool that will eventually read these.
+ */
+const PRESENTATION_DOCUMENT = {
+  application_info: DOCUMENT.application_info,
+  type: "TYPE_PRESENTATION",
+  root_node: {
+    uuid: uuid(5000),
+    name: "",
+    playlists: { playlists: [playlist(9, "Sunday", [])] },
+  },
+};
+
+let cachedPresentation: Uint8Array | undefined;
+
+/** A presentation playlist document, for testing kind rejection. */
+export function syntheticPresentationFile(): Uint8Array {
+  cachedPresentation ??= PlaylistDocument.encode(
+    PlaylistDocument.fromObject(PRESENTATION_DOCUMENT)
+  ).finish();
+  return cachedPresentation;
+}
+
 let cached: Uint8Array | undefined;
 
 /** The synthetic document, encoded as ProPresenter would write it. */
