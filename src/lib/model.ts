@@ -21,7 +21,7 @@ export interface MediaItem {
   key: string;
   /** Relative path as stored, e.g. "Media/Assets/Fond uni orange.mov". */
   relativePath: string;
-  /** Root the relative path hangs off, e.g. "ROOT_SHOW". */
+  /** Root the relative path hangs off, e.g. "SHOW", or "EXTERNAL:<volume>". */
   root: string;
   /** Absolute path as stored. Unreliable for comparison -- see `key`. */
   absolutePath: string;
@@ -201,6 +201,7 @@ function playbackSettings(media: any): PlaybackSettings {
   };
 }
 
+const LOCAL_ROOT = "rv.data.URL.LocalRelativePath.Root";
 const SCALE_BEHAVIOR = "rv.data.Media.ScaleBehavior";
 const SCALE_ALIGNMENT = "rv.data.Media.ScaleAlignment";
 
@@ -360,7 +361,7 @@ export function buildLibrary(doc: RawDoc): MediaLibrary {
 
       const relativePath: string = url?.local?.path ?? url?.external?.path ?? url?.relative_path ?? "";
       const root: string = url?.local
-        ? String(url.local.root ?? "ROOT_UNKNOWN")
+        ? enumLabel(LOCAL_ROOT, url.local.root)
         : url?.external
           ? externalRootLabel(url.external)
           : "";

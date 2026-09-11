@@ -4,6 +4,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { syntheticMediaFile } from "./synthetic";
 
 /**
  * Real ProPresenter files are not committed -- they are somebody's actual media
@@ -27,3 +28,16 @@ export function readRealFile(): Uint8Array {
   cached ??= new Uint8Array(fs.readFileSync(REAL_FILE));
   return cached;
 }
+
+/**
+ * The document sources every structural suite runs against.
+ *
+ * The synthetic fixture always runs, so CI protects the same invariants a
+ * developer sees locally. A real ProPresenter file is an extra pass when one is
+ * present -- it is the only thing that proves the schema copes with a genuine
+ * 482-item library, but it cannot be committed.
+ */
+export const SOURCES = [
+  { name: "synthetic", available: true, read: syntheticMediaFile },
+  { name: "real file", available: hasRealFile, read: readRealFile },
+] as const;

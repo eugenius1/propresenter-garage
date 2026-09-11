@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Eusebius Ngemera
 
-import { beforeAll, describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it as baseIt } from "vitest";
 import { encodeDocument } from "../decode";
 import { buildLibrary, decodeMediaDocument } from "../model";
 import { auditLibrary } from "../audit";
 import { diffLibraries } from "../diff";
-import { hasRealFile, readRealFile } from "./fixtures";
+import { SOURCES } from "./fixtures";
 
 function clone(bytes: Uint8Array) {
   return decodeMediaDocument(encodeDocument(decodeMediaDocument(bytes)));
@@ -29,11 +29,12 @@ function drawingOf(rawItem: any): any {
   return props.drawing;
 }
 
-describe.skipIf(!hasRealFile)("variants versus duplicates", () => {
+describe.each(SOURCES)("variants versus duplicates [$name]", (source) => {
+  const it = source.available ? baseIt : baseIt.skip;
   // Read in beforeAll, not here: a describe body runs even when skipped.
   let bytes: Uint8Array;
   beforeAll(() => {
-    bytes = readRealFile();
+    if (source.available) bytes = source.read();
   });
 
   it("treats the same file with different mirroring as separate entries", () => {

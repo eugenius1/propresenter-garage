@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Eusebius Ngemera
 
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it, it as baseIt } from "vitest";
 import { checkFidelity, DecodeError, encodeDocument } from "../decode";
 import { decodeMediaDocument } from "../model";
-import { hasRealFile, readRealFile, REAL_FILE } from "./fixtures";
+import { SOURCES } from "./fixtures";
 
 /**
  * The gate on the export feature.
@@ -14,9 +14,13 @@ import { hasRealFile, readRealFile, REAL_FILE } from "./fixtures";
  * disappear on re-encode and corrupt the library. Byte-identical output proves
  * the vendored schema covers the file completely.
  */
-describe.skipIf(!hasRealFile)(`round-trip fidelity (${REAL_FILE})`, () => {
+describe.each(SOURCES)("round-trip fidelity [$name]", (source) => {
+  const it = source.available ? baseIt : baseIt.skip;
+  let bytes: Uint8Array;
+  beforeAll(() => {
+    if (source.available) bytes = source.read();
+  });
   it("re-encodes to byte-identical output", () => {
-    const bytes = readRealFile();
     const report = checkFidelity(bytes);
     expect(report.reEncodedSize).toBe(bytes.length);
     expect(report.fidelity).toBe("identical");
@@ -27,14 +31,13 @@ describe.skipIf(!hasRealFile)(`round-trip fidelity (${REAL_FILE})`, () => {
     // Re-encoding normalises the byte layout. Feeding that back in must report
     // "identical" -- and a file that only differs in layout must never be
     // called lossy, or the export gate would refuse perfectly safe files.
-    const normalised = encodeDocument(decodeMediaDocument(readRealFile()));
+    const normalised = encodeDocument(decodeMediaDocument(bytes));
     const report = checkFidelity(normalised);
     expect(report.fidelity).toBe("identical");
     expect(report.exportSafe).toBe(true);
   });
 
   it("survives a decode/encode/decode cycle unchanged", () => {
-    const bytes = readRealFile();
     const once = encodeDocument(decodeMediaDocument(bytes));
     const twice = encodeDocument(decodeMediaDocument(once));
     expect(Buffer.compare(Buffer.from(once), Buffer.from(twice))).toBe(0);

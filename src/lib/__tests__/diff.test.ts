@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Eusebius Ngemera
 
-import { beforeAll, describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it as baseIt } from "vitest";
 import { encodeDocument } from "../decode";
 import { buildLibrary, decodeMediaDocument } from "../model";
 import { diffLibraries } from "../diff";
 import { auditLibrary } from "../audit";
-import { hasRealFile, readRealFile } from "./fixtures";
+import { SOURCES } from "./fixtures";
 
 /** Deep-clone a decoded document by round-tripping it through the wire format. */
 function clone(bytes: Uint8Array) {
@@ -24,11 +24,12 @@ function playlistsWithItems(doc: any): any[] {
   return rawNodes(doc.root_node).filter((n) => (n.items?.items ?? []).length > 0);
 }
 
-describe.skipIf(!hasRealFile)("diff against a mutated copy of a real library", () => {
+describe.each(SOURCES)("diff against a mutated copy [$name]", (source) => {
+  const it = source.available ? baseIt : baseIt.skip;
   // Read in beforeAll, not here: a describe body runs even when skipped.
   let bytes: Uint8Array;
   beforeAll(() => {
-    bytes = readRealFile();
+    if (source.available) bytes = source.read();
   });
 
   it("reports no changes when nothing changed", () => {
@@ -122,7 +123,11 @@ describe.skipIf(!hasRealFile)("diff against a mutated copy of a real library", (
     for (const pl of playlistsWithItems(mutated)) {
       for (const it of pl.items.items) {
         const url = it.cue?.actions?.find((a: any) => a.media)?.media?.element?.url;
-        if (url?.absolute_string) url.absolute_string = `D:\\NewLocation\\${url.local.path.replace(/\//g, "\\")}`;
+        // Media on an external volume has no `local` path, so leave it alone --
+        // only the show-relative items are being churned here.
+        if (url?.absolute_string && url.local?.path) {
+          url.absolute_string = `D:\\NewLocation\\${url.local.path.replace(/\//g, "\\")}`;
+        }
       }
     }
     const result = diffLibraries(buildLibrary(decodeMediaDocument(bytes)), buildLibrary(mutated));
@@ -164,9 +169,10 @@ describe.skipIf(!hasRealFile)("diff against a mutated copy of a real library", (
   });
 });
 
-describe.skipIf(!hasRealFile)("audit", () => {
+describe.each(SOURCES)("audit [$name]", (source) => {
+  const it = source.available ? baseIt : baseIt.skip;
   it("separates within-playlist duplicates from cross-playlist ones", () => {
-    const audit = auditLibrary(buildLibrary(decodeMediaDocument(readRealFile())));
+    const audit = auditLibrary(buildLibrary(decodeMediaDocument(source.read())));
     for (const g of audit.withinPlaylistDuplicates) expect(g.repeatedWithin.length).toBeGreaterThan(0);
     for (const g of audit.crossPlaylistDuplicates) expect(g.repeatedWithin).toEqual([]);
     expect(audit.totals.items).toBeGreaterThan(0);
