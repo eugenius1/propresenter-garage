@@ -1,0 +1,319 @@
+:root {
+  color-scheme: light;
+
+  --bg: #f6f7f9;
+  --surface: #ffffff;
+  --surface-2: #f0f2f5;
+  --border: #dfe3e8;
+  --border-strong: #c6ccd4;
+  --text: #1b1f24;
+  --text-dim: #5c6672;
+  --text-faint: #8b95a1;
+
+  --accent: #3b6ef5;
+  --accent-soft: #e8eeff;
+
+  --added: #1a7f45;
+  --added-soft: #e4f5ea;
+  --removed: #c0392b;
+  --removed-soft: #fdeae7;
+  --moved: #8a5cf6;
+  --moved-soft: #f0e9ff;
+  --renamed: #a86407;
+  --renamed-soft: #fdf1de;
+  --retimed: #0e7490;
+  --retimed-soft: #e0f4f8;
+  --relinked: #b8437a;
+  --relinked-soft: #fceaf3;
+  --restyled: #5b5fc7;
+  --restyled-soft: #eaeaff;
+
+  --radius: 10px;
+  --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+}
+
+/*
+ * Dark palette.
+ *
+ * Applied by a class rather than a bare `prefers-color-scheme` media query, so
+ * an explicit choice can override the system without the palette having to be
+ * written twice (once in a media rule, once in an attribute rule). The class is
+ * set before first paint by an inline script in index.html and kept in step
+ * with the system by src/theme.ts. The whole interface needs JavaScript anyway,
+ * so there is nothing to degrade to.
+ */
+:root.dark {
+  color-scheme: dark;
+
+  --bg: #14171a;
+  --surface: #1c2024;
+  --surface-2: #24292e;
+  --border: #2e343b;
+  --border-strong: #414952;
+  --text: #e7eaee;
+  --text-dim: #9aa4b0;
+  --text-faint: #737d89;
+
+  --accent: #6d94ff;
+  --accent-soft: #1e2a47;
+
+  --added: #4ecb80;
+  --added-soft: #16301f;
+  --removed: #ff7a6b;
+  --removed-soft: #35201d;
+  --moved: #b596ff;
+  --moved-soft: #261d3d;
+  --renamed: #e0a63c;
+  --renamed-soft: #322616;
+  --retimed: #4cc4dc;
+  --retimed-soft: #162d33;
+  --relinked: #f07ab0;
+  --relinked-soft: #331d29;
+  --restyled: #9ba0ff;
+  --restyled-soft: #21223d;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+.app { max-width: 1180px; margin: 0 auto; padding: 20px 20px 64px; }
+
+/* ---------- header ---------- */
+
+.masthead {
+  display: flex; align-items: baseline; gap: 12px;
+  flex-wrap: wrap; margin-bottom: 18px;
+}
+.masthead h1 { font-size: 19px; margin: 0; letter-spacing: -0.01em; }
+.masthead p { margin: 0; color: var(--text-dim); font-size: 13px; }
+.masthead .spacer { flex: 1 1 auto; }
+
+.chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 3px 9px; border-radius: 999px;
+  background: var(--surface-2); border: 1px solid var(--border);
+  font-size: 11.5px; color: var(--text-dim); white-space: nowrap;
+}
+.chip.ok { background: var(--added-soft); border-color: transparent; color: var(--added); }
+.chip.bad { background: var(--removed-soft); border-color: transparent; color: var(--removed); }
+
+/* ---------- file slots ---------- */
+
+.slots { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 18px; }
+@media (max-width: 720px) { .slots { grid-template-columns: 1fr; } }
+
+.slot {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 14px;
+  display: flex; flex-direction: column; gap: 8px; min-height: 116px;
+}
+.slot.empty {
+  border-style: dashed; border-color: var(--border-strong);
+  align-items: center; justify-content: center; text-align: center;
+  cursor: pointer; transition: background .12s, border-color .12s;
+}
+.slot.empty:hover, .slot.drag { background: var(--accent-soft); border-color: var(--accent); }
+.slot.error { border-color: var(--removed); background: var(--removed-soft); }
+
+.slot-role {
+  font-size: 10.5px; letter-spacing: .07em; text-transform: uppercase;
+  color: var(--text-faint); font-weight: 600;
+}
+.slot-name {
+  font-weight: 600; font-size: 14px; word-break: break-all;
+  display: flex; align-items: center; gap: 8px;
+}
+.slot-meta { color: var(--text-dim); font-size: 12px; display: flex; flex-wrap: wrap; gap: 4px 10px; }
+.slot-actions { display: flex; gap: 8px; margin-top: auto; }
+
+.btn {
+  font: inherit; font-size: 12.5px; padding: 5px 11px;
+  border-radius: 7px; border: 1px solid var(--border-strong);
+  background: var(--surface); color: var(--text); cursor: pointer;
+}
+.btn:hover { background: var(--surface-2); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.btn.primary:hover { filter: brightness(1.08); }
+
+/* ---------- tabs ---------- */
+
+.tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--border); margin-bottom: 16px; }
+.tab {
+  font: inherit; font-size: 13px; padding: 8px 14px; cursor: pointer;
+  background: none; border: none; border-bottom: 2px solid transparent;
+  color: var(--text-dim); margin-bottom: -1px;
+}
+.tab:hover:not(:disabled) { color: var(--text); }
+.tab[aria-selected="true"] { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
+.tab:disabled { opacity: .4; cursor: not-allowed; }
+
+/* ---------- panels & cards ---------- */
+
+.card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 16px; margin-bottom: 14px;
+}
+.card > h2 {
+  font-size: 13px; margin: 0 0 2px; letter-spacing: -0.005em;
+  display: flex; align-items: center; gap: 8px;
+}
+.card > .sub { color: var(--text-dim); font-size: 12.5px; margin: 0 0 12px; }
+
+.empty-state { text-align: center; padding: 44px 20px; color: var(--text-dim); }
+.empty-state strong { display: block; color: var(--text); margin-bottom: 6px; font-size: 15px; }
+
+/* ---------- stat strip ---------- */
+
+.stats { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 4px; }
+.stat {
+  border: 1px solid var(--border); border-radius: 8px;
+  padding: 8px 12px; background: var(--surface-2); min-width: 84px;
+}
+.stat .n { font-size: 19px; font-weight: 650; font-variant-numeric: tabular-nums; line-height: 1.1; }
+.stat .l { font-size: 11px; color: var(--text-dim); }
+
+.filters { display: flex; flex-wrap: wrap; gap: 6px; margin: 14px 0 4px; }
+.pill {
+  font: inherit; font-size: 12px; padding: 4px 10px; cursor: pointer;
+  border-radius: 999px; border: 1px solid var(--border-strong);
+  background: var(--surface); color: var(--text-dim);
+}
+.pill[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #fff; }
+.pill:disabled { opacity: .35; cursor: not-allowed; }
+
+/* ---------- change list ---------- */
+
+.changes { list-style: none; margin: 12px 0 0; padding: 0; }
+.change {
+  display: grid; grid-template-columns: 92px 1fr; gap: 12px;
+  padding: 9px 0; border-top: 1px solid var(--border); align-items: baseline;
+}
+.change:first-child { border-top: none; }
+
+.tag {
+  font-size: 10.5px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase;
+  padding: 3px 7px; border-radius: 5px; text-align: center; white-space: nowrap;
+}
+.tag.added { background: var(--added-soft); color: var(--added); }
+.tag.removed { background: var(--removed-soft); color: var(--removed); }
+.tag.moved { background: var(--moved-soft); color: var(--moved); }
+.tag.renamed { background: var(--renamed-soft); color: var(--renamed); }
+.tag.retimed { background: var(--retimed-soft); color: var(--retimed); }
+.tag.relinked { background: var(--relinked-soft); color: var(--relinked); }
+.tag.restyled { background: var(--restyled-soft); color: var(--restyled); }
+
+.change-body { min-width: 0; }
+.change-title { font-weight: 550; word-break: break-word; }
+.change-detail {
+  color: var(--text-dim); font-size: 12.5px; font-family: var(--mono);
+  word-break: break-word; margin-top: 2px;
+}
+.change-where { color: var(--text-faint); font-size: 12px; margin-top: 2px; }
+.fuzzy {
+  font-size: 10px; text-transform: uppercase; letter-spacing: .05em;
+  color: var(--renamed); background: var(--renamed-soft);
+  padding: 1px 5px; border-radius: 4px; margin-left: 6px; vertical-align: 1px;
+}
+
+.kind { font-size: 11px; color: var(--text-faint); margin-left: 6px; }
+
+/* ---------- finding blocks ---------- */
+
+.finding { border-top: 1px solid var(--border); padding: 11px 0; }
+.finding:first-of-type { border-top: none; }
+.finding h3 { font-size: 13px; margin: 0 0 3px; display: flex; align-items: center; gap: 8px; }
+.finding .why { color: var(--text-dim); font-size: 12.5px; margin: 0 0 8px; }
+.count-badge {
+  background: var(--surface-2); border: 1px solid var(--border);
+  border-radius: 999px; padding: 1px 8px; font-size: 11px;
+  color: var(--text-dim); font-variant-numeric: tabular-nums;
+}
+.count-badge.warn { background: var(--renamed-soft); color: var(--renamed); border-color: transparent; }
+
+.rows { list-style: none; margin: 0; padding: 0; font-size: 13px; }
+.rows li { padding: 4px 0; border-top: 1px dashed var(--border); }
+.rows li:first-child { border-top: none; }
+.rows .path { font-family: var(--mono); font-size: 12px; color: var(--text-dim); }
+.mono { font-family: var(--mono); font-size: 12px; }
+
+details.more > summary {
+  cursor: pointer; font-size: 12.5px; color: var(--accent);
+  margin-top: 6px; list-style: none;
+}
+details.more > summary::-webkit-details-marker { display: none; }
+details.more > summary::before { content: "▸ "; }
+details.more[open] > summary::before { content: "▾ "; }
+
+/* ---------- tree ---------- */
+
+.tree { list-style: none; margin: 0; padding: 0; }
+.tree ul { list-style: none; margin: 0; padding-left: 18px; border-left: 1px solid var(--border); }
+.tree summary {
+  cursor: pointer; padding: 3px 0; display: flex; gap: 8px; align-items: center;
+}
+.tree summary::-webkit-details-marker { display: none; }
+.tree summary::before { content: "▸"; color: var(--text-faint); font-size: 10px; width: 10px; }
+.tree details[open] > summary::before { content: "▾"; }
+.tree .leaf { padding: 3px 0 3px 18px; display: flex; gap: 8px; align-items: baseline; }
+.tree .node-name { font-weight: 550; }
+.tree .node-count { font-size: 11px; color: var(--text-faint); }
+.tree .item-name { font-size: 13px; }
+.tree .item-path { font-family: var(--mono); font-size: 11.5px; color: var(--text-faint); }
+
+.warn-inline { color: var(--renamed); }
+.footnote { color: var(--text-faint); font-size: 12px; margin-top: 18px; text-align: center; }
+.footnote a { color: var(--accent); }
+
+/* ---------- header pickers (language, appearance) ---------- */
+
+.pickers { display: inline-flex; gap: 6px; }
+
+.picker {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0 7px 0 8px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--text-dim);
+}
+.picker:hover { color: var(--text); border-color: var(--border-strong); }
+.picker:focus-within {
+  border-color: var(--accent);
+  color: var(--text);
+  outline: 2px solid var(--accent-soft);
+  outline-offset: 1px;
+}
+
+.picker-icon, .picker-caret { flex: none; }
+
+/* The select carries the click target; the icons are decoration either side. */
+.picker-select {
+  appearance: none;
+  font: inherit;
+  font-size: 11.5px;
+  line-height: 1;
+  padding: 4px 0;
+  border: none;
+  background: none;
+  color: inherit;
+  cursor: pointer;
+  /* Room for the widest option, so changing the value does not resize the chip. */
+  min-width: 4.6em;
+}
+.picker-select:focus { outline: none; }
+/* Native option lists are drawn by the OS and ignore inherited colours, so give
+   them an explicit pair that works in either theme. */
+.picker-select option {
+  background: var(--surface);
+  color: var(--text);
+}

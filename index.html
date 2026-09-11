@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#3b6ef5" />
+    <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
+    <title>ProPresenter Garage</title>
+    <meta
+      name="description"
+      content="A suite of utilities for ProPresenter 7 files. Runs entirely in your browser."
+    />
+  </head>
+  <body>
+    <script>
+      // Runs before first paint: mirrors src/theme.ts so the correct palette is
+      // in place by the time anything is drawn. Kept inline and tiny on purpose.
+      try {
+        var saved = localStorage.getItem("propresenter-garage.theme");
+        var dark =
+          saved === "dark" ||
+          ((!saved || saved === "system") &&
+            window.matchMedia("(prefers-color-scheme: dark)").matches);
+        if (dark) document.documentElement.classList.add("dark");
+      } catch (e) {
+        /* blocked storage: fall through to the light default */
+      }
+    </script>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

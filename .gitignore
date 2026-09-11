@@ -1,0 +1,11 @@
+node_modules
+dist
+dev-dist
+*.local
+.DS_Store
+
+# Generated at build time from proto/ -- never hand-edited.
+src/generated/
+
+# Real ProPresenter files are a church's actual media library. Never commit one.
+public/__dev-sample*
