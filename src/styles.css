@@ -402,7 +402,9 @@ select.mini { max-width: 9em; }
   font-size: 12.5px;
 }
 .where dt { color: var(--text-dim); white-space: nowrap; }
-.where dd { margin: 0; word-break: break-all; }
+/* Paths have no spaces, so let them break -- but at separators where
+   possible rather than mid-word. */
+.where dd { margin: 0; overflow-wrap: anywhere; }
 @media (max-width: 620px) {
   .where { grid-template-columns: 1fr; gap: 0 0; }
   .where dd { margin-bottom: 8px; }
@@ -416,3 +418,28 @@ select.mini { max-width: 9em; }
   display: inline-flex; align-items: center; gap: 6px;
   font-size: 12.5px; color: var(--text-dim);
 }
+
+/* A playlist deleted and made again: neither purely added nor removed. */
+.tag.recreated { background: var(--renamed-soft); color: var(--renamed); }
+
+/* ---------- informational panel ---------- */
+
+/* The two slots above are drop targets; this panel is not, so it deliberately
+   drops the dashed border and leads with an icon. */
+.info-card {
+  border-left: 3px solid var(--accent);
+  background: linear-gradient(
+    to right,
+    var(--accent-soft) 0,
+    var(--surface) 160px
+  );
+}
+.info-card .empty-state { padding: 22px 20px; text-align: left; }
+.info-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 8px;
+}
+.info-head strong { display: inline; margin: 0; font-size: 15px; }
+.info-icon { color: var(--accent); flex: none; }

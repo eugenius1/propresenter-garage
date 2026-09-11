@@ -55,9 +55,20 @@ function detailText(i18n: I18n, change: Change): string {
   }
 }
 
-function playlistChangeText({ t }: I18n, change: PlaylistChange): string {
+function playlistChangeText({ t, f, num }: I18n, change: PlaylistChange): string {
   if (change.type === "renamed") return `${change.from} → ${change.path}`;
+  if (change.type === "recreated") {
+    return `${change.path} — ${f(t.diff.playlistTypes.recreated, {
+      before: num(change.itemsBefore ?? 0),
+      after: num(change.itemsAfter ?? 0),
+    })}`;
+  }
   return `${change.path} — ${t.diff.playlistTypes[change.type]}`;
+}
+
+/** Playlist changes borrow the item tags, except the one with no counterpart. */
+function playlistTagLabel({ t }: I18n, change: PlaylistChange): string {
+  return change.type === "recreated" ? t.diff.recreated : t.diff.types[change.type];
 }
 
 export function DiffView({
@@ -168,7 +179,7 @@ export function DiffView({
               {diff.playlistChanges.map((change, i) => (
                 <li key={i}>
                   <span className={`tag ${change.type}`} style={{ marginRight: 8 }}>
-                    {t.diff.types[change.type]}
+                    {playlistTagLabel(i18n, change)}
                   </span>
                   <span className="path">{playlistChangeText(i18n, change)}</span>
                 </li>
@@ -225,6 +236,13 @@ export function DiffView({
               : plural(t.tools.mediaBin.merge.selected, selected.size)}
           </p>
 
+          {plan && plan.creates.length > 0 && (
+            <p className="why">
+              {plural(t.tools.mediaBin.merge.willCreate, plan.creates.length, {
+                names: plan.creates.join(", "),
+              })}
+            </p>
+          )}
           {plan && plan.blocked.length > 0 && (
             <p className="why warn-inline">
               {plural(t.tools.mediaBin.merge.blocked, plan.blocked.length)} —{" "}

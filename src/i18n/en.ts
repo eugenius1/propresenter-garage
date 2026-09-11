@@ -97,7 +97,10 @@ export const en = {
       added: "new playlist",
       removed: "playlist no longer present",
       renamed: "renamed",
+      recreated: "deleted and made again — {before} items before, {after} after",
     },
+    /** Tag for a playlist that was deleted and recreated under the same name. */
+    recreated: "Recreated",
   },
 
   playback: {
@@ -221,7 +224,7 @@ export const en = {
       whereMac: "macOS",
       whereLegacy: "ProPresenter 19 and below, either platform",
       whereWorkspaceNote:
-        "ProPresenter 20 moved the workspace out of Documents. The folder under LocalWorkspaces is named after your workspace.",
+        "ProPresenter 20 moved the workspace out of Documents. The folder shown as {placeholder} is named after your workspace — usually ProPresenter unless you renamed it.",
       oneOrTwo: "One file gives you an audit. Two files give you a diff.",
 
       replace: "Replace",
@@ -249,8 +252,8 @@ export const en = {
         selected: ["{n} change selected", "{n} changes selected"],
         applyAndExport: "Apply and export",
         blocked: ["{n} change cannot be applied", "{n} changes cannot be applied"],
-        blockedWhy:
-          "Their playlist does not exist on the other side, and creating playlists is not supported yet.",
+        blockedWhy: "Their entry could not be found in the file it came from.",
+        willCreate: ["Creates {n} playlist: {names}", "Creates {n} playlists: {names}"],
         exportBlocked:
           "That side cannot be exported: re-encoding it loses content the schema does not cover.",
         exportedAs: "Exported as {filename}. Check it in ProPresenter before replacing anything.",

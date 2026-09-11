@@ -106,7 +106,9 @@ export const fr: Dictionary = {
       added: "nouvelle liste",
       removed: "liste absente désormais",
       renamed: "renommée",
+      recreated: "supprimée puis recréée — {before} éléments avant, {after} après",
     },
+    recreated: "Recréée",
   },
 
   playback: {
@@ -231,7 +233,7 @@ export const fr: Dictionary = {
       whereMac: "macOS",
       whereLegacy: "ProPresenter 19 et antérieur, sur les deux plateformes",
       whereWorkspaceNote:
-        "ProPresenter 20 a déplacé l'espace de travail hors de Documents. Le dossier sous LocalWorkspaces porte le nom de votre espace de travail.",
+        "ProPresenter 20 a déplacé l'espace de travail hors de Documents. Le dossier indiqué par {placeholder} porte le nom de votre espace de travail — en général ProPresenter, sauf si vous l'avez renommé.",
       oneOrTwo:
         "Un fichier donne une analyse. Deux fichiers donnent une comparaison.",
 
@@ -263,8 +265,8 @@ export const fr: Dictionary = {
           "{n} modification ne peut pas être appliquée",
           "{n} modifications ne peuvent pas être appliquées",
         ],
-        blockedWhy:
-          "Leur liste n'existe pas de l'autre côté, et la création de listes n'est pas encore prise en charge.",
+        blockedWhy: "Leur entrée est introuvable dans le fichier d'origine.",
+        willCreate: ["Crée {n} liste : {names}", "Crée {n} listes : {names}"],
         exportBlocked:
           "Ce côté ne peut pas être exporté : le réencodage perd du contenu que le schéma ne couvre pas.",
         exportedAs:

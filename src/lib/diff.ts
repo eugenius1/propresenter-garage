@@ -63,10 +63,13 @@ export interface Change {
 }
 
 export interface PlaylistChange {
-  type: "added" | "removed" | "renamed";
+  type: "added" | "removed" | "renamed" | "recreated";
   path: string;
   /** Only set for renames: the previous path. */
   from?: string;
+  /** Only set for recreations: how many items each version held. */
+  itemsBefore?: number;
+  itemsAfter?: number;
 }
 
 export interface DiffResult {
@@ -265,27 +268,57 @@ export function diffLibraries(left: MediaLibrary, right: MediaLibrary): DiffResu
 }
 
 function diffPlaylists(left: MediaLibrary, right: MediaLibrary): PlaylistChange[] {
-  const out: PlaylistChange[] = [];
   const flatten = (lib: MediaLibrary) => {
-    const map = new Map<string, string>(); // uuid -> path
+    const byUuid = new Map<string, { path: string; items: number }>();
     const walk = (n: typeof lib.root) => {
-      if (n.kind !== "root" && n.uuid) map.set(n.uuid, n.path);
+      if (n.kind !== "root" && n.uuid) byUuid.set(n.uuid, { path: n.path, items: n.items.length });
       n.children.forEach(walk);
     };
     walk(lib.root);
-    return map;
+    return byUuid;
   };
 
   const before = flatten(left);
   const after = flatten(right);
 
-  for (const [uuid, path] of before) {
+  const removed: PlaylistChange[] = [];
+  const added: PlaylistChange[] = [];
+  const out: PlaylistChange[] = [];
+
+  for (const [uuid, node] of before) {
     const now = after.get(uuid);
-    if (now === undefined) out.push({ type: "removed", path });
-    else if (now !== path) out.push({ type: "renamed", path: now, from: path });
+    if (now === undefined) removed.push({ type: "removed", path: node.path });
+    else if (now.path !== node.path) out.push({ type: "renamed", path: now.path, from: node.path });
   }
-  for (const [uuid, path] of after) {
-    if (!before.has(uuid)) out.push({ type: "added", path });
+  for (const [uuid, node] of after) {
+    if (!before.has(uuid)) added.push({ type: "added", path: node.path });
   }
+
+  // A playlist deleted and made again in ProPresenter gets a fresh uuid, so by
+  // identity it is a removal and an addition. Reporting it as both, on adjacent
+  // lines naming the same path, reads as a glitch -- so pair them up.
+  const addedByPath = new Map(added.map((change) => [change.path, change]));
+  const pairedAdds = new Set<PlaylistChange>();
+
+  for (const change of removed) {
+    const twin = addedByPath.get(change.path);
+    if (twin && !pairedAdds.has(twin)) {
+      pairedAdds.add(twin);
+      const wasUuid = [...before].find(([, n]) => n.path === change.path)?.[0];
+      const nowUuid = [...after].find(([, n]) => n.path === change.path)?.[0];
+      out.push({
+        type: "recreated",
+        path: change.path,
+        itemsBefore: wasUuid ? before.get(wasUuid)?.items : undefined,
+        itemsAfter: nowUuid ? after.get(nowUuid)?.items : undefined,
+      });
+    } else {
+      out.push(change);
+    }
+  }
+  for (const change of added) {
+    if (!pairedAdds.has(change)) out.push(change);
+  }
+
   return out;
 }
