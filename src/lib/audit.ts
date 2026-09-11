@@ -14,6 +14,24 @@ import { basename, type MediaItem, type MediaLibrary, type ModDescriptor } from 
  * redundant, and only those are reported as duplicates.
  */
 
+/**
+ * Names for the findings, stable enough to link to.
+ *
+ * Used as DOM ids in the audit and as the target of "see in audit" from the
+ * Reorganise tab, so a quick fix can show its working in full context.
+ */
+export type FindingId =
+  | "withinPlaylist"
+  | "crossPlaylist"
+  | "variants"
+  | "locations"
+  | "external"
+  | "empty"
+  | "hidden"
+  | "nameMismatch";
+
+export const FINDING_DOM_ID = (id: FindingId) => `finding-${id}`;
+
 export interface DuplicateGroup {
   variantKey: string;
   filename: string;

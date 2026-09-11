@@ -2,8 +2,9 @@
 // Copyright (C) 2026 Eusebius Ngemera
 
 import type { ReactNode } from "react";
-import type { AuditResult } from "../lib/audit";
+import { FINDING_DOM_ID, type AuditResult, type FindingId } from "../lib/audit";
 import type { MediaLibrary } from "../lib/model";
+import { useEffect } from "react";
 import { useI18n, type I18n } from "../i18n";
 import { describeModsInline } from "../i18n/describe";
 
@@ -31,8 +32,29 @@ function Rows({
   );
 }
 
-export function AuditView({ audit, lib }: { audit: AuditResult; lib: MediaLibrary }) {
+export function AuditView({
+  audit,
+  lib,
+  focus,
+}: {
+  audit: AuditResult;
+  lib: MediaLibrary;
+  /** A finding to scroll to and highlight, set when arriving from elsewhere. */
+  focus?: FindingId | null;
+}) {
   const i18n = useI18n();
+
+  useEffect(() => {
+    if (!focus) return;
+    const target = document.getElementById(FINDING_DOM_ID(focus));
+    if (!target) return;
+    target.scrollIntoView({ behavior: "smooth", block: "center" });
+    // A brief highlight, because scrolling alone leaves the reader hunting for
+    // which of several findings they were sent to.
+    target.classList.add("flash");
+    const timer = setTimeout(() => target.classList.remove("flash"), 1600);
+    return () => clearTimeout(timer);
+  }, [focus, audit]);
   const { t, f, num, quote, plural } = i18n;
   const totals = audit.totals;
 
@@ -72,7 +94,7 @@ export function AuditView({ audit, lib }: { audit: AuditResult; lib: MediaLibrar
         <p className="sub">{t.audit.method}</p>
 
         {audit.withinPlaylistDuplicates.length > 0 && (
-          <div className="finding">
+          <div className="finding" id={FINDING_DOM_ID("withinPlaylist")}>
             <h3>
               {t.audit.withinPlaylist}
               <span className="count-badge warn">{num(audit.withinPlaylistDuplicates.length)}</span>
@@ -106,7 +128,7 @@ export function AuditView({ audit, lib }: { audit: AuditResult; lib: MediaLibrar
         )}
 
         {audit.crossPlaylistDuplicates.length > 0 && (
-          <div className="finding">
+          <div className="finding" id={FINDING_DOM_ID("crossPlaylist")}>
             <h3>
               {t.audit.crossPlaylist}
               <span className="count-badge">{num(audit.crossPlaylistDuplicates.length)}</span>
@@ -137,7 +159,7 @@ export function AuditView({ audit, lib }: { audit: AuditResult; lib: MediaLibrar
         )}
 
         {audit.variantGroups.length > 0 && (
-          <div className="finding">
+          <div className="finding" id={FINDING_DOM_ID("variants")}>
             <h3>
               {t.audit.variants}
               <span className="count-badge">{num(audit.variantGroups.length)}</span>
@@ -169,7 +191,7 @@ export function AuditView({ audit, lib }: { audit: AuditResult; lib: MediaLibrar
         )}
 
         {audit.absolutePathRoots.length > 1 && (
-          <div className="finding">
+          <div className="finding" id={FINDING_DOM_ID("locations")}>
             <h3>
               {t.audit.locations}
               <span className="count-badge">{num(audit.absolutePathRoots.length)}</span>
@@ -187,7 +209,7 @@ export function AuditView({ audit, lib }: { audit: AuditResult; lib: MediaLibrar
         )}
 
         {audit.externalVolumeItems.length > 0 && (
-          <div className="finding">
+          <div className="finding" id={FINDING_DOM_ID("external")}>
             <h3>
               {t.audit.external}
               <span className="count-badge warn">{num(audit.externalVolumeItems.length)}</span>
@@ -205,7 +227,7 @@ export function AuditView({ audit, lib }: { audit: AuditResult; lib: MediaLibrar
         )}
 
         {audit.emptyPlaylists.length > 0 && (
-          <div className="finding">
+          <div className="finding" id={FINDING_DOM_ID("empty")}>
             <h3>
               {t.audit.empty}
               <span className="count-badge">{num(audit.emptyPlaylists.length)}</span>
@@ -220,7 +242,7 @@ export function AuditView({ audit, lib }: { audit: AuditResult; lib: MediaLibrar
         )}
 
         {audit.hiddenItems.length > 0 && (
-          <div className="finding">
+          <div className="finding" id={FINDING_DOM_ID("hidden")}>
             <h3>
               {t.audit.hidden}
               <span className="count-badge">{num(audit.hiddenItems.length)}</span>
@@ -238,7 +260,7 @@ export function AuditView({ audit, lib }: { audit: AuditResult; lib: MediaLibrar
         )}
 
         {audit.nameMismatches.length > 0 && (
-          <div className="finding">
+          <div className="finding" id={FINDING_DOM_ID("nameMismatch")}>
             <h3>
               {t.audit.nameMismatch}
               <span className="count-badge">{num(audit.nameMismatches.length)}</span>

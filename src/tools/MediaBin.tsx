@@ -7,7 +7,7 @@ import { DiffView } from "../components/DiffView";
 import { AuditView } from "../components/AuditView";
 import { TreeView } from "../components/TreeView";
 import { ReorganiseView } from "../components/ReorganiseView";
-import { auditLibrary } from "../lib/audit";
+import { auditLibrary, type FindingId } from "../lib/audit";
 import { diffLibraries } from "../lib/diff";
 import type { LoadedFile } from "../lib/loadFile";
 import { useI18n } from "../i18n";
@@ -27,6 +27,9 @@ export function MediaBin() {
   const [right, setRight] = useState<LoadedFile | null>(null);
   const [tab, setTab] = useState<Tab>("audit");
   const [auditSide, setAuditSide] = useState<"left" | "right">("left");
+  // Set when arriving at the Audit tab from a quick fix, so the finding that
+  // fix came from is scrolled to rather than left to be hunted for.
+  const [auditFocus, setAuditFocus] = useState<FindingId | null>(null);
 
   const diff = useMemo(
     () => (left && right ? diffLibraries(left.library, right.library) : null),
@@ -99,7 +102,7 @@ export function MediaBin() {
               className="tab"
               role="tab"
               aria-selected={tab === "audit"}
-              onClick={() => setTab("audit")}
+              onClick={() => { setAuditFocus(null); setTab("audit"); }}
             >
               {t.tools.mediaBin.tabs.audit}
             </button>
@@ -143,13 +146,21 @@ export function MediaBin() {
                   </button>
                 </div>
               )}
-              <AuditView audit={audit} lib={inspected.library} />
+              <AuditView audit={audit} lib={inspected.library} focus={auditFocus} />
             </>
           )}
 
           {tab === "browse" && inspected && <TreeView lib={inspected.library} />}
 
-          {tab === "reorganise" && inspected && <ReorganiseView file={inspected} />}
+          {tab === "reorganise" && inspected && (
+            <ReorganiseView
+              file={inspected}
+              onShowInAudit={(finding) => {
+                setAuditFocus(finding);
+                setTab("audit");
+              }}
+            />
+          )}
         </>
       )}
     </>

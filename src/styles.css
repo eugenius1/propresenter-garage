@@ -367,3 +367,19 @@ select.mini { max-width: 9em; }
    .brand, and the group as a whole keeps the masthead's baseline. */
 .brand { display: flex; align-items: center; gap: 9px; }
 .logo { flex: none; display: block; border-radius: 7px; }
+
+/* Highlight a finding arrived at from elsewhere, then fade back. */
+.finding.flash {
+  animation: flash 1.6s ease-out;
+  border-radius: 8px;
+}
+@keyframes flash {
+  0%, 40% { background: var(--accent-soft); box-shadow: 0 0 0 8px var(--accent-soft); }
+  100% { background: transparent; box-shadow: 0 0 0 8px transparent; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .finding.flash { animation-duration: 1ms; }
+}
+
+/* The copyright sits on its own line above the attribution. */
+.footnote .copyright { display: block; margin-bottom: 4px; }
