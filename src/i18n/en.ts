@@ -211,7 +211,8 @@ export const en = {
       baselineHint: "Drop your Media file here, or click to pick it",
       compareHint: "Optional — drop a second Media file to see what changed",
       baselineSuffix: "(baseline)",
-      pickFileHint: 'Pick the file named "Media" from your ProPresenter folder.',
+      pickFileHint:
+        'Pick the file named "Media" from the Playlists folder inside your ProPresenter folder.',
 
       startHeading: "Load a Media playlist file to begin",
       whereWindows: "On Windows it lives in",

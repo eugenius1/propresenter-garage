@@ -11,9 +11,11 @@ leaves the machine, and once installed the app works with no network at all.
 
 ### Media Bin
 
-Compares and audits **media-bin playlists** — the file named `Media` in your
-ProPresenter folder. Load one file to audit it; load two to see exactly what
-changed between them.
+Compares and audits **media-bin playlists** — the file named `Media` inside
+your ProPresenter folder's `Playlists` directory. (`Media` at the top level of
+that folder is the media *assets*; the playlist document is the one under
+`Playlists`.) Load one file to audit it; load two to see exactly what changed
+between them.
 
 Planned: reorganising and exporting (see [the export safety gate](#the-export-safety-gate)),
 then presentation playlists and the library.

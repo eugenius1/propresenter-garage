@@ -9,9 +9,13 @@ import { syntheticMediaFile } from "./synthetic";
 /**
  * Real ProPresenter files are not committed -- they are somebody's actual media
  * library. Point PP_MEDIA_FILE at one to run the round-trip and parity tests.
+ *
+ * The default is a local copy of an installation kept for development, not an
+ * install location: ProPresenter itself lives under ~/Documents/ProPresenter.
  */
 export const REAL_FILE =
-  process.env.PP_MEDIA_FILE ?? path.join(os.homedir(), "dev/me/ProPresenter/Media");
+  process.env.PP_MEDIA_FILE ??
+  path.join(os.homedir(), "dev/me/ProPresenter/Playlists/Media");
 
 export const hasRealFile = fs.existsSync(REAL_FILE);
 

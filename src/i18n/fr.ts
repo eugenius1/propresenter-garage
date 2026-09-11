@@ -222,7 +222,7 @@ export const fr: Dictionary = {
         "Facultatif — déposez un second fichier Media pour voir les différences",
       baselineSuffix: "(référence)",
       pickFileHint:
-        "Choisissez le fichier nommé « Media » dans votre dossier ProPresenter.",
+        "Choisissez le fichier nommé « Media » dans le dossier Playlists de votre dossier ProPresenter.",
 
       startHeading: "Chargez un fichier de liste de médias pour commencer",
       whereWindows: "Sous Windows il se trouve dans",

@@ -77,9 +77,9 @@ export function MediaBin() {
           <div className="empty-state">
             <strong>{t.tools.mediaBin.startHeading}</strong>
             {t.tools.mediaBin.whereWindows}{" "}
-            <span className="mono">Documents\ProPresenter\Media</span>,{" "}
+            <span className="mono">Documents\ProPresenter\Playlists\Media</span>,{" "}
             {t.tools.mediaBin.whereMac}{" "}
-            <span className="mono">~/Documents/ProPresenter/Media</span>.{" "}
+            <span className="mono">~/Documents/ProPresenter/Playlists/Media</span>.{" "}
             {t.tools.mediaBin.noExtension}
             <p style={{ marginTop: 14 }}>{t.tools.mediaBin.oneOrTwo}</p>
           </div>
