@@ -222,12 +222,16 @@ export const fr: Dictionary = {
         "Facultatif — déposez un second fichier Media pour voir les différences",
       baselineSuffix: "(référence)",
       pickFileHint:
-        "Choisissez le fichier nommé « Media » dans le dossier Playlists de votre dossier ProPresenter.",
+        "Choisissez le fichier nommé « Media » dans le dossier Playlists de votre espace de travail ProPresenter.",
 
       startHeading: "Chargez un fichier de liste de médias pour commencer",
-      whereWindows: "Sous Windows il se trouve dans",
-      whereMac: "sous macOS dans",
-      noExtension: "Il n'a pas d'extension.",
+      whereIntro:
+        "C'est le fichier nommé Media, sans extension, dans le dossier Playlists de votre espace de travail ProPresenter.",
+      whereWindows: "Windows",
+      whereMac: "macOS",
+      whereLegacy: "ProPresenter 19 et antérieur, sur les deux plateformes",
+      whereWorkspaceNote:
+        "ProPresenter 20 a déplacé l'espace de travail hors de Documents. Le dossier sous LocalWorkspaces porte le nom de votre espace de travail.",
       oneOrTwo:
         "Un fichier donne une analyse. Deux fichiers donnent une comparaison.",
 

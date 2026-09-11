@@ -76,11 +76,24 @@ export function MediaBin() {
         <div className="card">
           <div className="empty-state">
             <strong>{t.tools.mediaBin.startHeading}</strong>
-            {t.tools.mediaBin.whereWindows}{" "}
-            <span className="mono">Documents\ProPresenter\Playlists\Media</span>,{" "}
-            {t.tools.mediaBin.whereMac}{" "}
-            <span className="mono">~/Documents/ProPresenter/Playlists/Media</span>.{" "}
-            {t.tools.mediaBin.noExtension}
+            {t.tools.mediaBin.whereIntro}
+
+            {/* The workspace moved in ProPresenter 20, so both locations are
+                still in the wild -- one real library recorded paths under each. */}
+            <dl className="where">
+              <dt>{t.tools.mediaBin.whereWindows}</dt>
+              <dd className="mono">
+                %AppData%\RenewedVision\ProPresenter\LocalWorkspaces\…\Playlists\Media
+              </dd>
+              <dt>{t.tools.mediaBin.whereMac}</dt>
+              <dd className="mono">
+                ~/Library/Application Support/RenewedVision/ProPresenter/…/Playlists/Media
+              </dd>
+              <dt>{t.tools.mediaBin.whereLegacy}</dt>
+              <dd className="mono">Documents/ProPresenter/Playlists/Media</dd>
+            </dl>
+            <p className="why">{t.tools.mediaBin.whereWorkspaceNote}</p>
+
             <p style={{ marginTop: 14 }}>{t.tools.mediaBin.oneOrTwo}</p>
           </div>
         </div>

@@ -212,12 +212,16 @@ export const en = {
       compareHint: "Optional — drop a second Media file to see what changed",
       baselineSuffix: "(baseline)",
       pickFileHint:
-        'Pick the file named "Media" from the Playlists folder inside your ProPresenter folder.',
+        'Pick the file named "Media" from the Playlists folder of your ProPresenter workspace.',
 
       startHeading: "Load a Media playlist file to begin",
-      whereWindows: "On Windows it lives in",
-      whereMac: "on macOS in",
-      noExtension: "It has no file extension.",
+      whereIntro:
+        "It is the file named Media, with no extension, in the Playlists folder of your ProPresenter workspace.",
+      whereWindows: "Windows",
+      whereMac: "macOS",
+      whereLegacy: "ProPresenter 19 and below, either platform",
+      whereWorkspaceNote:
+        "ProPresenter 20 moved the workspace out of Documents. The folder under LocalWorkspaces is named after your workspace.",
       oneOrTwo: "One file gives you an audit. Two files give you a diff.",
 
       replace: "Replace",

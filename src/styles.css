@@ -383,3 +383,27 @@ select.mini { max-width: 9em; }
 
 /* The copyright sits on its own line above the attribution. */
 .footnote .copyright { display: block; margin-bottom: 4px; }
+.merge-direction .picker-select {
+  border: 1px solid var(--border-strong);
+  border-radius: 7px;
+  padding: 4px 8px;
+  background: var(--surface-2);
+  color: var(--text);
+  min-width: 0;
+}
+
+/* Where-to-find-it list in the empty state. */
+.where {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 3px 14px;
+  margin: 12px 0 0;
+  text-align: left;
+  font-size: 12.5px;
+}
+.where dt { color: var(--text-dim); white-space: nowrap; }
+.where dd { margin: 0; word-break: break-all; }
+@media (max-width: 620px) {
+  .where { grid-template-columns: 1fr; gap: 0 0; }
+  .where dd { margin-bottom: 8px; }
+}

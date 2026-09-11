@@ -43,6 +43,8 @@ describe("dictionaries", () => {
       "app.title", "app.copyright", "app.footnoteLink", "tools.mediaBin.appOn",
       "library.image", "library.audio", "kinds.image", "kinds.audio",
       "errors.playlistType.audio", "playback.none",
+      // Platform names, not words.
+      "tools.mediaBin.whereWindows", "tools.mediaBin.whereMac",
     ]);
 
     const flat = (dict: unknown, prefix = ""): Record<string, string> => {
