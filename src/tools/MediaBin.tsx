@@ -21,8 +21,32 @@ type Tab = "diff" | "audit" | "browse" | "reorganise";
  * second tool can arrive without either of them growing a union of the other's
  * concerns.
  */
+/** Marks the panel as guidance rather than somewhere to drop a file. */
+function InfoIcon() {
+  return (
+    <svg
+      className="info-icon"
+      viewBox="0 0 20 20"
+      width="17"
+      height="17"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <circle cx="10" cy="10" r="8.4" fill="none" stroke="currentColor" strokeWidth="1.5" />
+      <circle cx="10" cy="6.1" r="1.05" fill="currentColor" />
+      <path
+        d="M10 9v5.2"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.7"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
 export function MediaBin() {
-  const { t } = useI18n();
+  const { t, f } = useI18n();
   const [left, setLeft] = useState<LoadedFile | null>(null);
   const [right, setRight] = useState<LoadedFile | null>(null);
   const [tab, setTab] = useState<Tab>("audit");
@@ -73,9 +97,12 @@ export function MediaBin() {
       </div>
 
       {!left && !right ? (
-        <div className="card">
+        <div className="card info-card">
           <div className="empty-state">
-            <strong>{t.tools.mediaBin.startHeading}</strong>
+            <p className="info-head">
+              <InfoIcon />
+              <strong>{t.tools.mediaBin.startHeading}</strong>
+            </p>
             {t.tools.mediaBin.whereIntro}
 
             {/* The workspace moved in ProPresenter 20, so both locations are
@@ -92,7 +119,9 @@ export function MediaBin() {
               <dt>{t.tools.mediaBin.whereLegacy}</dt>
               <dd className="mono">Documents/ProPresenter/Playlists/Media</dd>
             </dl>
-            <p className="why">{t.tools.mediaBin.whereWorkspaceNote}</p>
+            <p className="why">
+              {f(t.tools.mediaBin.whereWorkspaceNote, { placeholder: "…" })}
+            </p>
 
             <p style={{ marginTop: 14 }}>{t.tools.mediaBin.oneOrTwo}</p>
           </div>

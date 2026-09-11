@@ -48,7 +48,29 @@ export type Operation =
    */
   | { kind: "insertItem"; playlistUuid: string; itemName: string; entry: unknown }
   /** Replace an entry wholesale with one from another document. */
-  | { kind: "replaceItem"; playlistUuid: string; itemUuid: string; itemName: string; entry: unknown };
+  | { kind: "replaceItem"; playlistUuid: string; itemUuid: string; itemName: string; entry: unknown }
+  /**
+   * Create an empty playlist.
+   *
+   * `uuid` is supplied rather than generated so a merge can recreate the
+   * playlist the entries came from, keeping both sides identifiable as the
+   * same playlist afterwards. `parentUuid` is omitted to place it at the top
+   * level.
+   */
+  | {
+      kind: "createPlaylist";
+      uuid: string;
+      name: string;
+      parentUuid?: string;
+      /**
+       * Whether this node holds media or other playlists.
+       *
+       * A node holds one or the other, never both -- they are branches of the
+       * same oneof -- so which it will be has to be decided when it is made.
+       * Creating a group as a leaf leaves it unable to take children.
+       */
+      holds?: "items" | "playlists";
+    };
 
 export class OperationError extends Error {
   readonly operation: Operation;
@@ -196,6 +218,32 @@ function applyOne(doc: RawDoc, op: Operation): void {
         replacement.cue.uuid = items[index].cue.uuid;
       }
       items[index] = replacement;
+      break;
+    }
+
+    case "createPlaylist": {
+      const parent = op.parentUuid
+        ? findPlaylist(doc, op.parentUuid, op)
+        : (doc as any).root_node;
+
+      // A node holds either children or items, never both, so a playlist can
+      // only be nested under one that is already a group.
+      if (op.parentUuid && !parent.playlists) {
+        throw new OperationError(`playlist ${parent.name} cannot contain playlists`, op);
+      }
+      if (walk((doc as any).root_node).some((n: any) => n.uuid?.string === op.uuid)) {
+        throw new OperationError(`a playlist with uuid ${op.uuid} already exists`, op);
+      }
+
+      const Playlist = messageType("rv.data.Playlist");
+      const created = Playlist.fromObject(
+        op.holds === "playlists"
+          ? { uuid: { string: op.uuid }, name: op.name, playlists: { playlists: [] } }
+          : { uuid: { string: op.uuid }, name: op.name, items: { items: [] } }
+      );
+
+      parent.playlists ??= { playlists: [] };
+      parent.playlists.playlists.push(created);
       break;
     }
 

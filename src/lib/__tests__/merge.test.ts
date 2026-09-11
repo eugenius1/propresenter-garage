@@ -231,9 +231,10 @@ describe.each(SOURCES)("merge [$name]", (source) => {
     expect(afterMerge(baselineDoc, compareDoc, chosen, "intoBaseline").changes).toEqual([]);
   });
 
-  it("refuses to add an item whose playlist does not exist on the other side", () => {
-    // Creating playlists is not supported yet, so this has to be reported
-    // rather than silently dropped or applied somewhere arbitrary.
+  it("creates the playlist an incoming item needs, keeping its identity", () => {
+    // Recreating it with the source's uuid rather than a fresh one is what
+    // keeps the two documents comparable: a new uuid would make the very next
+    // diff report the playlist as replaced.
     //
     // A wholly new playlist holding a wholly new item: renaming or re-keying an
     // existing playlist would not do, since the diff matches items by their own
@@ -255,8 +256,69 @@ describe.each(SOURCES)("merge [$name]", (source) => {
     expect(added.length).toBeGreaterThan(0);
 
     const plan = planMerge(added[0], "intoBaseline", baselineDoc, compareDoc);
-    expect(plan.blocked).toBe("missingPlaylist");
-    expect(plan.operations).toEqual([]);
+    expect(plan.blocked).toBeUndefined();
+    expect(plan.operations[0]).toMatchObject({
+      kind: "createPlaylist",
+      uuid: "00000000-0000-4000-8000-ffffffffff01",
+      name: "Brand New Playlist",
+    });
+    expect(plan.creates).toEqual(["Brand New Playlist"]);
+
+    const merged = buildLibrary(applyOperations(baselineDoc, plan.operations));
+    const created = merged.playlists.find((p) => p.name === "Brand New Playlist")!;
+    expect(created.uuid).toBe("00000000-0000-4000-8000-ffffffffff01");
+    expect(created.items).toHaveLength(1);
+  });
+
+  it("creates a missing playlist once for several incoming items", () => {
+    const { baselineDoc, compareDoc } = pairWith((doc) => {
+      const template = rawPlaylists(doc)[0];
+      const fresh = JSON.parse(JSON.stringify(template.toJSON ? template.toJSON() : template));
+      fresh.uuid = { string: "00000000-0000-4000-8000-ffffffffff11" };
+      fresh.name = "Shared New Playlist";
+      fresh.items.items = fresh.items.items.slice(0, 2);
+      fresh.items.items[0].uuid = { string: "00000000-0000-4000-8000-ffffffffff12" };
+      fresh.items.items[1].uuid = { string: "00000000-0000-4000-8000-ffffffffff13" };
+      doc.root_node.playlists.playlists.push(messageType("rv.data.Playlist").fromObject(fresh));
+    });
+
+    const diff = diffOf(baselineDoc, compareDoc);
+    const added = diff.changes.filter((c) => c.type === "added");
+    expect(added.length).toBe(2);
+
+    const { operations } = planMerges(added, "intoBaseline", baselineDoc, compareDoc);
+    // Two items bound for one absent playlist must queue one creation, not two:
+    // the second would fail outright.
+    expect(operations.filter((o) => o.kind === "createPlaylist")).toHaveLength(1);
+    expect(() => applyOperations(baselineDoc, operations)).not.toThrow();
+    expect(afterMerge(baselineDoc, compareDoc, added, "intoBaseline").changes).toEqual([]);
+  });
+
+  it("recreates a missing parent group before its child", () => {
+    const { baselineDoc, compareDoc } = pairWith((doc) => {
+      const template = rawPlaylists(doc)[0];
+      const child = JSON.parse(JSON.stringify(template.toJSON ? template.toJSON() : template));
+      child.uuid = { string: "00000000-0000-4000-8000-ffffffffff21" };
+      child.name = "Nested";
+      child.items.items = child.items.items.slice(0, 1);
+      child.items.items[0].uuid = { string: "00000000-0000-4000-8000-ffffffffff22" };
+      const group = {
+        uuid: { string: "00000000-0000-4000-8000-ffffffffff20" },
+        name: "New Group",
+        playlists: { playlists: [child] },
+      };
+      doc.root_node.playlists.playlists.push(messageType("rv.data.Playlist").fromObject(group));
+    });
+
+    const diff = diffOf(baselineDoc, compareDoc);
+    const added = diff.changes.filter((c) => c.type === "added");
+    const { operations } = planMerges(added, "intoBaseline", baselineDoc, compareDoc);
+
+    const creates = operations.filter((o) => o.kind === "createPlaylist");
+    expect(creates.map((o: any) => o.name)).toEqual(["New Group", "Nested"]);
+
+    const merged = buildLibrary(applyOperations(baselineDoc, operations));
+    expect(merged.playlists.find((p) => p.name === "Nested")!.path).toBe("New Group / Nested");
   });
 
   it("applies removals last, so earlier operations still find their entries", () => {

@@ -25,7 +25,9 @@ export type MergeDirection = "intoBaseline" | "intoCompare";
 export interface MergePlan {
   operations: Operation[];
   /** Set when the change cannot be applied, with the reason left untranslated. */
-  blocked?: "missingPlaylist" | "unsupported";
+  blocked?: "unsupported";
+  /** Playlists this plan would create on the way, for the interface to report. */
+  creates?: string[];
 }
 
 function childrenOf(node: any): any[] {
@@ -40,6 +42,56 @@ function walk(node: any, out: any[] = []): any[] {
 
 function playlistExists(doc: RawDoc, uuid: string): boolean {
   return walk(doc.root_node).some((n: any) => n.uuid?.string === uuid);
+}
+
+/** The node holding `uuid`, or undefined when it is at the top level. */
+function parentOf(doc: RawDoc, uuid: string): any {
+  return walk(doc.root_node).find((n: any) =>
+    childrenOf(n).some((c: any) => c.uuid?.string === uuid)
+  );
+}
+
+function nodeIn(doc: RawDoc, uuid: string): any {
+  return walk(doc.root_node).find((n: any) => n.uuid?.string === uuid);
+}
+
+/**
+ * Operations needed before an entry can be placed in `playlistUuid`.
+ *
+ * A playlist absent from the target is recreated with the *same* uuid it has on
+ * the source side, so the two documents stay comparable afterwards: generating
+ * a fresh one would make the very next diff report the playlist as renamed or
+ * replaced. Its parent is recreated first where that is missing too.
+ */
+function ensurePlaylist(
+  target: RawDoc,
+  source: RawDoc,
+  playlistUuid: string,
+  created: Set<string>
+): Operation[] {
+  if (playlistExists(target, playlistUuid) || created.has(playlistUuid)) return [];
+
+  const operations: Operation[] = [];
+  const parent = parentOf(source, playlistUuid);
+  const parentUuid: string | undefined = parent?.uuid?.string;
+
+  // The root has no uuid of its own, so an absent parent means top level.
+  if (parentUuid) {
+    operations.push(...ensurePlaylist(target, source, parentUuid, created));
+  }
+
+  const node = nodeIn(source, playlistUuid);
+  created.add(playlistUuid);
+  operations.push({
+    kind: "createPlaylist",
+    uuid: playlistUuid,
+    name: node?.name ?? "",
+    parentUuid: parentUuid && parentUuid !== "" ? parentUuid : undefined,
+    // Mirror the source: a group has to be made as a group, or the child it
+    // exists to hold cannot go into it.
+    holds: node?.playlists ? "playlists" : "items",
+  });
+  return operations;
 }
 
 /** The raw entry for an item, wherever it sits in the tree. */
@@ -61,7 +113,9 @@ export function planMerge(
   change: Change,
   direction: MergeDirection,
   baselineDoc: RawDoc,
-  compareDoc: RawDoc
+  compareDoc: RawDoc,
+  /** Playlists already queued for creation by earlier changes in the batch. */
+  created: Set<string> = new Set()
 ): MergePlan {
   const intoBaseline = direction === "intoBaseline";
   const target = intoBaseline ? baselineDoc : compareDoc;
@@ -100,26 +154,26 @@ export function planMerge(
       }
 
       const item = change.item;
-      if (!playlistExists(target, item.playlistUuid)) {
-        // The playlist it belongs in does not exist on this side. Creating
-        // playlists is not yet supported, so this is left for the reader.
-        return { operations: [], blocked: "missingPlaylist" };
-      }
       const entry = findEntry(sourceDoc, item.uuid);
       if (entry === undefined) return { operations: [], blocked: "unsupported" };
+
+      // The playlist it belongs in may not exist on this side yet; make it.
+      const setup = ensurePlaylist(target, sourceDoc, item.playlistUuid, created);
       return {
         operations: [
+          ...setup,
           { kind: "insertItem", playlistUuid: item.playlistUuid, itemName: name, entry },
         ],
+        creates: setup.filter((o) => o.kind === "createPlaylist").map((o) => o.name),
       };
     }
 
     case "moved": {
-      if (!playlistExists(target, wanted.playlistUuid)) {
-        return { operations: [], blocked: "missingPlaylist" };
-      }
+      const setup = ensurePlaylist(target, sourceDoc, wanted.playlistUuid, created);
       return {
+        creates: setup.filter((o) => o.kind === "createPlaylist").map((o) => o.name),
         operations: [
+          ...setup,
           {
             kind: "moveItem",
             itemUuid: existing.uuid,
@@ -165,22 +219,32 @@ export function planMerges(
   direction: MergeDirection,
   baselineDoc: RawDoc,
   compareDoc: RawDoc
-): { operations: Operation[]; blocked: Change[] } {
+): { operations: Operation[]; blocked: Change[]; creates: string[] } {
   const operations: Operation[] = [];
   const blocked: Change[] = [];
 
+  // Shared across the batch so two changes bound for the same absent playlist
+  // queue one creation between them, not one each.
+  const created = new Set<string>();
   const plans = changes.map((change) => ({
     change,
-    plan: planMerge(change, direction, baselineDoc, compareDoc),
+    plan: planMerge(change, direction, baselineDoc, compareDoc, created),
   }));
 
   for (const { change, plan } of plans) {
     if (plan.blocked) blocked.push(change);
   }
 
-  const rank = (op: Operation) => (op.kind === "removeItem" ? 1 : 0);
+  // Creations first so an insert always finds its playlist; removals last so
+  // an earlier operation still finds the entry it names.
+  const rank = (op: Operation) =>
+    op.kind === "createPlaylist" ? -1 : op.kind === "removeItem" ? 1 : 0;
   for (const { plan } of plans) operations.push(...plan.operations);
   operations.sort((a, b) => rank(a) - rank(b));
 
-  return { operations, blocked };
+  const creates = operations
+    .filter((op) => op.kind === "createPlaylist")
+    .map((op) => (op as Extract<Operation, { kind: "createPlaylist" }>).name);
+
+  return { operations, blocked, creates };
 }
