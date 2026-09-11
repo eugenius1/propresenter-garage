@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Eusebius Ngemera
+
 import { checkFidelity, DecodeError, decodeDocument, type Fidelity } from "./decode";
 import { buildLibrary, type MediaLibrary } from "./model";
 import type { I18n } from "../i18n/core";

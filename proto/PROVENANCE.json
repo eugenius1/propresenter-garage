@@ -1,0 +1,10 @@
+{
+  "upstream": "https://github.com/greyshirtguy/ProPresenter7-Proto.git",
+  "ref": "master",
+  "commit": "bf6325d243897a6c64dde46eec803ec29f5f8569",
+  "committedAt": "2026-08-13T09:42:46+10:00",
+  "proPresenterVersion": "21.4,352583705",
+  "vendoredAt": "2026-09-11T00:27:36.970Z",
+  "sourceDirectory": "autogen-proto",
+  "note": "Vendored, not a submodule -- see the comment at the top of scripts/update-protos.mjs. Licence: MIT, see LICENSE-ProPresenter7-Proto."
+}

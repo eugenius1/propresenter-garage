@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Eusebius Ngemera
+
 // Generate the PWA icons as PNGs with no image dependencies:
 // rasterise a few rounded rectangles into an RGBA buffer, then deflate it into
 // a minimal single-IDAT PNG.

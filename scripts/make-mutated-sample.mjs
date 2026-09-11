@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Eusebius Ngemera
+
 // Dev helper: derive a plausibly-edited copy of a real Media file so the diff
 // view can be exercised without waiting for two genuine weekly snapshots.
 //   node scripts/make-mutated-sample.mjs <source> <destination>

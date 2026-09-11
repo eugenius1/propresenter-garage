@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Eusebius Ngemera
+
 import { useEffect, useMemo, useState } from "react";
 import { FileSlot } from "./components/FileSlot";
 import { DiffView } from "./components/DiffView";
@@ -49,6 +52,7 @@ export default function App() {
           className="chip"
           title={f(t.app.schemaHelp, {
             files: PROTO_VERSION.files,
+            commit: PROTO_VERSION.upstreamCommit?.slice(0, 7) ?? "?",
             date: new Date(PROTO_VERSION.builtAt).toLocaleDateString(undefined),
           })}
         >
@@ -138,6 +142,14 @@ export default function App() {
           {t.app.footnoteLink}
         </a>{" "}
         {t.app.footnoteAfter}
+        {" · "}
+        <a
+          href="https://github.com/eugenius1/propresenter-garage/blob/main/LICENSE"
+          target="_blank"
+          rel="noreferrer"
+        >
+          GPLv3
+        </a>
       </p>
     </div>
   );

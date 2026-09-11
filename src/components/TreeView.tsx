@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Eusebius Ngemera
+
 import { useState } from "react";
 import type { MediaLibrary, PlaylistNode } from "../lib/model";
 import { useI18n, type I18n } from "../i18n";

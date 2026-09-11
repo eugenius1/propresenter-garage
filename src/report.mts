@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Eusebius Ngemera
+
 // Print the audit for a Media file as plain text.
 //   npm run report -- /path/to/ProPresenter/Media [--lang=fr]
 import fs from "node:fs";

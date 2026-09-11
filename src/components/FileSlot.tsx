@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Eusebius Ngemera
+
 import { useRef, useState } from "react";
 import { DecodeError, type Fidelity } from "../lib/decode";
 import { formatBytes, loadMediaFile, type LoadedFile } from "../lib/loadFile";

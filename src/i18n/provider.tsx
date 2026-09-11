@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Eusebius Ngemera
+
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
 import { createI18n, detectLanguage, type I18n, type Lang } from "./core";
 

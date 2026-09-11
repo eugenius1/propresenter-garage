@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Eusebius Ngemera
+
 import { basename, type MediaItem, type MediaLibrary, type ModDescriptor } from "./model";
 
 /**

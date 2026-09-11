@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Eusebius Ngemera
+
 import type { ReactNode } from "react";
 import type { AuditResult } from "../lib/audit";
 import type { MediaLibrary } from "../lib/model";

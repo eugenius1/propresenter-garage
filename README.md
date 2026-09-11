@@ -42,8 +42,22 @@ offline from the filesystem. `npm test` runs the suite.
 ProPresenter 7 stores its data as Google protocol buffers. The schema is not
 published, so this uses the reverse-engineered definitions from
 [greyshirtguy/ProPresenter7-Proto](https://github.com/greyshirtguy/ProPresenter7-Proto)
-(MIT), vendored in `proto/`. That repository regenerates them daily against new
-ProPresenter releases, so staying current means refreshing the folder.
+(MIT), vendored in `proto/`.
+
+`npm run protos:update [ref]` re-vendors from upstream and records the exact
+commit in [`proto/PROVENANCE.json`](proto/PROVENANCE.json), which the build
+threads into the interface — the schema chip's tooltip names the commit, so a
+reported problem can be tied to an exact set of definitions. The update prints
+an added/removed summary, and the resulting diff is reviewable before you
+commit it.
+
+**Why vendored rather than a git submodule.** A submodule pins a commit, which
+is the part worth having, and we get that from the provenance file instead. What
+a submodule also brings is a clone that needs `--recurse-submodules` and CI that
+needs submodule support — forget either and you get an empty `proto/` and a
+confusing build failure. And since upstream is an unofficial reverse-engineered
+schema, a rewrite or takedown would break a submodule while leaving a vendored
+copy untouched. That independence is worth 161 text files.
 
 `npm run protos` collapses the 36 transitively-imported `.proto` files into a
 single JSON descriptor (98 KB, 19 KB gzipped) at build time, so the app loads
@@ -161,7 +175,21 @@ than a shell with several; navigation arrives with the second tool.
 
 ## Licence
 
-GNU General Public License v3.0 or later — see [LICENSE](LICENSE).
+Copyright (C) 2026 Eusebius Ngemera
+
+This program is free software: you can redistribute it and/or modify it under
+the terms of the GNU General Public License as published by the Free Software
+Foundation, either version 3 of the License, or (at your option) any later
+version.
+
+This program is distributed in the hope that it will be useful, but WITHOUT ANY
+WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
+PARTICULAR PURPOSE. See the GNU General Public License for more details. You
+should have received a copy of the licence along with this program — see
+[LICENSE](LICENSE), or <https://www.gnu.org/licenses/>.
+
+Source files carry an [SPDX](https://spdx.dev/) header rather than the full
+notice, which keeps them readable while staying machine-checkable.
 
 The vendored schema in `proto/` is a separate work, MIT-licensed by its author
 and kept under its own notice at

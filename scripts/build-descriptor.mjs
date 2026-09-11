@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Eusebius Ngemera
+
 // Build-time step: collapse the vendored .proto tree into one JSON descriptor.
 // Shipping the descriptor instead of the .proto files means the app never parses
 // schema text at runtime -- protobuf.js loads it via Root.fromJSON() instantly.
@@ -26,9 +29,27 @@ fs.mkdirSync(path.dirname(OUT), { recursive: true });
 fs.writeFileSync(OUT, json);
 
 const version = fs.readFileSync(path.join(PROTO_DIR, "version.txt"), "utf8").trim();
+
+// Provenance is written by scripts/update-protos.mjs. Carry the upstream commit
+// through to the interface so a reported problem can be tied to an exact schema.
+const provenancePath = path.join(PROTO_DIR, "PROVENANCE.json");
+const provenance = fs.existsSync(provenancePath)
+  ? JSON.parse(fs.readFileSync(provenancePath, "utf8"))
+  : {};
+
 fs.writeFileSync(
   "src/generated/proto-version.json",
-  JSON.stringify({ version, files: root.files.length, builtAt: new Date().toISOString() }, null, 2)
+  JSON.stringify(
+    {
+      version,
+      files: root.files.length,
+      builtAt: new Date().toISOString(),
+      upstreamCommit: provenance.commit ?? null,
+      upstreamCommittedAt: provenance.committedAt ?? null,
+    },
+    null,
+    2
+  )
 );
 
 console.log(

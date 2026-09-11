@@ -7,14 +7,18 @@
   "type": "module",
   "scripts": {
     "protos": "node scripts/build-descriptor.mjs",
+    "protos:update": "node scripts/update-protos.mjs",
     "icons": "node scripts/make-icons.mjs",
     "dev": "npm run protos && vite",
     "build": "npm run protos && tsc -b tsconfig.app.json && vite build",
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
+    "lint": "oxlint",
+    "lint:fix": "oxlint --fix",
     "typecheck": "tsc --noEmit -p tsconfig.app.json && tsc --noEmit -p tsconfig.test.json",
-    "report": "tsx src/report.mts"
+    "report": "tsx src/report.mts",
+    "check": "npm run lint && npm run typecheck && npm test"
   },
   "dependencies": {
     "protobufjs": "^8.8.0",

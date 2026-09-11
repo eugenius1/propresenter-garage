@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Eusebius Ngemera
+
 import type { LayoutDescriptor, ModDescriptor, PlaybackSettings } from "../lib/model";
 import type { I18n } from "./core";
 

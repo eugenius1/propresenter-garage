@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Eusebius Ngemera
+
 import type { Dictionary } from "./en";
 
 /**
@@ -25,7 +28,7 @@ export const fr: Dictionary = {
     schema: "schéma {version}",
     offline: "fonctionne hors ligne",
     offlineHelp: "Les fichiers sont lus dans votre navigateur. Rien n'est envoyé.",
-    schemaHelp: "{files} fichiers proto, générés le {date}",
+    schemaHelp: "{files} fichiers proto du schéma {commit}, générés le {date}",
     languageLabel: "Langue",
     themeLabel: "Apparence",
     footnoteBefore: "Schéma issu de",

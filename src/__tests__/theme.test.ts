@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Eusebius Ngemera
+
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { isTheme, resolveTheme, systemTheme, THEMES, watchSystemTheme } from "../theme";
 
