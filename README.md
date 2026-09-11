@@ -2,6 +2,8 @@
 
 An installable web app holding a suite of utilities for ProPresenter 7 files.
 
+**<https://eusebius.tech/propresenter-garage/>**
+
 Everything runs in the browser. No server, no upload: your media library never
 leaves the machine, and once installed the app works with no network at all.
 
@@ -34,8 +36,12 @@ npm install
 npm run dev
 ```
 
-`npm run build` produces a static `dist/` you can host anywhere, including
-offline from the filesystem. `npm test` runs the suite.
+`npm run build` produces a static `dist/`. `npm test` runs the suite, and
+`npm run check` is the same gate CI uses: codegen, lint, both typechecks, tests.
+
+Pushing to `main` deploys to GitHub Pages. The site needs a real HTTP server
+even though it is entirely static -- ES modules and service workers are both
+blocked on `file://`.
 
 ## How it reads the files
 
