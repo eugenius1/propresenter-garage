@@ -2,9 +2,10 @@
 // Copyright (C) 2026 Eusebius Ngemera
 
 import { useRef, useState } from "react";
-import { DecodeError, type Fidelity } from "../lib/decode";
+import type { Fidelity } from "../lib/decode";
 import { formatBytes, loadMediaFile, type LoadedFile } from "../lib/loadFile";
 import { useI18n, type I18n } from "../i18n";
+import { errorMessage } from "../i18n/errors";
 
 interface Props {
   role: string;
@@ -28,40 +29,14 @@ function fidelityHelp({ t }: I18n, fidelity: Fidelity): string {
   }[fidelity];
 }
 
-/**
- * Turn a thrown error into a sentence in the reader's language.
- *
- * `hint` is supplied by the tool, which is the only thing that knows which file
- * it wanted; the shared error only knows which kind it got.
- */
-function errorMessage(i18n: I18n, error: unknown, hint?: string): string {
-  const { t, f } = i18n;
-  if (error instanceof DecodeError) {
-    switch (error.code) {
-      case "empty":
-        return t.errors.empty;
-      case "notProtobuf":
-        return f(t.errors.notProtobuf, { reason: error.params.reason ?? "" });
-      case "wrongPlaylistType": {
-        const kinds = t.errors.playlistType;
-        const actual = (error.params.actual ?? "unknown") as keyof typeof kinds;
-        const expected = (error.params.expected ?? "unknown") as keyof typeof kinds;
-        const message = f(t.errors.wrongPlaylistType, {
-          actual: kinds[actual],
-          expected: kinds[expected],
-        });
-        return hint ? `${message} ${hint}` : message;
-      }
-    }
-  }
-  return (error as Error).message;
-}
-
 export function FileSlot({ role, hint, wrongKindHint, file, onLoad, onClear }: Props) {
   const i18n = useI18n();
   const { t, plural, f } = i18n;
   const input = useRef<HTMLInputElement>(null);
-  const [error, setError] = useState<string | null>(null);
+  // Store the error, not a rendered sentence. Keeping the formatted string here
+  // meant a message stayed in whichever language was active when the file was
+  // rejected, because switching language left nothing to re-render from.
+  const [error, setError] = useState<unknown>(null);
   const [dragging, setDragging] = useState(false);
 
   async function accept(picked: File | undefined) {
@@ -71,7 +46,7 @@ export function FileSlot({ role, hint, wrongKindHint, file, onLoad, onClear }: P
     try {
       onLoad(await loadMediaFile(picked));
     } catch (e) {
-      setError(errorMessage(i18n, e, wrongKindHint));
+      setError(e);
     }
   }
 
@@ -90,7 +65,13 @@ export function FileSlot({ role, hint, wrongKindHint, file, onLoad, onClear }: P
         <input ref={input} type="file" hidden onChange={(e) => void accept(e.target.files?.[0])} />
         <div className="slot-role">{role}</div>
         <div style={{ marginTop: 4 }}>
-          {error ? <span style={{ color: "var(--removed)" }}>{error}</span> : hint}
+          {error ? (
+            <span style={{ color: "var(--removed)" }}>
+              {errorMessage(i18n, error, wrongKindHint)}
+            </span>
+          ) : (
+            hint
+          )}
         </div>
       </div>
     );

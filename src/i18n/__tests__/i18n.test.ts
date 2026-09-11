@@ -1,14 +1,16 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Eusebius Ngemera
 
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it, it as baseIt } from "vitest";
 import { en } from "../en";
 import { fr } from "../fr";
 import { createI18n, detectLanguage, DICTIONARIES, interpolate, LANGUAGES } from "..";
 import { describeModsInline } from "../describe";
+import { errorMessage } from "../errors";
+import { DecodeError } from "../../lib/decode";
 import { buildLibrary, decodeMediaDocument } from "../../lib/model";
 import { auditLibrary } from "../../lib/audit";
-import { hasRealFile, readRealFile } from "../../lib/__tests__/fixtures";
+import { SOURCES } from "../../lib/__tests__/fixtures";
 
 /** Every leaf string path in a dictionary, so locales can be compared. */
 function paths(value: unknown, prefix = ""): string[] {
@@ -117,6 +119,44 @@ describe("plural rules", () => {
   });
 });
 
+describe("error messages", () => {
+  const EN = createI18n("en");
+  const FR = createI18n("fr");
+  const wrongKind = new DecodeError("wrongPlaylistType", {
+    expected: "media",
+    actual: "presentation",
+  });
+
+  it("renders the same error in whichever language is active", () => {
+    // The interface must format errors at render time, not store a formatted
+    // sentence: holding the string meant a rejected file kept its message in
+    // the language that was active when it was rejected.
+    expect(errorMessage(EN, wrongKind)).toBe(
+      "This is a presentation playlist, not a media playlist."
+    );
+    expect(errorMessage(FR, wrongKind)).toBe(
+      "Il s'agit d'une liste de présentations, pas d'une liste de médias."
+    );
+  });
+
+  it("appends the tool's own hint about which file it wanted", () => {
+    const hint = EN.t.tools.mediaBin.pickFileHint;
+    expect(errorMessage(EN, wrongKind, hint)).toContain("This is a presentation playlist");
+    expect(errorMessage(EN, wrongKind, hint)).toContain('Pick the file named "Media"');
+  });
+
+  it("names the reason a file was not protobuf at all", () => {
+    const bad = new DecodeError("notProtobuf", { reason: "index out of range" });
+    expect(errorMessage(EN, bad)).toContain("index out of range");
+    expect(errorMessage(FR, bad)).toContain("index out of range");
+    expect(errorMessage(FR, bad)).not.toEqual(errorMessage(EN, bad));
+  });
+
+  it("falls back to a plain error's own message", () => {
+    expect(errorMessage(EN, new Error("disk on fire"))).toBe("disk on fire");
+  });
+});
+
 describe("interpolation", () => {
   it("substitutes named placeholders", () => {
     expect(interpolate("{a} then {b}", { a: "one", b: 2 })).toBe("one then 2");
@@ -149,7 +189,12 @@ describe("interpolation", () => {
   });
 });
 
-describe.skipIf(!hasRealFile)("language independence of analysis", () => {
+describe.each(SOURCES)("language independence of analysis [$name]", (source) => {
+  const it = source.available ? baseIt : baseIt.skip;
+  let bytes: Uint8Array;
+  beforeAll(() => {
+    if (source.available) bytes = source.read();
+  });
   const EN = createI18n("en");
   const FR = createI18n("fr");
 
@@ -157,7 +202,7 @@ describe.skipIf(!hasRealFile)("language independence of analysis", () => {
     // The duplicate identity must never depend on the chosen language. An
     // earlier version built it from English display strings, which would have
     // made French readers see a different set of duplicates.
-    const lib = buildLibrary(decodeMediaDocument(readRealFile()));
+    const lib = buildLibrary(decodeMediaDocument(bytes));
     const modified = lib.items.filter((i) => i.modifications.descriptors.length > 0);
     expect(modified.length).toBeGreaterThan(0);
 
@@ -171,7 +216,7 @@ describe.skipIf(!hasRealFile)("language independence of analysis", () => {
   });
 
   it("renders the same modifications differently per language while the identity holds", () => {
-    const lib = buildLibrary(decodeMediaDocument(readRealFile()));
+    const lib = buildLibrary(decodeMediaDocument(bytes));
     const mirrored = lib.items.find((i) => i.modifications.flippedHorizontally);
     expect(mirrored).toBeDefined();
 
@@ -181,18 +226,18 @@ describe.skipIf(!hasRealFile)("language independence of analysis", () => {
     expect(describeModsInline(EN, descriptors)).not.toEqual(describeModsInline(FR, descriptors));
 
     // Same input, same identity, whichever language rendered it.
-    const again = buildLibrary(decodeMediaDocument(readRealFile()));
+    const again = buildLibrary(decodeMediaDocument(bytes));
     const same = again.items.find((i) => i.uuid === mirrored!.uuid)!;
     expect(same.modifications.fingerprint).toBe(mirrored!.modifications.fingerprint);
   });
 
   it("groups variants consistently across languages", () => {
-    const audit = auditLibrary(buildLibrary(decodeMediaDocument(readRealFile())));
+    const audit = auditLibrary(buildLibrary(decodeMediaDocument(bytes)));
     expect(audit.variantGroups.length).toBeGreaterThan(0);
   });
 
   it("gives every variant a path so it can be found on disk", () => {
-    const audit = auditLibrary(buildLibrary(decodeMediaDocument(readRealFile())));
+    const audit = auditLibrary(buildLibrary(decodeMediaDocument(bytes)));
     for (const group of audit.variantGroups) {
       expect(group.path).toBeTruthy();
       for (const variant of group.variants) {
