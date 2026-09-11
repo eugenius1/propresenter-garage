@@ -361,3 +361,9 @@ select.mini { max-width: 9em; }
 .tree summary:focus-within .row-actions { opacity: 1; }
 
 .why.warn-inline { color: var(--renamed); }
+
+/* The masthead aligns its children on the baseline, which an SVG does not
+   share with text -- so the mark and the title align to each other inside
+   .brand, and the group as a whole keeps the masthead's baseline. */
+.brand { display: flex; align-items: center; gap: 9px; }
+.logo { flex: none; display: block; border-radius: 7px; }

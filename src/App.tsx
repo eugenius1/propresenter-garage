@@ -2,6 +2,7 @@
 // Copyright (C) 2026 Eusebius Ngemera
 
 import { useEffect } from "react";
+import { Logo } from "./components/Logo";
 import { LanguageSwitcher } from "./components/LanguageSwitcher";
 import { ThemeSwitcher } from "./components/ThemeSwitcher";
 import { MediaBin } from "./tools/MediaBin";
@@ -25,7 +26,10 @@ export default function App() {
   return (
     <div className="app">
       <header className="masthead">
-        <h1>{t.app.title}</h1>
+        <span className="brand">
+          <Logo />
+          <h1>{t.app.title}</h1>
+        </span>
         <p>{t.tools.mediaBin.tagline}</p>
         <span className="spacer" />
         <span
