@@ -237,6 +237,27 @@ export const en = {
         reorganise: "Reorganise",
       },
 
+      merge: {
+        heading: "Bring changes across",
+        intro:
+          "Pick changes and apply them to one side, then export it. The file you load is never written to — export produces a separate copy.",
+        direction: "Apply to",
+        intoBaseline: "Baseline ({filename})",
+        intoCompare: "Compare ({filename})",
+        selectAll: "Select all",
+        selectNone: "Clear selection",
+        selected: ["{n} change selected", "{n} changes selected"],
+        applyAndExport: "Apply and export",
+        blocked: ["{n} change cannot be applied", "{n} changes cannot be applied"],
+        blockedWhy:
+          "Their playlist does not exist on the other side, and creating playlists is not supported yet.",
+        exportBlocked:
+          "That side cannot be exported: re-encoding it loses content the schema does not cover.",
+        exportedAs: "Exported as {filename}. Check it in ProPresenter before replacing anything.",
+        failed: "Those changes could not be applied together: {reason}",
+        nothingSelected: "Nothing selected.",
+      },
+
       reorganise: {
         heading: "Reorganise",
         intro:

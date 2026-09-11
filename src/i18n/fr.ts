@@ -248,6 +248,31 @@ export const fr: Dictionary = {
         reorganise: "Réorganiser",
       },
 
+      merge: {
+        heading: "Reporter des modifications",
+        intro:
+          "Choisissez des modifications et appliquez-les à un côté, puis exportez-le. Le fichier chargé n'est jamais écrit : l'export produit une copie distincte.",
+        direction: "Appliquer à",
+        intoBaseline: "Référence ({filename})",
+        intoCompare: "Comparaison ({filename})",
+        selectAll: "Tout sélectionner",
+        selectNone: "Tout désélectionner",
+        selected: ["{n} modification sélectionnée", "{n} modifications sélectionnées"],
+        applyAndExport: "Appliquer et exporter",
+        blocked: [
+          "{n} modification ne peut pas être appliquée",
+          "{n} modifications ne peuvent pas être appliquées",
+        ],
+        blockedWhy:
+          "Leur liste n'existe pas de l'autre côté, et la création de listes n'est pas encore prise en charge.",
+        exportBlocked:
+          "Ce côté ne peut pas être exporté : le réencodage perd du contenu que le schéma ne couvre pas.",
+        exportedAs:
+          "Exporté sous {filename}. Vérifiez-le dans ProPresenter avant de remplacer quoi que ce soit.",
+        failed: "Ces modifications n'ont pas pu être appliquées ensemble : {reason}",
+        nothingSelected: "Aucune sélection.",
+      },
+
       reorganise: {
         heading: "Réorganiser",
         intro:

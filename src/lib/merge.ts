@@ -1,0 +1,186 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Eusebius Ngemera
+
+import type { RawDoc } from "./decode";
+import type { Change } from "./diff";
+import type { Operation } from "./operations";
+
+/**
+ * Turn a diff entry into edits that make one document match the other.
+ *
+ * The diff already knows what differs; merging is the question of which side
+ * wins. Each change becomes operations applied to the *target* document, taking
+ * whatever it needs from the source.
+ *
+ * Item-level differences -- a rename, a relink, a changed transition, a new
+ * mirror -- all collapse to one operation: replace the target's entry with the
+ * source's. Reconstructing each difference individually would mean rebuilding a
+ * protobuf entry from the model, and the model does not capture every field.
+ * Taking the whole entry is both simpler and lossless.
+ */
+
+/** Which document is being written to. */
+export type MergeDirection = "intoBaseline" | "intoCompare";
+
+export interface MergePlan {
+  operations: Operation[];
+  /** Set when the change cannot be applied, with the reason left untranslated. */
+  blocked?: "missingPlaylist" | "unsupported";
+}
+
+function childrenOf(node: any): any[] {
+  return node.playlists?.playlists ?? node.children ?? [];
+}
+
+function walk(node: any, out: any[] = []): any[] {
+  out.push(node);
+  for (const child of childrenOf(node)) walk(child, out);
+  return out;
+}
+
+function playlistExists(doc: RawDoc, uuid: string): boolean {
+  return walk(doc.root_node).some((n: any) => n.uuid?.string === uuid);
+}
+
+/** The raw entry for an item, wherever it sits in the tree. */
+function findEntry(doc: RawDoc, itemUuid: string): unknown {
+  for (const node of walk(doc.root_node)) {
+    const found = (node.items?.items ?? []).find((i: any) => i.uuid?.string === itemUuid);
+    if (found) return found;
+  }
+  return undefined;
+}
+
+/**
+ * Plan the edits for one change.
+ *
+ * `source` is the document the change is taken from, `target` the one being
+ * brought into line with it.
+ */
+export function planMerge(
+  change: Change,
+  direction: MergeDirection,
+  baselineDoc: RawDoc,
+  compareDoc: RawDoc
+): MergePlan {
+  const intoBaseline = direction === "intoBaseline";
+  const target = intoBaseline ? baselineDoc : compareDoc;
+
+  // `change.item` is the entry as it stands on the right-hand (compare) side,
+  // and `change.before` as it stands on the left. Which of those is the source
+  // depends on the direction being merged.
+  const wanted = intoBaseline ? change.item : (change.before ?? change.item);
+  const existing = intoBaseline ? (change.before ?? change.item) : change.item;
+  const sourceDoc = intoBaseline ? compareDoc : baselineDoc;
+
+  const name = wanted.name || wanted.displayFilename;
+
+  switch (change.type) {
+    // Present on one side only. Adding it to the other, or taking it away,
+    // depending on which way the merge runs.
+    case "added":
+    case "removed": {
+      const presentIn: MergeDirection =
+        change.type === "added" ? "intoCompare" : "intoBaseline";
+      const alreadyThere = direction === presentIn;
+
+      if (alreadyThere) {
+        // The target already has it and the source does not: remove it.
+        const item = change.item;
+        return {
+          operations: [
+            {
+              kind: "removeItem",
+              playlistUuid: item.playlistUuid,
+              itemUuid: item.uuid,
+              itemName: item.name || item.displayFilename,
+            },
+          ],
+        };
+      }
+
+      const item = change.item;
+      if (!playlistExists(target, item.playlistUuid)) {
+        // The playlist it belongs in does not exist on this side. Creating
+        // playlists is not yet supported, so this is left for the reader.
+        return { operations: [], blocked: "missingPlaylist" };
+      }
+      const entry = findEntry(sourceDoc, item.uuid);
+      if (entry === undefined) return { operations: [], blocked: "unsupported" };
+      return {
+        operations: [
+          { kind: "insertItem", playlistUuid: item.playlistUuid, itemName: name, entry },
+        ],
+      };
+    }
+
+    case "moved": {
+      if (!playlistExists(target, wanted.playlistUuid)) {
+        return { operations: [], blocked: "missingPlaylist" };
+      }
+      return {
+        operations: [
+          {
+            kind: "moveItem",
+            itemUuid: existing.uuid,
+            itemName: name,
+            fromPlaylistUuid: existing.playlistUuid,
+            toPlaylistUuid: wanted.playlistUuid,
+          },
+        ],
+      };
+    }
+
+    // Everything else is a difference within one entry, so the entry is taken
+    // wholesale rather than reconstructed field by field.
+    case "renamed":
+    case "relinked":
+    case "retimed":
+    case "restyled": {
+      const entry = findEntry(sourceDoc, wanted.uuid);
+      if (entry === undefined) return { operations: [], blocked: "unsupported" };
+      return {
+        operations: [
+          {
+            kind: "replaceItem",
+            playlistUuid: existing.playlistUuid,
+            itemUuid: existing.uuid,
+            itemName: name,
+            entry,
+          },
+        ],
+      };
+    }
+  }
+}
+
+/**
+ * Plan a set of changes together.
+ *
+ * Order matters: removals are applied last so that an earlier operation naming
+ * an entry still finds it.
+ */
+export function planMerges(
+  changes: Change[],
+  direction: MergeDirection,
+  baselineDoc: RawDoc,
+  compareDoc: RawDoc
+): { operations: Operation[]; blocked: Change[] } {
+  const operations: Operation[] = [];
+  const blocked: Change[] = [];
+
+  const plans = changes.map((change) => ({
+    change,
+    plan: planMerge(change, direction, baselineDoc, compareDoc),
+  }));
+
+  for (const { change, plan } of plans) {
+    if (plan.blocked) blocked.push(change);
+  }
+
+  const rank = (op: Operation) => (op.kind === "removeItem" ? 1 : 0);
+  for (const { plan } of plans) operations.push(...plan.operations);
+  operations.sort((a, b) => rank(a) - rank(b));
+
+  return { operations, blocked };
+}

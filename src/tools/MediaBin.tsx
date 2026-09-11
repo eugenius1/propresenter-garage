@@ -137,7 +137,9 @@ export function MediaBin() {
             </button>
           </div>
 
-          {tab === "diff" && diff && <DiffView diff={diff} />}
+          {tab === "diff" && diff && (
+            <DiffView diff={diff} baseline={left ?? undefined} compare={right ?? undefined} />
+          )}
 
           {tab === "audit" && audit && inspected && (
             <>

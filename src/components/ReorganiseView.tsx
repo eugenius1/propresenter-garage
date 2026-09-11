@@ -56,6 +56,7 @@ export function ReorganiseView({
   const i18n = useI18n();
   const { t, f, num, plural } = i18n;
   const r = t.tools.mediaBin.reorganise;
+  const rootLabel = t.diff.root;
 
   const [operations, setOperations] = useState<Operation[]>([]);
   const [exported, setExported] = useState<string | null>(null);
@@ -90,17 +91,17 @@ export function ReorganiseView({
   // stops being offered.
   const audit = useMemo(() => (editedLib ? auditLibrary(editedLib) : null), [editedLib]);
 
-  const describeItem = (item: MediaItem) => ({
-    key: item.uuid,
-    primary: f(r.affectedItem, {
-      name: item.name || item.displayFilename,
-      playlist: item.playlistPath || t.diff.root,
-    }),
-    secondary: item.relativePath || item.absolutePath,
-  });
-
   const duplicateFix = useMemo<QuickFix | null>(() => {
     if (!audit || audit.withinPlaylistDuplicates.length === 0) return null;
+
+    const describeItem = (item: MediaItem) => ({
+      key: item.uuid,
+      primary: f(r.affectedItem, {
+        name: item.name || item.displayFilename,
+        playlist: item.playlistPath || rootLabel,
+      }),
+      secondary: item.relativePath || item.absolutePath,
+    });
 
     const operations: Operation[] = [];
     const affected: QuickFix["affected"] = [];
@@ -136,7 +137,7 @@ export function ReorganiseView({
           affected,
         }
       : null;
-  }, [audit, f, plural, r, t]);
+  }, [audit, f, plural, r, rootLabel]);
 
   const emptyPlaylistFix = useMemo<QuickFix | null>(() => {
     if (!editedLib) return null;

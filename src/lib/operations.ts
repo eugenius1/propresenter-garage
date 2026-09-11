@@ -2,7 +2,7 @@
 // Copyright (C) 2026 Eusebius Ngemera
 
 import { decodeMediaDocument } from "./model";
-import { encodeDocument, type RawDoc } from "./decode";
+import { encodeDocument, messageType, type RawDoc } from "./decode";
 
 /**
  * Edits to a media-bin document.
@@ -37,7 +37,18 @@ export type Operation =
     }
   | { kind: "renameItem"; itemUuid: string; from: string; to: string }
   | { kind: "renamePlaylist"; playlistUuid: string; from: string; to: string }
-  | { kind: "removePlaylist"; playlistUuid: string; playlistName: string };
+  | { kind: "removePlaylist"; playlistUuid: string; playlistName: string }
+  /**
+   * Insert an entry taken from another document.
+   *
+   * Carries the raw protobuf entry rather than a description of it, because
+   * anything less would mean reconstructing the entry from the model -- and the
+   * model does not capture every field. The entry is deep-copied on the way in,
+   * so the document it came from is not aliased into this one.
+   */
+  | { kind: "insertItem"; playlistUuid: string; itemName: string; entry: unknown }
+  /** Replace an entry wholesale with one from another document. */
+  | { kind: "replaceItem"; playlistUuid: string; itemUuid: string; itemName: string; entry: unknown };
 
 export class OperationError extends Error {
   readonly operation: Operation;
@@ -46,6 +57,21 @@ export class OperationError extends Error {
     super(message);
     this.name = "OperationError";
     this.operation = operation;
+  }
+}
+
+/**
+ * Deep-copy one entry through the wire format.
+ *
+ * Entries arriving from another document must not be shared by reference:
+ * a later edit to either document would otherwise reach into the other.
+ */
+function copyEntry(entry: unknown, op: Operation): any {
+  try {
+    const PlaylistItem = messageType("rv.data.PlaylistItem");
+    return PlaylistItem.decode(PlaylistItem.encode(entry as never).finish());
+  } catch (e) {
+    throw new OperationError(`entry could not be copied: ${(e as Error).message}`, op);
   }
 }
 
@@ -137,6 +163,39 @@ function applyOne(doc: RawDoc, op: Operation): void {
 
     case "renamePlaylist": {
       findPlaylist(doc, op.playlistUuid, op).name = op.to;
+      break;
+    }
+
+    case "insertItem": {
+      const playlist = findPlaylist(doc, op.playlistUuid, op);
+      const items = itemsOf(playlist);
+      if (!items) throw new OperationError(`playlist ${playlist.name} cannot hold items`, op);
+      items.push(copyEntry(op.entry, op));
+      break;
+    }
+
+    case "replaceItem": {
+      const playlist = findPlaylist(doc, op.playlistUuid, op);
+      const items = itemsOf(playlist);
+      if (!items) throw new OperationError(`playlist ${playlist.name} holds no items`, op);
+      const index = items.findIndex((i: any) => i.uuid?.string === op.itemUuid);
+      if (index < 0) {
+        throw new OperationError(`no item ${op.itemUuid} in playlist ${playlist.name}`, op);
+      }
+      // Replace in place, so the entry keeps its position in the playlist --
+      // and keep the target's identity rather than the source's.
+      //
+      // Entries matched across documents by media path rather than uuid (the
+      // same file re-added by hand carries a fresh one) would otherwise take on
+      // the source's uuid, which both breaks any later operation naming the
+      // original and silently turns the entry into a different item as far as
+      // every future diff is concerned.
+      const replacement = copyEntry(op.entry, op);
+      replacement.uuid = items[index].uuid;
+      if (replacement.cue && items[index].cue) {
+        replacement.cue.uuid = items[index].cue.uuid;
+      }
+      items[index] = replacement;
       break;
     }
 

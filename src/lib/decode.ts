@@ -96,6 +96,11 @@ export function enumLabel(fullyQualifiedEnum: string, value: unknown): string {
   return String(value ?? "unknown");
 }
 
+/** Look up a message type from the vendored schema, for code that builds messages. */
+export function messageType(fullyQualifiedName: string): protobuf.Type {
+  return root.lookupType(fullyQualifiedName);
+}
+
 export function encodeDocument(doc: RawDoc): Uint8Array {
   return PlaylistDocument.encode(doc).finish();
 }
