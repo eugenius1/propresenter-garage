@@ -228,6 +228,44 @@ export const en = {
         diff: "Diff",
         audit: "Audit",
         browse: "Browse",
+        reorganise: "Reorganise",
+      },
+
+      reorganise: {
+        heading: "Reorganise",
+        intro:
+          "Changes are collected here and applied only when you export. Your original file is never written to — export produces a separate copy for you to put in place yourself.",
+        pending: ["{n} pending change", "{n} pending changes"],
+        none: "No changes yet.",
+        undo: "Undo last",
+        discard: "Discard all",
+        exportFile: "Export file",
+        exportBlocked:
+          "This file cannot be exported: re-encoding it loses content the schema does not cover.",
+        exportedAs: "Exported as {filename}. Check it in ProPresenter before replacing anything.",
+        broken:
+          "These changes no longer apply to this file. Undo the last one, or discard them all.",
+
+        quickFixes: "Quick fixes",
+        quickFixesWhy:
+          "Built from the audit. Each one queues ordinary changes you can review and undo below.",
+        removeDuplicates: ["Remove {n} duplicate entry", "Remove {n} duplicate entries"],
+        removeDuplicatesWhy:
+          "Keeps the first of each entry repeated inside a single playlist, with identical modifications.",
+        removeEmpty: ["Remove {n} empty playlist", "Remove {n} empty playlists"],
+        removeEmptyWhy: "Playlists holding no media and no sub-playlists.",
+        nothingToFix: "The audit found nothing to fix automatically.",
+
+        rename: "Rename",
+        remove: "Remove",
+        moveUp: "Move up",
+        moveDown: "Move down",
+        moveTo: "Move to…",
+        renameItemPrompt: "New name for this item",
+        renamePlaylistPrompt: "New name for this playlist",
+        removePlaylistConfirm:
+          "Remove {name} and the {n} items in it? You can still undo this before exporting.",
+        emptyPlaylist: "empty",
       },
     },
   },

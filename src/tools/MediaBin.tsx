@@ -6,12 +6,13 @@ import { FileSlot } from "../components/FileSlot";
 import { DiffView } from "../components/DiffView";
 import { AuditView } from "../components/AuditView";
 import { TreeView } from "../components/TreeView";
+import { ReorganiseView } from "../components/ReorganiseView";
 import { auditLibrary } from "../lib/audit";
 import { diffLibraries } from "../lib/diff";
 import type { LoadedFile } from "../lib/loadFile";
 import { useI18n } from "../i18n";
 
-type Tab = "diff" | "audit" | "browse";
+type Tab = "diff" | "audit" | "browse" | "reorganise";
 
 /**
  * The Media Bin tool: compare and audit media-bin playlists.
@@ -110,6 +111,14 @@ export function MediaBin() {
             >
               {t.tools.mediaBin.tabs.browse}
             </button>
+            <button
+              className="tab"
+              role="tab"
+              aria-selected={tab === "reorganise"}
+              onClick={() => setTab("reorganise")}
+            >
+              {t.tools.mediaBin.tabs.reorganise}
+            </button>
           </div>
 
           {tab === "diff" && diff && <DiffView diff={diff} />}
@@ -139,6 +148,8 @@ export function MediaBin() {
           )}
 
           {tab === "browse" && inspected && <TreeView lib={inspected.library} />}
+
+          {tab === "reorganise" && inspected && <ReorganiseView file={inspected} />}
         </>
       )}
     </>

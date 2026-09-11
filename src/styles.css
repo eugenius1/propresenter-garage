@@ -317,3 +317,47 @@ details.more[open] > summary::before { content: "▾ "; }
   background: var(--surface);
   color: var(--text);
 }
+
+/* ---------- reorganise editor ---------- */
+
+.editor-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 10px 0 2px;
+}
+.editor-count { font-size: 13px; font-weight: 550; }
+
+.row-actions { display: inline-flex; gap: 4px; align-items: center; flex: none; }
+
+.mini {
+  font: inherit;
+  font-size: 11px;
+  line-height: 1.4;
+  padding: 2px 7px;
+  border-radius: 5px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-dim);
+  cursor: pointer;
+}
+.mini:hover:not(:disabled) { color: var(--text); border-color: var(--border-strong); }
+.mini:disabled { opacity: .35; cursor: not-allowed; }
+.mini.danger { color: var(--removed); }
+.mini.danger:hover { background: var(--removed-soft); border-color: var(--removed); }
+
+select.mini { max-width: 9em; }
+
+/* Actions sit to the right of each row, revealed on hover to keep the tree
+   readable while still being reachable by keyboard. */
+.tree .leaf.editable { gap: 10px; align-items: center; padding: 4px 0; }
+.tree .leaf.editable .row-actions { opacity: 0; transition: opacity .1s; }
+.tree .leaf.editable:hover .row-actions,
+.tree .leaf.editable:focus-within .row-actions { opacity: 1; }
+
+.tree summary .row-actions { opacity: 0; transition: opacity .1s; }
+.tree summary:hover .row-actions,
+.tree summary:focus-within .row-actions { opacity: 1; }
+
+.why.warn-inline { color: var(--renamed); }

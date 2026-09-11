@@ -240,6 +240,45 @@ export const fr: Dictionary = {
         diff: "Différences",
         audit: "Analyse",
         browse: "Parcourir",
+        reorganise: "Réorganiser",
+      },
+
+      reorganise: {
+        heading: "Réorganiser",
+        intro:
+          "Les modifications sont rassemblées ici et appliquées seulement à l'export. Votre fichier d'origine n'est jamais écrit : l'export produit une copie distincte que vous mettez en place vous-même.",
+        pending: ["{n} modification en attente", "{n} modifications en attente"],
+        none: "Aucune modification pour l'instant.",
+        undo: "Annuler la dernière",
+        discard: "Tout abandonner",
+        exportFile: "Exporter le fichier",
+        exportBlocked:
+          "Ce fichier ne peut pas être exporté : le réencodage perd du contenu que le schéma ne couvre pas.",
+        exportedAs:
+          "Exporté sous {filename}. Vérifiez-le dans ProPresenter avant de remplacer quoi que ce soit.",
+        broken:
+          "Ces modifications ne s'appliquent plus à ce fichier. Annulez la dernière ou abandonnez tout.",
+
+        quickFixes: "Corrections rapides",
+        quickFixesWhy:
+          "Issues de l'analyse. Chacune met en file des modifications ordinaires, que vous pouvez relire et annuler ci-dessous.",
+        removeDuplicates: ["Supprimer {n} doublon", "Supprimer {n} doublons"],
+        removeDuplicatesWhy:
+          "Conserve la première de chaque entrée répétée dans une même liste, avec des retouches identiques.",
+        removeEmpty: ["Supprimer {n} liste vide", "Supprimer {n} listes vides"],
+        removeEmptyWhy: "Listes ne contenant aucun média ni sous-liste.",
+        nothingToFix: "L'analyse n'a rien trouvé à corriger automatiquement.",
+
+        rename: "Renommer",
+        remove: "Supprimer",
+        moveUp: "Monter",
+        moveDown: "Descendre",
+        moveTo: "Déplacer vers…",
+        renameItemPrompt: "Nouveau nom pour cet élément",
+        renamePlaylistPrompt: "Nouveau nom pour cette liste",
+        removePlaylistConfirm:
+          "Supprimer {name} et ses {n} éléments ? Vous pouvez encore annuler avant l'export.",
+        emptyPlaylist: "vide",
       },
     },
   },
