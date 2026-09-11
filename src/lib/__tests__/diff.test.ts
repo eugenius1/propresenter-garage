@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Eusebius Ngemera
 
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
 import { decodeDocument, encodeDocument } from "../decode";
 import { buildLibrary } from "../model";
 import { diffLibraries } from "../diff";
@@ -25,7 +25,11 @@ function playlistsWithItems(doc: any): any[] {
 }
 
 describe.skipIf(!hasRealFile)("diff against a mutated copy of a real library", () => {
-  const bytes = readRealFile();
+  // Read in beforeAll, not here: a describe body runs even when skipped.
+  let bytes: Uint8Array;
+  beforeAll(() => {
+    bytes = readRealFile();
+  });
 
   it("reports no changes when nothing changed", () => {
     const a = buildLibrary(decodeDocument(bytes));

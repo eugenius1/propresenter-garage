@@ -14,6 +14,16 @@ export const REAL_FILE =
 
 export const hasRealFile = fs.existsSync(REAL_FILE);
 
+let cached: Uint8Array | undefined;
+
+/**
+ * Read the sample file, once per process.
+ *
+ * Must only be called from inside a test or a `beforeAll` -- never in a
+ * `describe` body. Vitest executes suite bodies during collection even for
+ * suites that `skipIf` will skip, so a read there throws instead of skipping.
+ */
 export function readRealFile(): Uint8Array {
-  return new Uint8Array(fs.readFileSync(REAL_FILE));
+  cached ??= new Uint8Array(fs.readFileSync(REAL_FILE));
+  return cached;
 }

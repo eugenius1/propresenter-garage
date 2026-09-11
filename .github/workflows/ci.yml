@@ -1,0 +1,43 @@
+name: CI
+
+on:
+  # Every branch, so a check runs before anything reaches a pull request.
+  # Branches only -- `push` would otherwise fire again for tags on commits
+  # that have already been checked.
+  push:
+    branches: ["**"]
+  pull_request:
+
+# A new push to the same ref supersedes the previous run.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    # Pushes cover our own branches, so a same-repo pull request would just
+    # duplicate the run its branch already triggered. Forks are the exception:
+    # their pushes are invisible to us, so those PRs do need their own run.
+    if: >-
+      github.event_name == 'push' ||
+      github.event.pull_request.head.repo.full_name != github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - run: npm ci
+
+      # Generates the proto descriptor, then lints, typechecks and tests.
+      # Tests needing a real ProPresenter file skip here by design -- see
+      # src/lib/__tests__/fixtures.ts.
+      - run: npm run check
+
+      - run: npm run build
