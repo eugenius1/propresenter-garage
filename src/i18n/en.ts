@@ -253,6 +253,8 @@ export const en = {
         applyAndExport: "Apply and export",
         blocked: ["{n} change cannot be applied", "{n} changes cannot be applied"],
         blockedWhy: "Their entry could not be found in the file it came from.",
+        blockedDestructive:
+          "A recreated playlist cannot be brought across: it would mean deleting this side's playlist and everything in it.",
         willCreate: ["Creates {n} playlist: {names}", "Creates {n} playlists: {names}"],
         exportBlocked:
           "That side cannot be exported: re-encoding it loses content the schema does not cover.",

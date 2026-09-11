@@ -2,7 +2,7 @@
 // Copyright (C) 2026 Eusebius Ngemera
 
 import type { RawDoc } from "./decode";
-import type { Change } from "./diff";
+import type { Change, PlaylistChange } from "./diff";
 import type { Operation } from "./operations";
 
 /**
@@ -25,7 +25,7 @@ export type MergeDirection = "intoBaseline" | "intoCompare";
 export interface MergePlan {
   operations: Operation[];
   /** Set when the change cannot be applied, with the reason left untranslated. */
-  blocked?: "unsupported";
+  blocked?: "unsupported" | "destructive";
   /** Playlists this plan would create on the way, for the interface to report. */
   creates?: string[];
 }
@@ -209,6 +209,67 @@ export function planMerge(
 }
 
 /**
+ * Plan the edits for one playlist-level change.
+ *
+ * A recreation is deliberately refused. Bringing one across means deleting the
+ * target's playlist and everything in it, then making a different one -- too
+ * destructive to hide behind a checkbox alongside renames.
+ */
+export function planPlaylistMerge(
+  change: PlaylistChange,
+  direction: MergeDirection,
+  baselineDoc: RawDoc,
+  compareDoc: RawDoc,
+  created: Set<string> = new Set()
+): MergePlan {
+  const intoBaseline = direction === "intoBaseline";
+  const target = intoBaseline ? baselineDoc : compareDoc;
+  const sourceDoc = intoBaseline ? compareDoc : baselineDoc;
+
+  switch (change.type) {
+    case "renamed": {
+      // `name`/`fromName` are the compare and baseline sides respectively.
+      const to = intoBaseline ? change.name : (change.fromName ?? change.name);
+      const from = intoBaseline ? (change.fromName ?? change.name) : change.name;
+      if (!playlistExists(target, change.uuid)) return { operations: [], blocked: "unsupported" };
+      return {
+        operations: [
+          { kind: "renamePlaylist", playlistUuid: change.uuid, from, to },
+        ],
+      };
+    }
+
+    // Present on one side only: create it here, or take it away, depending on
+    // which way the merge runs. Its contents arrive as their own item changes.
+    case "added":
+    case "removed": {
+      const presentIn: MergeDirection =
+        change.type === "added" ? "intoCompare" : "intoBaseline";
+
+      if (direction === presentIn) {
+        if (!playlistExists(target, change.uuid)) return { operations: [] };
+        return {
+          operations: [
+            { kind: "removePlaylist", playlistUuid: change.uuid, playlistName: change.name },
+          ],
+        };
+      }
+
+      const setup = ensurePlaylist(target, sourceDoc, change.uuid, created);
+      return {
+        operations: setup,
+        creates: setup
+          .filter((o) => o.kind === "createPlaylist")
+          .map((o) => (o as Extract<Operation, { kind: "createPlaylist" }>).name),
+      };
+    }
+
+    case "recreated":
+      return { operations: [], blocked: "destructive" };
+  }
+}
+
+/**
  * Plan a set of changes together.
  *
  * Order matters: removals are applied last so that an earlier operation naming
@@ -218,10 +279,17 @@ export function planMerges(
   changes: Change[],
   direction: MergeDirection,
   baselineDoc: RawDoc,
-  compareDoc: RawDoc
-): { operations: Operation[]; blocked: Change[]; creates: string[] } {
+  compareDoc: RawDoc,
+  playlistChanges: PlaylistChange[] = []
+): {
+  operations: Operation[];
+  blocked: Change[];
+  blockedPlaylists: PlaylistChange[];
+  creates: string[];
+} {
   const operations: Operation[] = [];
   const blocked: Change[] = [];
+  const blockedPlaylists: PlaylistChange[] = [];
 
   // Shared across the batch so two changes bound for the same absent playlist
   // queue one creation between them, not one each.
@@ -231,14 +299,29 @@ export function planMerges(
     plan: planMerge(change, direction, baselineDoc, compareDoc, created),
   }));
 
+  const playlistPlans = playlistChanges.map((change) => ({
+    change,
+    plan: planPlaylistMerge(change, direction, baselineDoc, compareDoc, created),
+  }));
+
   for (const { change, plan } of plans) {
     if (plan.blocked) blocked.push(change);
   }
+  for (const { change, plan } of playlistPlans) {
+    if (plan.blocked) blockedPlaylists.push(change);
+  }
 
-  // Creations first so an insert always finds its playlist; removals last so
-  // an earlier operation still finds the entry it names.
+  // Creations first so an insert always finds its playlist. Then renames, then
+  // item edits. Removals last -- of items, then of whole playlists -- so an
+  // earlier operation still finds the entry or playlist it names.
   const rank = (op: Operation) =>
-    op.kind === "createPlaylist" ? -1 : op.kind === "removeItem" ? 1 : 0;
+    op.kind === "createPlaylist" ? -2
+      : op.kind === "renamePlaylist" ? -1
+      : op.kind === "removeItem" ? 1
+      : op.kind === "removePlaylist" ? 2
+      : 0;
+
+  for (const { plan } of playlistPlans) operations.push(...plan.operations);
   for (const { plan } of plans) operations.push(...plan.operations);
   operations.sort((a, b) => rank(a) - rank(b));
 
@@ -246,5 +329,5 @@ export function planMerges(
     .filter((op) => op.kind === "createPlaylist")
     .map((op) => (op as Extract<Operation, { kind: "createPlaylist" }>).name);
 
-  return { operations, blocked, creates };
+  return { operations, blocked, blockedPlaylists, creates };
 }

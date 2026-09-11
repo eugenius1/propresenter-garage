@@ -64,9 +64,20 @@ export interface Change {
 
 export interface PlaylistChange {
   type: "added" | "removed" | "renamed" | "recreated";
+  /**
+   * The playlist's own identity, so a merge can act on it.
+   *
+   * For a recreation the two sides have different uuids by definition; this is
+   * the one the playlist carries on the side it still exists.
+   */
+  uuid: string;
+  /** Full ancestry, for display. */
   path: string;
-  /** Only set for renames: the previous path. */
+  /** The node's own name, which is what a rename actually changes. */
+  name: string;
+  /** Only set for renames: the previous path and name. */
   from?: string;
+  fromName?: string;
   /** Only set for recreations: how many items each version held. */
   itemsBefore?: number;
   itemsAfter?: number;
@@ -269,9 +280,11 @@ export function diffLibraries(left: MediaLibrary, right: MediaLibrary): DiffResu
 
 function diffPlaylists(left: MediaLibrary, right: MediaLibrary): PlaylistChange[] {
   const flatten = (lib: MediaLibrary) => {
-    const byUuid = new Map<string, { path: string; items: number }>();
+    const byUuid = new Map<string, { path: string; name: string; items: number }>();
     const walk = (n: typeof lib.root) => {
-      if (n.kind !== "root" && n.uuid) byUuid.set(n.uuid, { path: n.path, items: n.items.length });
+      if (n.kind !== "root" && n.uuid) {
+        byUuid.set(n.uuid, { path: n.path, name: n.name, items: n.items.length });
+      }
       n.children.forEach(walk);
     };
     walk(lib.root);
@@ -287,11 +300,21 @@ function diffPlaylists(left: MediaLibrary, right: MediaLibrary): PlaylistChange[
 
   for (const [uuid, node] of before) {
     const now = after.get(uuid);
-    if (now === undefined) removed.push({ type: "removed", path: node.path });
-    else if (now.path !== node.path) out.push({ type: "renamed", path: now.path, from: node.path });
+    if (now === undefined) {
+      removed.push({ type: "removed", uuid, path: node.path, name: node.name });
+    } else if (now.path !== node.path) {
+      out.push({
+        type: "renamed",
+        uuid,
+        path: now.path,
+        name: now.name,
+        from: node.path,
+        fromName: node.name,
+      });
+    }
   }
   for (const [uuid, node] of after) {
-    if (!before.has(uuid)) added.push({ type: "added", path: node.path });
+    if (!before.has(uuid)) added.push({ type: "added", uuid, path: node.path, name: node.name });
   }
 
   // A playlist deleted and made again in ProPresenter gets a fresh uuid, so by
@@ -308,7 +331,9 @@ function diffPlaylists(left: MediaLibrary, right: MediaLibrary): PlaylistChange[
       const nowUuid = [...after].find(([, n]) => n.path === change.path)?.[0];
       out.push({
         type: "recreated",
+        uuid: nowUuid ?? change.uuid,
         path: change.path,
+        name: change.name,
         itemsBefore: wasUuid ? before.get(wasUuid)?.items : undefined,
         itemsAfter: nowUuid ? after.get(nowUuid)?.items : undefined,
       });

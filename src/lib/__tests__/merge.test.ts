@@ -6,7 +6,7 @@ import { encodeDocument, messageType } from "../decode";
 import { buildLibrary, decodeMediaDocument } from "../model";
 import { diffLibraries, type Change } from "../diff";
 import { applyOperations } from "../operations";
-import { planMerge, planMerges, type MergeDirection } from "../merge";
+import { planMerge, planMerges, planPlaylistMerge, type MergeDirection } from "../merge";
 import { SOURCES } from "./fixtures";
 
 /**
@@ -336,5 +336,85 @@ describe.each(SOURCES)("merge [$name]", (source) => {
     if (firstOther >= 0 && lastRemoval >= 0) expect(firstOther).toBeLessThan(lastRemoval);
 
     expect(afterMerge(baselineDoc, compareDoc, diff.changes, "intoBaseline").changes).toEqual([]);
+  });
+
+  it("brings a playlist rename across", () => {
+    const { baselineDoc, compareDoc } = pairWith((doc) => {
+      rawPlaylists(doc)[0].name = "Renamed Playlist";
+    });
+
+    const diff = diffOf(baselineDoc, compareDoc);
+    expect(diff.playlistChanges).toHaveLength(1);
+    expect(diff.playlistChanges[0].type).toBe("renamed");
+
+    const { operations } = planMerges([], "intoBaseline", baselineDoc, compareDoc, diff.playlistChanges);
+    expect(operations).toHaveLength(1);
+    expect(operations[0]).toMatchObject({ kind: "renamePlaylist", to: "Renamed Playlist" });
+
+    const merged = applyOperations(baselineDoc, operations);
+    expect(diffOf(merged, compareDoc).playlistChanges).toEqual([]);
+  });
+
+  it("pushes a playlist rename the other way too", () => {
+    const { baselineDoc, compareDoc } = pairWith((doc) => {
+      rawPlaylists(doc)[0].name = "Renamed Playlist";
+    });
+
+    const diff = diffOf(baselineDoc, compareDoc);
+    const originalName = buildLibrary(baselineDoc).playlists[0].name;
+
+    const { operations } = planMerges([], "intoCompare", baselineDoc, compareDoc, diff.playlistChanges);
+    expect(operations[0]).toMatchObject({ kind: "renamePlaylist", to: originalName });
+
+    const merged = applyOperations(compareDoc, operations);
+    expect(diffOf(baselineDoc, merged).playlistChanges).toEqual([]);
+  });
+
+  it("renaming a playlist does not disturb the items inside it", () => {
+    const { baselineDoc, compareDoc } = pairWith((doc) => {
+      rawPlaylists(doc)[0].name = "Renamed Playlist";
+    });
+
+    const diff = diffOf(baselineDoc, compareDoc);
+    const { operations } = planMerges([], "intoBaseline", baselineDoc, compareDoc, diff.playlistChanges);
+    const merged = buildLibrary(applyOperations(baselineDoc, operations));
+
+    expect(merged.items.length).toBe(buildLibrary(baselineDoc).items.length);
+    expect(diffOf(applyOperations(baselineDoc, operations), compareDoc).changes).toEqual([]);
+  });
+
+  it("renames before it removes, so a rename still finds its playlist", () => {
+    const { baselineDoc, compareDoc } = pairWith((doc) => {
+      const [first, second] = rawPlaylists(doc);
+      first.name = "Renamed Playlist";
+      second.items.items.splice(0, 1);
+    });
+
+    const diff = diffOf(baselineDoc, compareDoc);
+    const { operations } = planMerges(
+      diff.changes, "intoBaseline", baselineDoc, compareDoc, diff.playlistChanges
+    );
+
+    const rename = operations.findIndex((o) => o.kind === "renamePlaylist");
+    const removal = operations.findIndex((o) => o.kind === "removeItem");
+    expect(rename).toBeLessThan(removal);
+    expect(() => applyOperations(baselineDoc, operations)).not.toThrow();
+  });
+
+  it("refuses to merge a recreated playlist", () => {
+    // Bringing one across means deleting the target's playlist and everything
+    // in it, which is too destructive to sit behind a checkbox beside renames.
+    const { baselineDoc, compareDoc } = pairWith((doc) => {
+      const playlist = rawPlaylists(doc)[0];
+      playlist.uuid.string = "00000000-0000-4000-8000-ffffffffff31";
+    });
+
+    const diff = diffOf(baselineDoc, compareDoc);
+    const recreated = diff.playlistChanges.find((c) => c.type === "recreated");
+    expect(recreated).toBeDefined();
+
+    const plan = planPlaylistMerge(recreated!, "intoBaseline", baselineDoc, compareDoc);
+    expect(plan.blocked).toBe("destructive");
+    expect(plan.operations).toEqual([]);
   });
 });

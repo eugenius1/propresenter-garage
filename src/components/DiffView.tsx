@@ -85,6 +85,7 @@ export function DiffView({
   const { t, f, plural, num } = i18n;
   const [active, setActive] = useState<Set<ChangeType>>(new Set(ORDER));
   const [selected, setSelected] = useState<Set<number>>(new Set());
+  const [selectedPlaylists, setSelectedPlaylists] = useState<Set<number>>(new Set());
   const [direction, setDirection] = useState<MergeDirection>("intoBaseline");
   const [exported, setExported] = useState<string | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
@@ -93,23 +94,40 @@ export function DiffView({
   const target = direction === "intoBaseline" ? baseline : compare;
 
   // Indices into diff.changes, so a selection survives filtering the list.
-  const toggleSelected = (index: number) =>
-    setSelected((prev) => {
+  const makeToggle = (setter: typeof setSelected) => (index: number) =>
+    setter((prev) => {
       const next = new Set(prev);
       if (next.has(index)) next.delete(index);
       else next.add(index);
       return next;
     });
 
+  const toggleSelected = makeToggle(setSelected);
+  const togglePlaylist = makeToggle(setSelectedPlaylists);
+
+  /** A recreation cannot be merged, so it is not offered for selection. */
+  const selectablePlaylist = (change: PlaylistChange) => change.type !== "recreated";
+
   const chosen = useMemo(
     () => [...selected].sort((a, b) => a - b).map((i) => diff.changes[i]).filter(Boolean),
     [selected, diff]
   );
 
+  const chosenPlaylists = useMemo(
+    () =>
+      [...selectedPlaylists]
+        .sort((a, b) => a - b)
+        .map((i) => diff.playlistChanges[i])
+        .filter(Boolean),
+    [selectedPlaylists, diff]
+  );
+
+  const totalSelected = selected.size + selectedPlaylists.size;
+
   const plan = useMemo(() => {
-    if (!baseline || !compare || chosen.length === 0) return null;
-    return planMerges(chosen, direction, baseline.doc, compare.doc);
-  }, [chosen, direction, baseline, compare]);
+    if (!baseline || !compare || totalSelected === 0) return null;
+    return planMerges(chosen, direction, baseline.doc, compare.doc, chosenPlaylists);
+  }, [chosen, chosenPlaylists, totalSelected, direction, baseline, compare]);
 
   function applyAndExport() {
     if (!plan || !target) return;
@@ -177,10 +195,23 @@ export function DiffView({
             </h3>
             <ul className="rows">
               {diff.playlistChanges.map((change, i) => (
-                <li key={i}>
-                  <span className={`tag ${change.type}`} style={{ marginRight: 8 }}>
-                    {playlistTagLabel(i18n, change)}
-                  </span>
+                <li key={i} className="playlist-change">
+                  {canMerge && (
+                    <input
+                      type="checkbox"
+                      className="change-select"
+                      checked={selectedPlaylists.has(i)}
+                      disabled={!selectablePlaylist(change)}
+                      title={
+                        selectablePlaylist(change)
+                          ? undefined
+                          : t.tools.mediaBin.merge.blockedDestructive
+                      }
+                      onChange={() => togglePlaylist(i)}
+                      aria-label={`${playlistTagLabel(i18n, change)}: ${change.path}`}
+                    />
+                  )}
+                  <span className={`tag ${change.type}`}>{playlistTagLabel(i18n, change)}</span>
                   <span className="path">{playlistChangeText(i18n, change)}</span>
                 </li>
               ))}
@@ -213,11 +244,24 @@ export function DiffView({
             <span className="spacer" />
             <button
               className="btn"
-              onClick={() => setSelected(new Set(diff.changes.map((_, i) => i)))}
+              onClick={() => {
+                setSelected(new Set(diff.changes.map((_, i) => i)));
+                setSelectedPlaylists(
+                  new Set(
+                    diff.playlistChanges
+                      .map((c, i) => (selectablePlaylist(c) ? i : -1))
+                      .filter((i) => i >= 0)
+                  )
+                );
+              }}
             >
               {t.tools.mediaBin.merge.selectAll}
             </button>
-            <button className="btn" disabled={selected.size === 0} onClick={() => setSelected(new Set())}>
+            <button
+              className="btn"
+              disabled={totalSelected === 0}
+              onClick={() => { setSelected(new Set()); setSelectedPlaylists(new Set()); }}
+            >
               {t.tools.mediaBin.merge.selectNone}
             </button>
             <button
@@ -231,9 +275,9 @@ export function DiffView({
           </div>
 
           <p className="sub" style={{ marginBottom: 0 }}>
-            {selected.size === 0
+            {totalSelected === 0
               ? t.tools.mediaBin.merge.nothingSelected
-              : plural(t.tools.mediaBin.merge.selected, selected.size)}
+              : plural(t.tools.mediaBin.merge.selected, totalSelected)}
           </p>
 
           {plan && plan.creates.length > 0 && (
@@ -242,6 +286,9 @@ export function DiffView({
                 names: plan.creates.join(", "),
               })}
             </p>
+          )}
+          {plan && plan.blockedPlaylists.length > 0 && (
+            <p className="why warn-inline">{t.tools.mediaBin.merge.blockedDestructive}</p>
           )}
           {plan && plan.blocked.length > 0 && (
             <p className="why warn-inline">

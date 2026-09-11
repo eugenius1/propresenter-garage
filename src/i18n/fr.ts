@@ -266,6 +266,8 @@ export const fr: Dictionary = {
           "{n} modifications ne peuvent pas être appliquées",
         ],
         blockedWhy: "Leur entrée est introuvable dans le fichier d'origine.",
+        blockedDestructive:
+          "Une liste recréée ne peut pas être reportée : cela supprimerait la liste de ce côté et tout son contenu.",
         willCreate: ["Crée {n} liste : {names}", "Crée {n} listes : {names}"],
         exportBlocked:
           "Ce côté ne peut pas être exporté : le réencodage perd du contenu que le schéma ne couvre pas.",
