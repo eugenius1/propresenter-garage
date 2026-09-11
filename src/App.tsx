@@ -18,6 +18,17 @@ import { applyDocumentLanguage, useI18n } from "./i18n";
  * tool has not asked yet, and guessing them now would mean building extension
  * points it may not want.
  */
+/**
+ * The copyright span, widening to a range as the project outlives its first
+ * year rather than silently claiming only the current one.
+ */
+const FIRST_PUBLISHED = 2026;
+
+function copyrightYears(now = new Date()): string {
+  const current = now.getFullYear();
+  return current > FIRST_PUBLISHED ? `${FIRST_PUBLISHED}\u2013${current}` : String(FIRST_PUBLISHED);
+}
+
 export default function App() {
   const { t, f, lang } = useI18n();
 
@@ -54,6 +65,7 @@ export default function App() {
       <MediaBin />
 
       <p className="footnote">
+        <span className="copyright">{f(t.app.copyright, { years: copyrightYears() })}</span>
         {t.app.footnoteBefore}{" "}
         <a
           href="https://github.com/greyshirtguy/ProPresenter7-Proto"
