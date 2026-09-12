@@ -138,7 +138,11 @@ body {
   border-radius: 7px; border: 1px solid var(--border-strong);
   background: var(--surface); color: var(--text); cursor: pointer;
 }
-.btn:hover:not(:disabled) { background: var(--surface-2); }
+/* Scoped away from .primary on purpose: `.btn:hover:not(:disabled)` outranks
+   `.btn.primary` on specificity, so an unscoped hover replaced the accent
+   background with a pale one while the text stayed white -- leaving the button
+   looking empty. */
+.btn:not(.primary):hover:not(:disabled) { background: var(--surface-2); }
 .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
 .btn.primary:hover:not(:disabled) { filter: brightness(1.08); }
 /* Without this a disabled button looks perfectly clickable -- "Apply and
