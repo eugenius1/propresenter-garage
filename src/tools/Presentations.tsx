@@ -31,6 +31,8 @@ export function Presentations() {
   const input = useRef<HTMLInputElement>(null);
 
   const [reports, setReports] = useState<PresentationReport[] | null>(null);
+  const [folderName, setFolderName] = useState<string>("");
+  const [fellBack, setFellBack] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [active, setActive] = useState<Set<TextIssueKind>>(new Set(KINDS));
@@ -47,13 +49,22 @@ export function Presentations() {
 
   async function chooseFolder() {
     setError(null);
+    setFellBack(false);
     try {
       const folder = await pickFolder(isPresentationFile, { write: false });
       if (!folder) return;
+      setFolderName(folder.name);
       await scan(folder.files);
     } catch (e) {
       setBusy(null);
-      setError((e as Error).message);
+      // The picker can be unavailable for reasons the reader cannot act on --
+      // an embedded frame, a policy, a browser that claims the API and then
+      // refuses. Falling back to the directory input gets them a result
+      // instead of an error, at the cost of not being able to write back.
+      setFellBack(true);
+      setError(null);
+      input.current?.click();
+      void e;
     }
   }
 
@@ -107,7 +118,9 @@ export function Presentations() {
               const list = e.target.files;
               if (!list) return;
               setError(null);
-              void scan(readFolderFromInput(list, isPresentationFile).files);
+              const folder = readFolderFromInput(list, isPresentationFile);
+              setFolderName(folder.name);
+              void scan(folder.files);
             }}
           />
           {busy && <span className="editor-count">{f(p.scanning, { n: busy })}</span>}
@@ -122,6 +135,7 @@ export function Presentations() {
           {access === "readwrite" && p.installNote}
         </p>
 
+        {fellBack && <p className="why warn-inline">{p.pickerFailed}</p>}
         {error && <p className="why warn-inline">{error}</p>}
 
         {reports && (
@@ -139,7 +153,14 @@ export function Presentations() {
               ))}
             </div>
 
-            {reports.length === 0 && <p className="sub">{p.noneFound}</p>}
+            {reports.length === 0 && (
+              <p className="sub warn-inline">
+                {f(p.noneFound, { folder: folderName || "—" })}
+              </p>
+            )}
+            {reports.length > 0 && folderName && (
+              <p className="why">{f(p.scanned, { folder: folderName })}</p>
+            )}
           </>
         )}
       </div>

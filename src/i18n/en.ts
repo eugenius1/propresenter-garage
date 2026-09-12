@@ -225,7 +225,10 @@ export const en = {
         "Installing the app makes the permission stick: in a tab it lapses when you close the last one.",
 
       found: ["{n} presentation", "{n} presentations"],
-      noneFound: "No .pro files in that folder.",
+      noneFound: "No .pro files found in {folder}. Presentations live in the Libraries folder of a ProPresenter workspace — pick that, or the workspace itself.",
+      pickerFailed:
+        "The folder picker was unavailable, so the files were read as copies instead. Fixes cannot be saved back this way.",
+      scanned: "Read {folder}.",
       clean: "No text problems found.",
       issuesFound: ["{n} problem in {files}", "{n} problems in {files}"],
       inFiles: ["{n} file", "{n} files"],

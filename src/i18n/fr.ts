@@ -233,7 +233,10 @@ export const fr: Dictionary = {
         "Installer l'application rend l'autorisation permanente : dans un onglet, elle expire à la fermeture du dernier.",
 
       found: ["{n} présentation", "{n} présentations"],
-      noneFound: "Aucun fichier .pro dans ce dossier.",
+      noneFound: "Aucun fichier .pro trouvé dans {folder}. Les présentations se trouvent dans le dossier Libraries d'un espace de travail ProPresenter — choisissez celui-ci, ou l'espace de travail lui-même.",
+      pickerFailed:
+        "Le sélecteur de dossier n'était pas disponible ; les fichiers ont été lus sous forme de copies. Les corrections ne peuvent pas être réenregistrées ainsi.",
+      scanned: "Dossier {folder} lu.",
       clean: "Aucun problème de texte trouvé.",
       issuesFound: ["{n} problème dans {files}", "{n} problèmes dans {files}"],
       inFiles: ["{n} fichier", "{n} fichiers"],
