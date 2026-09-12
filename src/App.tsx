@@ -1,22 +1,26 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Eusebius Ngemera
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Logo } from "./components/Logo";
 import { LanguageSwitcher } from "./components/LanguageSwitcher";
 import { ThemeSwitcher } from "./components/ThemeSwitcher";
 import { MediaBin } from "./tools/MediaBin";
+import { Presentations } from "./tools/Presentations";
 import { PROTO_VERSION } from "./lib/decode";
 import { applyDocumentLanguage, useI18n } from "./i18n";
+
+type ToolId = "mediaBin" | "presentations";
 
 /**
  * The shell: title, appearance and language controls, licence notice, and the
  * active tool.
  *
- * There is one tool, so it is rendered directly. Tool selection, routing and a
- * registry are deliberately absent -- those are answers to questions the second
- * tool has not asked yet, and guessing them now would mean building extension
- * points it may not want.
+ * Tool selection is a plain list rather than a registry with extension points.
+ * Two tools share nothing but the chrome around them -- one reads a playlist
+ * document, the other a folder of presentations -- so there is nothing yet for
+ * an abstraction to hold. Routing is still absent because nothing has asked to
+ * be linkable.
  */
 /**
  * The copyright span, widening to a range as the project outlives its first
@@ -31,8 +35,15 @@ function copyrightYears(now = new Date()): string {
 
 export default function App() {
   const { t, f, lang } = useI18n();
+  const [tool, setTool] = useState<ToolId>("mediaBin");
 
   useEffect(() => applyDocumentLanguage(lang), [lang]);
+
+  const tools: { id: ToolId; name: string; tagline: string }[] = [
+    { id: "mediaBin", name: t.tools.mediaBin.name, tagline: t.tools.mediaBin.tagline },
+    { id: "presentations", name: t.tools.presentations.name, tagline: t.tools.presentations.tagline },
+  ];
+  const current = tools.find((entry) => entry.id === tool)!;
 
   return (
     <div className="app">
@@ -41,7 +52,7 @@ export default function App() {
           <Logo />
           <h1>{t.app.title}</h1>
         </span>
-        <p>{t.tools.mediaBin.tagline}</p>
+        <p>{current.tagline}</p>
         <span className="spacer" />
         <span
           className="chip"
@@ -62,7 +73,20 @@ export default function App() {
         </div>
       </header>
 
-      <MediaBin />
+      <nav className="tools" aria-label={t.app.toolLabel}>
+        {tools.map((entry) => (
+          <button
+            key={entry.id}
+            className="tool-tab"
+            aria-current={entry.id === tool ? "page" : undefined}
+            onClick={() => setTool(entry.id)}
+          >
+            {entry.name}
+          </button>
+        ))}
+      </nav>
+
+      {tool === "mediaBin" ? <MediaBin /> : <Presentations />}
 
       <p className="footnote">
         <span className="copyright">{f(t.app.copyright, { years: copyrightYears() })}</span>

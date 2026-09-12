@@ -452,3 +452,46 @@ select.mini { max-width: 9em; }
 .playlist-change .change-select { align-self: center; margin: 0; }
 .playlist-change .tag { flex: none; }
 .playlist-change .change-select:disabled { opacity: .3; }
+
+/* ---------- tool switcher ---------- */
+
+/* The suite's own navigation, deliberately distinct from the tabs *inside* a
+   tool: a pill group rather than an underline, so the two do not read as one
+   nested row of tabs. */
+.tools {
+  display: flex;
+  gap: 4px;
+  padding: 3px;
+  margin-bottom: 16px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  width: fit-content;
+  max-width: 100%;
+  overflow-x: auto;
+}
+.tool-tab {
+  font: inherit;
+  font-size: 12.5px;
+  padding: 5px 14px;
+  border: none;
+  border-radius: 999px;
+  background: none;
+  color: var(--text-dim);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.tool-tab:hover { color: var(--text); }
+.tool-tab[aria-current="page"] {
+  background: var(--surface);
+  color: var(--text);
+  font-weight: 600;
+  box-shadow: 0 1px 2px rgb(0 0 0 / .08);
+}
+
+/* Whitespace made visible in a finding. */
+.whitespace { white-space: pre-wrap; }
+
+.tag.leadingSpace, .tag.trailingSpace { background: var(--renamed-soft); color: var(--renamed); }
+.tag.blankLine { background: var(--moved-soft); color: var(--moved); }
+.tag.repeatedSpace { background: var(--retimed-soft); color: var(--retimed); }

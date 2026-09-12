@@ -25,6 +25,7 @@ export const en = {
     offlineHelp: "Files are read in your browser. Nothing is uploaded.",
     schemaHelp: "{files} proto files from schema {commit}, built {date}",
     languageLabel: "Language",
+    toolLabel: "Tool",
     themeLabel: "Appearance",
     copyright: "\u00a9 {years} Eusebius Ngemera",
     footnoteBefore: "Schema from",
@@ -205,6 +206,50 @@ export const en = {
   },
 
   tools: {
+    presentations: {
+      name: "Presentations",
+      tagline: "Check the text of every presentation in a library",
+
+      pickFolder: "Choose a folder…",
+      pickFiles: "Choose .pro files…",
+      scanning: "Reading {n}…",
+      chooseHint:
+        "Pick your ProPresenter workspace, or its Libraries folder. Everything inside is read in your browser; nothing is uploaded.",
+      readwriteNote:
+        "This browser can read the folder and, later, save fixes back to it.",
+      readonlyNote:
+        "This browser can read a folder but cannot write to it. Safari and Firefox offer no way back to the original files — use Chrome or Edge if you want fixes saved in place.",
+      unavailableNote:
+        "This browser cannot read a folder. Pick the .pro files individually instead.",
+      installNote:
+        "Installing the app makes the permission stick: in a tab it lapses when you close the last one.",
+
+      found: ["{n} presentation", "{n} presentations"],
+      noneFound: "No .pro files in that folder.",
+      clean: "No text problems found.",
+      issuesFound: ["{n} problem in {files}", "{n} problems in {files}"],
+      inFiles: ["{n} file", "{n} files"],
+      slidesAndBoxes: "{slides} slides · {empty} empty text boxes",
+      unreadable: "Could not be read: {reason}",
+
+      slide: "slide {n}",
+      line: "line {n}",
+      kinds: {
+        leadingSpace: "Leading space",
+        trailingSpace: "Trailing space",
+        blankLine: "Blank line",
+        repeatedSpace: "Double space",
+      },
+      why: {
+        leadingSpace: "The line begins with a space, which shifts it right on screen.",
+        trailingSpace: "The line ends with a space. Invisible in the editor, but it affects centring.",
+        blankLine: "A line between two lines of text that shows nothing — it leaves a gap on the slide.",
+        repeatedSpace: "Two or more spaces in a row inside the line.",
+      },
+      emptyBoxesNote:
+        "Text boxes with no text at all are counted, not listed: ProPresenter themes leave them on slides as a matter of course.",
+      showAll: "Show all {n}",
+    },
     mediaBin: {
       name: "Media Bin",
       tagline: "Compare and audit media-bin playlists",

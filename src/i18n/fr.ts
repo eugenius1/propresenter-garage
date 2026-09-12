@@ -29,6 +29,7 @@ export const fr: Dictionary = {
     offlineHelp: "Les fichiers sont lus dans votre navigateur. Rien n'est envoyé.",
     schemaHelp: "{files} fichiers proto du schéma {commit}, générés le {date}",
     languageLabel: "Langue",
+    toolLabel: "Outil",
     themeLabel: "Apparence",
     copyright: "\u00a9 {years} Eusebius Ngemera",
     footnoteBefore: "Schéma issu de",
@@ -213,6 +214,50 @@ export const fr: Dictionary = {
   },
 
   tools: {
+    presentations: {
+      name: "Présentations",
+      tagline: "Vérifier le texte de toutes les présentations d'une bibliothèque",
+
+      pickFolder: "Choisir un dossier…",
+      pickFiles: "Choisir des fichiers .pro…",
+      scanning: "Lecture de {n}…",
+      chooseHint:
+        "Choisissez votre espace de travail ProPresenter, ou son dossier Libraries. Tout est lu dans votre navigateur ; rien n'est envoyé.",
+      readwriteNote:
+        "Ce navigateur peut lire le dossier et, plus tard, y enregistrer les corrections.",
+      readonlyNote:
+        "Ce navigateur peut lire un dossier mais pas y écrire. Safari et Firefox n'offrent aucun retour vers les fichiers d'origine — utilisez Chrome ou Edge pour enregistrer les corrections sur place.",
+      unavailableNote:
+        "Ce navigateur ne peut pas lire de dossier. Choisissez les fichiers .pro un à un.",
+      installNote:
+        "Installer l'application rend l'autorisation permanente : dans un onglet, elle expire à la fermeture du dernier.",
+
+      found: ["{n} présentation", "{n} présentations"],
+      noneFound: "Aucun fichier .pro dans ce dossier.",
+      clean: "Aucun problème de texte trouvé.",
+      issuesFound: ["{n} problème dans {files}", "{n} problèmes dans {files}"],
+      inFiles: ["{n} fichier", "{n} fichiers"],
+      slidesAndBoxes: "{slides} diapositives · {empty} zones de texte vides",
+      unreadable: "Lecture impossible : {reason}",
+
+      slide: "diapositive {n}",
+      line: "ligne {n}",
+      kinds: {
+        leadingSpace: "Espace au début",
+        trailingSpace: "Espace à la fin",
+        blankLine: "Ligne vide",
+        repeatedSpace: "Espace double",
+      },
+      why: {
+        leadingSpace: "La ligne commence par une espace, ce qui la décale vers la droite à l'écran.",
+        trailingSpace: "La ligne finit par une espace. Invisible dans l'éditeur, mais cela affecte le centrage.",
+        blankLine: "Une ligne entre deux lignes de texte qui n'affiche rien — elle laisse un trou sur la diapositive.",
+        repeatedSpace: "Deux espaces ou plus à la suite dans la ligne.",
+      },
+      emptyBoxesNote:
+        "Les zones de texte sans aucun texte sont comptées, pas listées : les thèmes ProPresenter en laissent systématiquement sur les diapositives.",
+      showAll: "Afficher les {n}",
+    },
     mediaBin: {
       name: "Médias",
       tagline: "Comparer et analyser les listes de médias",
