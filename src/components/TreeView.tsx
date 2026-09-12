@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Eusebius Ngemera
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import type { MediaLibrary, PlaylistNode } from "../lib/model";
+import { fold } from "../lib/search";
 import { useI18n, type I18n } from "../i18n";
 
 function Node({ node, depth, i18n }: { node: PlaylistNode; depth: number; i18n: I18n }) {
@@ -42,16 +43,22 @@ export function TreeView({ lib }: { lib: MediaLibrary }) {
   const i18n = useI18n();
   const { t, f, plural } = i18n;
   const [query, setQuery] = useState("");
-  const q = query.trim().toLowerCase();
+  const q = fold(query.trim());
 
-  const matches = q
-    ? lib.items.filter(
-        (i) =>
-          i.name.toLowerCase().includes(q) ||
-          i.displayFilename.toLowerCase().includes(q) ||
-          i.playlistPath.toLowerCase().includes(q)
-      )
-    : [];
+  /**
+   * Every searchable field of every item, folded once.
+   *
+   * Folding on each keystroke instead would redo the same work over the whole
+   * library for every letter typed -- five hundred items, three fields each.
+   * The newline between fields keeps a query from matching across the join
+   * between a name and the path underneath it.
+   */
+  const haystack = useMemo(
+    () => lib.items.map((i) => fold(`${i.name}\n${i.displayFilename}\n${i.playlistPath}`)),
+    [lib]
+  );
+
+  const matches = q ? lib.items.filter((_, index) => haystack[index].includes(q)) : [];
 
   return (
     <div className="card">
