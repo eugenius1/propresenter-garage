@@ -2,7 +2,7 @@
 // Copyright (C) 2026 Eusebius Ngemera
 
 import { useEffect, useState } from "react";
-import { ChevronDown, Monitor, Moon, Sun } from "lucide-react";
+import { ChevronDown, Contrast, Moon, Sun } from "lucide-react";
 import { useI18n } from "../i18n";
 import {
   applyTheme,
@@ -40,13 +40,14 @@ export function ThemeSwitcher() {
 
   return (
     <div className="picker">
-      {/* A monitor for "follow the system", which is what it follows. */}
+      {/* A half-filled circle for "follow the system": it stands for the choice
+          between light and dark rather than for the machine making it. */}
       {theme === "light" ? (
         <Sun className="picker-icon" size={13} aria-hidden />
       ) : theme === "dark" ? (
         <Moon className="picker-icon" size={13} aria-hidden />
       ) : (
-        <Monitor className="picker-icon" size={13} aria-hidden />
+        <Contrast className="picker-icon" size={13} aria-hidden />
       )}
       <select
         className="picker-select"

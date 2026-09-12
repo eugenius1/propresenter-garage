@@ -25,7 +25,7 @@ export const fr: Dictionary = {
   app: {
     title: "ProPresenter Garage",
     schema: "schéma {version}",
-    offline: "fonctionne hors ligne",
+    offline: "Fonctionne hors ligne.",
     offlineHelp: "Les fichiers sont lus dans votre navigateur. Rien n'est envoyé.",
     schemaHelp: "{files} fichiers proto du schéma {commit}, générés le {date}",
     languageLabel: "Langue",

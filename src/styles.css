@@ -530,3 +530,11 @@ select.mini { max-width: 9em; }
 .tag.leadingSpace, .tag.trailingSpace { background: var(--renamed-soft); color: var(--renamed-strong); }
 .tag.blankLine { background: var(--moved-soft); color: var(--moved-strong); }
 .tag.repeatedSpace { background: var(--retimed-soft); color: var(--retimed-strong); }
+
+/* The tagline describes whichever tool is showing, so it sits under the
+   switcher rather than beside the app's own name. */
+.tool-tagline {
+  margin: -8px 0 16px;
+  color: var(--text-dim);
+  font-size: 13px;
+}

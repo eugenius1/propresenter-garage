@@ -88,7 +88,6 @@ export default function App() {
           <Logo />
           <h1>{t.app.title}</h1>
         </span>
-        <p>{current.tagline}</p>
         <span className="spacer" />
         <span
           className="chip"
@@ -121,6 +120,8 @@ export default function App() {
           </button>
         ))}
       </nav>
+
+      <p className="tool-tagline">{current.tagline}</p>
 
       {tool === "presentations" ? <Presentations /> : <MediaBin />}
 
