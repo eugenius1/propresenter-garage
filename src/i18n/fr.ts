@@ -35,6 +35,10 @@ export const fr: Dictionary = {
     footnoteBefore: "Schéma issu de",
     footnoteLink: "greyshirtguy/ProPresenter7-Proto",
     footnoteAfter: "(non officiel). Sans lien avec Renewed Vision.",
+    updateReady: "Une nouvelle version est disponible.",
+    updateNow: "Recharger",
+    updating: "Rechargement\u2026",
+    updateLater: "Ignorer",
   },
 
 

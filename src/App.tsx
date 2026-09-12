@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Logo } from "./components/Logo";
 import { LanguageSwitcher } from "./components/LanguageSwitcher";
 import { ThemeSwitcher } from "./components/ThemeSwitcher";
+import { UpdatePrompt } from "./components/UpdatePrompt";
 import { MediaBin } from "./tools/MediaBin";
 import { Presentations } from "./tools/Presentations";
 import { PROTO_VERSION } from "./lib/decode";
@@ -146,6 +147,8 @@ export default function App() {
         </a>{" "}
         {t.app.footnoteAfter}
       </p>
+
+      <UpdatePrompt />
     </div>
   );
 }

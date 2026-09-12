@@ -31,6 +31,10 @@ export const en = {
     footnoteBefore: "Schema from",
     footnoteLink: "greyshirtguy/ProPresenter7-Proto",
     footnoteAfter: "(unofficial). Not affiliated with Renewed Vision.",
+    updateReady: "A new version is available.",
+    updateNow: "Reload",
+    updating: "Reloading\u2026",
+    updateLater: "Dismiss",
   },
 
 

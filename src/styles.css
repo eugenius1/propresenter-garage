@@ -549,3 +549,24 @@ select.mini { max-width: 9em; }
   cursor: pointer;
   text-decoration: underline;
 }
+
+/* The offer to load a newly deployed build. Anchored to the bottom so it
+   never pushes the page around while something is being read. */
+.update-bar {
+  position: fixed;
+  inset-inline: 12px;
+  bottom: 12px;
+  margin-inline: auto;
+  width: fit-content;
+  max-width: calc(100% - 24px);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  box-shadow: 0 6px 24px rgb(0 0 0 / .18);
+  z-index: 20;
+}
+.update-text { font-size: 13px; font-weight: 550; }

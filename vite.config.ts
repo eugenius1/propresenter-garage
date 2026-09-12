@@ -10,7 +10,12 @@ export default defineConfig({
   plugins: [
     react(),
     VitePWA({
-      registerType: "autoUpdate",
+      // "prompt", not "autoUpdate": a cache-first worker serves the previous
+      // build on the first visit after a deploy, and swapping it silently
+      // would replace the page under whoever is reading it. UpdatePrompt asks.
+      registerType: "prompt",
+      // Registration happens in UpdatePrompt, which needs the callbacks.
+      injectRegister: null,
       includeAssets: ["favicon.svg"],
       manifest: {
         name: "ProPresenter Garage",
