@@ -16,21 +16,33 @@ export interface LoadedFile {
    * `library`, which is a lossy projection of it.
    */
   doc: RawDoc;
+  /** The bytes as loaded, kept so the file can be remembered across a refresh. */
+  raw: Uint8Array;
   fidelity: Fidelity;
   /** Whether writing this file back out would preserve everything in it. */
   exportSafe: boolean;
 }
 
 export async function loadMediaFile(file: File): Promise<LoadedFile> {
-  const buffer = new Uint8Array(await file.arrayBuffer());
+  return loadMediaBytes(file.name, new Uint8Array(await file.arrayBuffer()));
+}
+
+/**
+ * Load from bytes rather than a File.
+ *
+ * Used to restore a file remembered across a refresh, where there is no File
+ * object to hand -- only the bytes that were kept.
+ */
+export function loadMediaBytes(filename: string, buffer: Uint8Array): LoadedFile {
   if (buffer.length === 0) throw new DecodeError("empty");
 
   const doc = decodeMediaDocument(buffer);
   const { fidelity, exportSafe } = checkFidelity(buffer);
 
   return {
-    filename: file.name,
+    filename,
     bytes: buffer.length,
+    raw: buffer,
     library: buildLibrary(doc),
     doc,
     fidelity,

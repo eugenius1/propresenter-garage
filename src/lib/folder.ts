@@ -50,6 +50,14 @@ export interface PickedFolder {
   files: FolderFile[];
   /** Whether anything in this folder can be written back. */
   writable: boolean;
+  /**
+   * The directory handle, when there was one.
+   *
+   * Kept so the folder can be remembered across a refresh: a handle is
+   * structured-cloneable, so it survives in IndexedDB as a live handle rather
+   * than a description of a path.
+   */
+  handle?: unknown;
 }
 
 /** Directories that never hold documents, skipped to keep scans quick. */
@@ -127,9 +135,24 @@ export async function pickFolder(
     writable = (await handle.requestPermission({ mode: "readwrite" })) === "granted";
   }
 
+  return readFolderHandle(handle, matches, writable);
+}
+
+/**
+ * Walk a directory handle that is already in hand.
+ *
+ * Separate from picking so a remembered handle can be reopened without showing
+ * the picker again.
+ */
+export async function readFolderHandle(
+  handle: unknown,
+  matches: (name: string) => boolean,
+  writable = false
+): Promise<PickedFolder> {
+  const directory = handle as AnyHandle;
   const files: FolderFile[] = [];
-  await walkHandle(handle, "", files, matches);
-  return { name: handle.name, files, writable };
+  await walkHandle(directory, "", files, matches);
+  return { name: directory.name, files, writable, handle };
 }
 
 /**

@@ -1,14 +1,23 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Eusebius Ngemera
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   folderAccess,
   isPresentationFile,
   pickFolder,
   readFolderFromInput,
+  readFolderHandle,
   type FolderFile,
 } from "../lib/folder";
+import {
+  forget,
+  handlePermission,
+  keep,
+  KEYS,
+  remember,
+  requestHandlePermission,
+} from "../lib/persistence";
 import { checkPresentationFile, type PresentationReport, type TextIssueKind } from "../lib/presentation";
 import { useI18n } from "../i18n";
 
@@ -33,6 +42,8 @@ export function Presentations() {
   const [reports, setReports] = useState<PresentationReport[] | null>(null);
   const [folderName, setFolderName] = useState<string>("");
   const [fellBack, setFellBack] = useState(false);
+  /** A remembered folder whose permission has lapsed and needs one click back. */
+  const [pending, setPending] = useState<{ handle: unknown; name: string } | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [active, setActive] = useState<Set<TextIssueKind>>(new Set(KINDS));
@@ -47,13 +58,77 @@ export function Presentations() {
     setReports(out);
   }
 
+  /**
+   * Pick up where the last visit left off.
+   *
+   * A directory handle survives in IndexedDB, but permission may not: in an
+   * ordinary tab it lapses once the last tab for the origin closes, while an
+   * installed app keeps it. Where it is still granted the folder is simply
+   * reread; where it is not, asking again needs a user gesture, so the folder
+   * is offered as a button rather than re-requested on load.
+   */
+  useEffect(() => {
+    let cancelled = false;
+
+    void (async () => {
+      const saved = await remember<unknown>(KEYS.presentationsFolder);
+      if (!saved || cancelled) return;
+
+      const name = (saved as { name?: string }).name ?? "";
+      if ((await handlePermission(saved, "read")) === "granted") {
+        try {
+          const folder = await readFolderHandle(saved, isPresentationFile);
+          if (cancelled) return;
+          setFolderName(folder.name);
+          await scan(folder.files);
+          return;
+        } catch {
+          // The folder may have moved or been removed since.
+          await forget(KEYS.presentationsFolder);
+          return;
+        }
+      }
+
+      if (!cancelled) setPending({ handle: saved, name });
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  async function reopen() {
+    if (!pending) return;
+    if ((await requestHandlePermission(pending.handle, "read")) !== "granted") return;
+    try {
+      const folder = await readFolderHandle(pending.handle, isPresentationFile);
+      setPending(null);
+      setFolderName(folder.name);
+      await scan(folder.files);
+    } catch (e) {
+      setPending(null);
+      setError((e as Error).message);
+    }
+  }
+
+  function forgetFolder() {
+    setPending(null);
+    setReports(null);
+    setFolderName("");
+    void forget(KEYS.presentationsFolder);
+  }
+
   async function chooseFolder() {
     setError(null);
     setFellBack(false);
     try {
       const folder = await pickFolder(isPresentationFile, { write: false });
       if (!folder) return;
+      setPending(null);
       setFolderName(folder.name);
+      // Only a real handle is worth keeping; the input fallback hands over
+      // copies with no path back to the folder.
+      if (folder.handle) void keep(KEYS.presentationsFolder, folder.handle);
       await scan(folder.files);
     } catch (e) {
       setBusy(null);
@@ -135,6 +210,19 @@ export function Presentations() {
           {access === "readwrite" && p.installNote}
         </p>
 
+        {pending && (
+          <div className="editor-bar" style={{ paddingTop: 0 }}>
+            <span className="editor-count">{f(p.remembered, { folder: pending.name })}</span>
+            <span className="spacer" />
+            <button className="btn primary" onClick={() => void reopen()}>
+              {f(p.reconnect, { folder: pending.name })}
+            </button>
+            <button className="btn" onClick={forgetFolder}>
+              {p.forgetFolder}
+            </button>
+          </div>
+        )}
+        {pending && <p className="why">{p.reconnectWhy}</p>}
         {fellBack && <p className="why warn-inline">{p.pickerFailed}</p>}
         {error && <p className="why warn-inline">{error}</p>}
 
@@ -159,7 +247,12 @@ export function Presentations() {
               </p>
             )}
             {reports.length > 0 && folderName && (
-              <p className="why">{f(p.scanned, { folder: folderName })}</p>
+              <p className="why">
+                {f(p.scanned, { folder: folderName })}{" "}
+                <button className="linkish" onClick={forgetFolder}>
+                  {p.forgetFolder}
+                </button>
+              </p>
             )}
           </>
         )}

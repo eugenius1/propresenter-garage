@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Eusebius Ngemera
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Info } from "lucide-react";
 import { FileSlot } from "../components/FileSlot";
 import { DiffView } from "../components/DiffView";
@@ -10,7 +10,8 @@ import { TreeView } from "../components/TreeView";
 import { ReorganiseView } from "../components/ReorganiseView";
 import { auditLibrary, type FindingId } from "../lib/audit";
 import { diffLibraries } from "../lib/diff";
-import type { LoadedFile } from "../lib/loadFile";
+import { loadMediaBytes, type LoadedFile } from "../lib/loadFile";
+import { forget, keep, KEYS, remember, type RememberedFile } from "../lib/persistence";
 import { useI18n } from "../i18n";
 
 type Tab = "diff" | "audit" | "browse" | "reorganise";
@@ -40,16 +41,70 @@ export function MediaBin() {
   const inspected = auditSide === "right" && right ? right : left;
   const audit = useMemo(() => (inspected ? auditLibrary(inspected.library) : null), [inspected]);
 
+  /**
+   * Restore whatever was loaded last time.
+   *
+   * The bytes are kept rather than a file handle: these arrive through a file
+   * input, which hands over a copy with no path back to the original, so there
+   * is nothing else to keep. Decoding again on load is cheap -- a few
+   * milliseconds for a 400 KB document -- and avoids storing a derived model
+   * that would go stale against a schema update.
+   */
+  useEffect(() => {
+    let cancelled = false;
+
+    void (async () => {
+      const [savedLeft, savedRight] = await Promise.all([
+        remember<RememberedFile>(KEYS.mediaBinBaseline),
+        remember<RememberedFile>(KEYS.mediaBinCompare),
+      ]);
+      if (cancelled) return;
+
+      const restore = (saved: RememberedFile | null) => {
+        if (!saved) return null;
+        try {
+          return loadMediaBytes(saved.filename, saved.bytes);
+        } catch {
+          // A file that no longer decodes -- most likely a schema change --
+          // should not wedge the tool on every load.
+          return null;
+        }
+      };
+
+      const restoredLeft = restore(savedLeft);
+      const restoredRight = restore(savedRight);
+      if (restoredLeft) setLeft(restoredLeft);
+      if (restoredRight) setRight(restoredRight);
+      if (restoredLeft && restoredRight) setTab("diff");
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   // The file this tool wants, named so a wrong-kind error can say so.
   const wrongKindHint = t.tools.mediaBin.pickFileHint;
 
   function loadLeft(file: LoadedFile) {
     setLeft(file);
     setTab(right ? "diff" : "audit");
+    void keep(KEYS.mediaBinBaseline, { filename: file.filename, bytes: file.raw });
   }
   function loadRight(file: LoadedFile) {
     setRight(file);
     if (left) setTab("diff");
+    void keep(KEYS.mediaBinCompare, { filename: file.filename, bytes: file.raw });
+  }
+  function clearLeft() {
+    setLeft(null);
+    setTab("audit");
+    void forget(KEYS.mediaBinBaseline);
+  }
+  function clearRight() {
+    setRight(null);
+    setTab("audit");
+    void forget(KEYS.mediaBinCompare);
   }
 
   return (
@@ -61,7 +116,7 @@ export function MediaBin() {
           wrongKindHint={wrongKindHint}
           file={left}
           onLoad={loadLeft}
-          onClear={() => { setLeft(null); setTab("audit"); }}
+          onClear={clearLeft}
         />
         <FileSlot
           role={t.tools.mediaBin.compare}
@@ -69,7 +124,7 @@ export function MediaBin() {
           wrongKindHint={wrongKindHint}
           file={right}
           onLoad={loadRight}
-          onClear={() => { setRight(null); setTab("audit"); }}
+          onClear={clearRight}
         />
       </div>
 
