@@ -4,7 +4,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
 import {
   checkPresentationFile,
   decodePresentation,
@@ -105,9 +105,14 @@ const REAL_LIBRARY =
 const hasRealLibrary = fs.existsSync(REAL_LIBRARY);
 
 describe.skipIf(!hasRealLibrary)("against real presentations", () => {
-  const files = fs
-    .readdirSync(REAL_LIBRARY)
-    .filter((f) => f.toLowerCase().endsWith(".pro"));
+  // Listed in beforeAll, not here: vitest runs a describe body during
+  // collection even for a suite skipIf will skip, so reading the directory
+  // here throws on any machine without one.
+  let files: string[] = [];
+  beforeAll(() => {
+    if (!hasRealLibrary) return;
+    files = fs.readdirSync(REAL_LIBRARY).filter((f) => f.toLowerCase().endsWith(".pro"));
+  });
 
   it("decodes every file in the library", () => {
     expect(files.length).toBeGreaterThan(0);
