@@ -126,7 +126,16 @@ export default function App() {
       {tool === "presentations" ? <Presentations /> : <MediaBin />}
 
       <p className="footnote">
-        <span className="copyright">{f(t.app.copyright, { years: copyrightYears() })}</span>
+        <span className="copyright">
+          {f(t.app.copyright, { years: copyrightYears() })} ·{" "}
+          <a
+            href="https://github.com/eugenius1/propresenter-garage/blob/main/LICENSE"
+            target="_blank"
+            rel="noreferrer"
+          >
+            GPLv3
+          </a>
+        </span>
         {t.app.footnoteBefore}{" "}
         <a
           href="https://github.com/greyshirtguy/ProPresenter7-Proto"
@@ -136,14 +145,6 @@ export default function App() {
           {t.app.footnoteLink}
         </a>{" "}
         {t.app.footnoteAfter}
-        {" · "}
-        <a
-          href="https://github.com/eugenius1/propresenter-garage/blob/main/LICENSE"
-          target="_blank"
-          rel="noreferrer"
-        >
-          GPLv3
-        </a>
       </p>
     </div>
   );

@@ -20,8 +20,8 @@ export const en = {
 
   app: {
     title: "ProPresenter Garage",
-    schema: "schema {version}",
-    offline: "Runs offline.",
+    schema: "Schema {version}",
+    offline: "Runs offline",
     offlineHelp: "Files are read in your browser. Nothing is uploaded.",
     schemaHelp: "{files} proto files from schema {commit}, built {date}",
     languageLabel: "Language",
@@ -29,7 +29,7 @@ export const en = {
     themeLabel: "Appearance",
     copyright: "\u00a9 {years} Eusebius Ngemera",
     footnoteBefore: "Schema from",
-    footnoteLink: "ProPresenter7-Proto",
+    footnoteLink: "greyshirtguy/ProPresenter7-Proto",
     footnoteAfter: "(unofficial). Not affiliated with Renewed Vision.",
   },
 
@@ -229,6 +229,11 @@ export const en = {
       pickerFailed:
         "The folder picker was unavailable, so the files were read as copies instead. Fixes cannot be saved back this way.",
       scanned: "Read {folder}.",
+      remembered: "{folder} was open last time.",
+      reconnect: "Reopen {folder}",
+      reconnectWhy:
+        "Permission to read the folder lapsed when the tab closed. Reopening needs one click; installing the app makes it stick.",
+      forgetFolder: "Forget this folder",
       clean: "No text problems found.",
       issuesFound: ["{n} problem in {files}", "{n} problems in {files}"],
       inFiles: ["{n} file", "{n} files"],

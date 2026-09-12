@@ -24,8 +24,8 @@ export const fr: Dictionary = {
 
   app: {
     title: "ProPresenter Garage",
-    schema: "schéma {version}",
-    offline: "Fonctionne hors ligne.",
+    schema: "Schéma {version}",
+    offline: "Fonctionne hors ligne",
     offlineHelp: "Les fichiers sont lus dans votre navigateur. Rien n'est envoyé.",
     schemaHelp: "{files} fichiers proto du schéma {commit}, générés le {date}",
     languageLabel: "Langue",
@@ -33,7 +33,7 @@ export const fr: Dictionary = {
     themeLabel: "Apparence",
     copyright: "\u00a9 {years} Eusebius Ngemera",
     footnoteBefore: "Schéma issu de",
-    footnoteLink: "ProPresenter7-Proto",
+    footnoteLink: "greyshirtguy/ProPresenter7-Proto",
     footnoteAfter: "(non officiel). Sans lien avec Renewed Vision.",
   },
 
@@ -237,6 +237,11 @@ export const fr: Dictionary = {
       pickerFailed:
         "Le sélecteur de dossier n'était pas disponible ; les fichiers ont été lus sous forme de copies. Les corrections ne peuvent pas être réenregistrées ainsi.",
       scanned: "Dossier {folder} lu.",
+      remembered: "{folder} était ouvert la dernière fois.",
+      reconnect: "Rouvrir {folder}",
+      reconnectWhy:
+        "L'autorisation de lire le dossier a expiré à la fermeture de l'onglet. La rouvrir demande un clic ; installer l'application la rend permanente.",
+      forgetFolder: "Oublier ce dossier",
       clean: "Aucun problème de texte trouvé.",
       issuesFound: ["{n} problème dans {files}", "{n} problèmes dans {files}"],
       inFiles: ["{n} fichier", "{n} fichiers"],
