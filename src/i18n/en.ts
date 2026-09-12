@@ -232,7 +232,9 @@ export const en = {
       noneFound: "No .pro files found in {folder}. Presentations live in the Libraries folder of a ProPresenter workspace — pick that, or the workspace itself.",
       pickerFailed:
         "The folder picker was unavailable, so the files were read as copies instead. Fixes cannot be saved back this way.",
-      scanned: "Read {folder}.",
+      summary: "Summary",
+      changeFolder: "Change",
+      clearFolder: "Clear",
       remembered: "{folder} was open last time.",
       reconnect: "Reopen {folder}",
       reconnectWhy:

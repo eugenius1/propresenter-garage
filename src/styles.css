@@ -179,6 +179,18 @@ body {
 /* Without this a disabled button looks perfectly clickable -- "Apply and
    export" sat in full accent blue while nothing was selected. */
 .btn:disabled { opacity: .4; cursor: not-allowed; }
+/* A button holding an icon instead of a label. The empty pseudo-element gives
+   it a line of text's height, so it matches the buttons beside it rather than
+   shrinking to fit a 13px glyph -- and the same figure as min-width squares it. */
+.btn.icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 5px;
+  min-width: calc(1.5em + 12px);
+  color: var(--text-dim);
+}
+.btn.icon::before { content: ""; height: 1.5em; }
 
 /* ---------- tabs ---------- */
 
@@ -570,3 +582,27 @@ select.mini { max-width: 9em; }
   z-index: 20;
 }
 .update-text { font-size: 13px; font-weight: 550; }
+
+/* The folder that is loaded, standing in for the button that chose it. */
+.chosen {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  max-width: 100%;
+  /* Same vertical padding as .btn, so the row lines up. */
+  padding: 5px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-2);
+  color: var(--text);
+}
+.chosen svg { flex: none; color: var(--text-dim); }
+.chosen-name {
+  font-size: 13px;
+  font-weight: 550;
+  /* A long name truncates rather than pushing the buttons off the row. */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

@@ -2,6 +2,7 @@
 // Copyright (C) 2026 Eusebius Ngemera
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { FolderOpen, X } from "lucide-react";
 import {
   folderAccess,
   isPresentationFile,
@@ -113,6 +114,8 @@ export function Presentations() {
 
   function forgetFolder() {
     setPending(null);
+    setFellBack(false);
+    setError(null);
     setReports(null);
     setFolderName("");
     void forget(KEYS.presentationsFolder);
@@ -143,6 +146,9 @@ export function Presentations() {
     }
   }
 
+  /** The picker where this browser has one, the directory input otherwise. */
+  const choose = () => (access === "readwrite" ? void chooseFolder() : input.current?.click());
+
   const withIssues = useMemo(
     () => (reports ?? []).filter((r) => r.issues.some((i) => active.has(i.kind)) || r.error),
     [reports, active]
@@ -171,16 +177,36 @@ export function Presentations() {
         <p className="sub">{p.chooseHint}</p>
 
         <div className="editor-bar">
-          {/* One button, whichever route this browser supports. Offering both
-              the picker and the input produced two controls with the same
-              label and no way to tell them apart. */}
-          <button
-            className="btn primary"
-            onClick={() => (access === "readwrite" ? void chooseFolder() : input.current?.click())}
-            disabled={busy !== null}
-          >
-            {access === "unavailable" ? p.pickFiles : p.pickFolder}
-          </button>
+          {/* Once a folder is chosen it replaces the button, so what is loaded
+              is on screen rather than implied. Only its name: the browser
+              never reveals where the folder sits on disk, by design. */}
+          {folderName ? (
+            <>
+              <span className="chosen">
+                <FolderOpen size={15} aria-hidden="true" />
+                <span className="chosen-name">{folderName}</span>
+              </span>
+              <button className="btn" onClick={choose} disabled={busy !== null}>
+                {p.changeFolder}
+              </button>
+              <button
+                className="btn icon"
+                aria-label={p.clearFolder}
+                title={p.clearFolder}
+                onClick={forgetFolder}
+                disabled={busy !== null}
+              >
+                <X size={13} aria-hidden="true" />
+              </button>
+            </>
+          ) : (
+            /* One button, whichever route this browser supports. Offering both
+               the picker and the input produced two controls with the same
+               label and no way to tell them apart. */
+            <button className="btn primary" onClick={choose} disabled={busy !== null}>
+              {access === "unavailable" ? p.pickFiles : p.pickFolder}
+            </button>
+          )}
           <input
             ref={input}
             type="file"
@@ -226,37 +252,28 @@ export function Presentations() {
         {fellBack && <p className="why warn-inline">{p.pickerFailed}</p>}
         {error && <p className="why warn-inline">{error}</p>}
 
-        {reports && (
-          <>
-            <div className="stats" style={{ marginTop: 12 }}>
-              <div className="stat">
-                <div className="n">{num(reports.length)}</div>
-                <div className="l">{p.name}</div>
-              </div>
-              {KINDS.map((kind) => (
-                <div className="stat" key={kind}>
-                  <div className="n">{num(countOf(kind))}</div>
-                  <div className="l">{p.kinds[kind]}</div>
-                </div>
-              ))}
-            </div>
-
-            {reports.length === 0 && (
-              <p className="sub warn-inline">
-                {f(p.noneFound, { folder: folderName || "—" })}
-              </p>
-            )}
-            {reports.length > 0 && folderName && (
-              <p className="why">
-                {f(p.scanned, { folder: folderName })}{" "}
-                <button className="linkish" onClick={forgetFolder}>
-                  {p.forgetFolder}
-                </button>
-              </p>
-            )}
-          </>
+        {reports && reports.length === 0 && (
+          <p className="sub warn-inline">{f(p.noneFound, { folder: folderName || "—" })}</p>
         )}
       </div>
+
+      {reports && reports.length > 0 && (
+        <div className="card">
+          <h2>{p.summary}</h2>
+          <div className="stats">
+            <div className="stat">
+              <div className="n">{num(reports.length)}</div>
+              <div className="l">{p.name}</div>
+            </div>
+            {KINDS.map((kind) => (
+              <div className="stat" key={kind}>
+                <div className="n">{num(countOf(kind))}</div>
+                <div className="l">{p.kinds[kind]}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {reports && reports.length > 0 && (
         <div className="card">

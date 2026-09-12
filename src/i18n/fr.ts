@@ -240,7 +240,9 @@ export const fr: Dictionary = {
       noneFound: "Aucun fichier .pro trouvé dans {folder}. Les présentations se trouvent dans le dossier Libraries d'un espace de travail ProPresenter — choisissez celui-ci, ou l'espace de travail lui-même.",
       pickerFailed:
         "Le sélecteur de dossier n'était pas disponible ; les fichiers ont été lus sous forme de copies. Les corrections ne peuvent pas être réenregistrées ainsi.",
-      scanned: "Dossier {folder} lu.",
+      summary: "Résumé",
+      changeFolder: "Changer",
+      clearFolder: "Effacer",
       remembered: "{folder} était ouvert la dernière fois.",
       reconnect: "Rouvrir {folder}",
       reconnectWhy:

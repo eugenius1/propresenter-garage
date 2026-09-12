@@ -94,7 +94,7 @@ export function UpdatePrompt({ load = loadRegistrar }: { load?: () => Promise<Re
       >
         {reloading ? t.app.updating : t.app.updateNow}
       </button>
-      <button className="mini" aria-label={t.app.updateLater} title={t.app.updateLater} onClick={() => setUpdate(null)}>
+      <button className="btn icon" aria-label={t.app.updateLater} title={t.app.updateLater} onClick={() => setUpdate(null)}>
         <X size={13} aria-hidden="true" />
       </button>
     </div>
