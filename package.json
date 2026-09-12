@@ -10,7 +10,7 @@
     "protos:update": "node scripts/update-protos.mjs",
     "icons": "node scripts/make-icons.mjs",
     "dev": "npm run protos && vite",
-    "build": "npm run protos && tsc -b tsconfig.app.json && vite build",
+    "build": "npm run protos && tsc -b tsconfig.app.json && vite build && node scripts/spa-fallback.mjs",
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
