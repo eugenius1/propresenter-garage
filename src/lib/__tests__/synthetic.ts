@@ -273,6 +273,88 @@ const PRESENTATION_DOCUMENT = {
   },
 };
 
+/**
+ * A presentation whose text carries one of each problem worth reporting.
+ *
+ * Built rather than committed for the same reason as the media document, and
+ * shaped so the checks have something to find: a leading space, a trailing
+ * space, a gap between two full lines, a doubled space, and -- deliberately --
+ * an empty placeholder box, which must *not* be reported.
+ */
+function rtfDocument(body: string): Uint8Array {
+  const header =
+    "{\\rtf0\\ansi\\ansicpg1252{\\fonttbl\\f0\\fnil ArialMT;}" +
+    "{\\colortbl;\\red0\\green0\\blue0;}{\\*\\listtable}\\uc1\\pard\\f0\\fs100";
+  return new TextEncoder().encode(`${header}${body}}`);
+}
+
+function textSlide(id: number, cueName: string, body: string) {
+  return {
+    uuid: uuid(20000 + id),
+    name: cueName,
+    isEnabled: true,
+    actions: [
+      {
+        uuid: uuid(21000 + id),
+        type: "ACTION_TYPE_PRESENTATION_SLIDE",
+        slide: {
+          presentation: {
+            base_slide: {
+              uuid: uuid(22000 + id),
+              elements: [
+                {
+                  element: {
+                    uuid: uuid(23000 + id),
+                    name: "Text",
+                    text: { rtf_data: rtfDocument(body) },
+                  },
+                },
+              ],
+            },
+          },
+        },
+      },
+    ],
+  };
+}
+
+const TEXT_PRESENTATION = {
+  application_info: DOCUMENT.application_info,
+  uuid: uuid(24000),
+  name: "Checked Song",
+  cues: [
+    textSlide(1, "Clean", "\\cb3 A tidy line\\par\\pard\\cb3 And another"),
+    textSlide(2, "Leading", "\\cb3 Fine here\\par\\pard\\cb3  leading space"),
+    textSlide(3, "Trailing", "\\cb3 trailing space \\par\\pard\\cb3 Fine"),
+    // A blank line with nothing but formatting, between two real lines.
+    textSlide(4, "Gap", "\\cb3 Above\\par\\pard\\li0\\qc\\fs200\\par\\pard\\cb3 Below"),
+    textSlide(5, "Doubled", "\\cb3 two  spaces here"),
+    // An empty placeholder: must be counted, never reported as an issue.
+    textSlide(6, "Empty", "\\cb3"),
+  ],
+  cue_groups: [
+    {
+      group: { uuid: uuid(25000), name: "Verse" },
+      cue_identifiers: [uuid(20001), uuid(20002)],
+    },
+    {
+      group: { uuid: uuid(25001), name: "Chorus" },
+      cue_identifiers: [uuid(20003), uuid(20004), uuid(20005), uuid(20006)],
+    },
+  ],
+};
+
+let cachedTextPresentation: Uint8Array | undefined;
+
+/** A presentation with known text problems, for the checker's tests. */
+export function syntheticTextPresentation(): Uint8Array {
+  const Presentation = root.lookupType("rv.data.Presentation");
+  cachedTextPresentation ??= Presentation.encode(
+    Presentation.fromObject(TEXT_PRESENTATION)
+  ).finish();
+  return cachedTextPresentation;
+}
+
 let cachedPresentation: Uint8Array | undefined;
 
 /** A presentation playlist document, for testing kind rejection. */
