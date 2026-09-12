@@ -90,16 +90,6 @@ export default function App() {
           <h1>{t.app.title}</h1>
         </span>
         <span className="spacer" />
-        <span
-          className="chip"
-          title={f(t.app.schemaHelp, {
-            files: PROTO_VERSION.files,
-            commit: PROTO_VERSION.upstreamCommit?.slice(0, 7) ?? "?",
-            date: new Date(PROTO_VERSION.builtAt).toLocaleDateString(undefined),
-          })}
-        >
-          {f(t.app.schema, { version: PROTO_VERSION.version.split(",")[0] })}
-        </span>
         <span className="chip ok" title={t.app.offlineHelp}>
           {t.app.offline}
         </span>
@@ -137,7 +127,7 @@ export default function App() {
             GPLv3
           </a>
         </span>
-        {t.app.footnoteBefore}{" "}
+        {f(t.app.footnoteBefore, { version: PROTO_VERSION.version.split(",")[0] })}{" "}
         <a
           href="https://github.com/greyshirtguy/ProPresenter7-Proto"
           target="_blank"
@@ -145,7 +135,20 @@ export default function App() {
         >
           {t.app.footnoteLink}
         </a>{" "}
-        {t.app.footnoteAfter}
+        {/* The commit pins which revision of a reverse-engineered schema this
+            was built against, which is the part that actually dates the app --
+            the version it reports is ProPresenter's, not the schema's. */}
+        <span
+          title={f(t.app.schemaHelp, {
+            files: PROTO_VERSION.files,
+            date: new Date(PROTO_VERSION.builtAt).toLocaleDateString(undefined),
+          })}
+        >
+          ({PROTO_VERSION.upstreamCommit?.slice(0, 7) ?? "?"})
+        </span>
+        {/* The full stop belongs to the sentence, not the link, and is the
+            same character in both languages. */}
+        . {t.app.footnoteAfter}
       </p>
 
       <UpdatePrompt />

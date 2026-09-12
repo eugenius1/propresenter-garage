@@ -41,6 +41,10 @@
   --text-dim: var(--slate-11);
   --text-faint: var(--slate-10);
 
+  /* The height every pill in the masthead agrees on -- the chip and the
+     language and appearance pickers. */
+  --pill-height: 24px;
+
   /*
    * Indigo rather than blue: step 9 is #3e63dd, within a hair of the #3b6ef5
    * this app used before the scales arrived. Radix's blue is a much brighter
@@ -119,16 +123,21 @@ body {
 /* ---------- header ---------- */
 
 .masthead {
-  display: flex; align-items: baseline; gap: 12px;
+  /* Centred, not baseline-aligned: the chip and the pickers are pills with
+     their own borders, and lining up the text inside them left the pills
+     themselves sitting at different heights. */
+  display: flex; align-items: center; gap: 12px;
   flex-wrap: wrap; margin-bottom: 18px;
 }
 .masthead h1 { font-size: 19px; margin: 0; letter-spacing: -0.01em; }
 .masthead p { margin: 0; color: var(--text-dim); font-size: 13px; }
 .masthead .spacer { flex: 1 1 auto; }
 
+/* Same height as .picker beside it: set on the box rather than arrived at
+   through padding, since the two hold text at different line heights. */
 .chip {
   display: inline-flex; align-items: center; gap: 6px;
-  padding: 3px 9px; border-radius: 999px;
+  min-height: var(--pill-height); padding: 0 9px; border-radius: 999px;
   background: var(--surface-2); border: 1px solid var(--border);
   font-size: 11.5px; color: var(--text-dim); white-space: nowrap;
 }
@@ -330,6 +339,7 @@ details.more[open] > summary::before { content: "▾ "; }
   display: inline-flex;
   align-items: center;
   gap: 5px;
+  min-height: var(--pill-height);
   padding: 0 7px 0 8px;
   border: 1px solid var(--border);
   border-radius: 999px;
@@ -412,9 +422,8 @@ select.mini { max-width: 9em; }
 
 .why.warn-inline { color: var(--renamed); }
 
-/* The masthead aligns its children on the baseline, which an SVG does not
-   share with text -- so the mark and the title align to each other inside
-   .brand, and the group as a whole keeps the masthead's baseline. */
+/* The mark and the title are centred on each other inside .brand, so the
+   group moves as one item in the masthead. */
 .brand { display: flex; align-items: center; gap: 9px; }
 .logo { flex: none; display: block; border-radius: 7px; }
 
