@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Eusebius Ngemera
 
+import { ChevronDown, Globe } from "lucide-react";
 import { DICTIONARIES, LANGUAGES, useI18n, type Lang } from "../i18n";
 
 /**
@@ -19,7 +20,7 @@ export function LanguageSwitcher() {
 
   return (
     <div className="picker">
-      <GlobeIcon />
+      <Globe className="picker-icon" size={13} aria-hidden />
       <select
         className="picker-select"
         aria-label={t.app.languageLabel}
@@ -32,52 +33,7 @@ export function LanguageSwitcher() {
           </option>
         ))}
       </select>
-      <CaretIcon />
+      <ChevronDown className="picker-caret" size={13} aria-hidden />
     </div>
-  );
-}
-
-function GlobeIcon() {
-  return (
-    <svg
-      className="picker-icon"
-      viewBox="0 0 16 16"
-      width="13"
-      height="13"
-      aria-hidden="true"
-      focusable="false"
-    >
-      <circle cx="8" cy="8" r="6.4" fill="none" stroke="currentColor" strokeWidth="1.3" />
-      {/* Equator and central meridian, plus the two curves that read as a globe. */}
-      <path
-        d="M1.6 8h12.8M8 1.6c3.4 3.5 3.4 9.3 0 12.8M8 1.6C4.6 5.1 4.6 10.9 8 14.4"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.3"
-        strokeLinecap="round"
-      />
-    </svg>
-  );
-}
-
-function CaretIcon() {
-  return (
-    <svg
-      className="picker-caret"
-      viewBox="0 0 10 6"
-      width="8"
-      height="5"
-      aria-hidden="true"
-      focusable="false"
-    >
-      <path
-        d="M1 1l4 4 4-4"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.5"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
   );
 }

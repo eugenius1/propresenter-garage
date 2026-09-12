@@ -19,7 +19,7 @@ export function Logo() {
       aria-hidden="true"
       focusable="false"
     >
-      <rect width="64" height="64" rx="14" fill="var(--accent)" />
+      <rect width="64" height="64" rx="14" fill="var(--accent-ui)" />
       <g fill="#fff">
         <rect x="14" y="16" width="16" height="6" rx="3" />
         <rect x="14" y="29" width="16" height="6" rx="3" opacity=".75" />

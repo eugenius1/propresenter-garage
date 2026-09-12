@@ -2,6 +2,7 @@
 // Copyright (C) 2026 Eusebius Ngemera
 
 import { useMemo, useState } from "react";
+import { Info } from "lucide-react";
 import { FileSlot } from "../components/FileSlot";
 import { DiffView } from "../components/DiffView";
 import { AuditView } from "../components/AuditView";
@@ -21,30 +22,6 @@ type Tab = "diff" | "audit" | "browse" | "reorganise";
  * second tool can arrive without either of them growing a union of the other's
  * concerns.
  */
-/** Marks the panel as guidance rather than somewhere to drop a file. */
-function InfoIcon() {
-  return (
-    <svg
-      className="info-icon"
-      viewBox="0 0 20 20"
-      width="17"
-      height="17"
-      aria-hidden="true"
-      focusable="false"
-    >
-      <circle cx="10" cy="10" r="8.4" fill="none" stroke="currentColor" strokeWidth="1.5" />
-      <circle cx="10" cy="6.1" r="1.05" fill="currentColor" />
-      <path
-        d="M10 9v5.2"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.7"
-        strokeLinecap="round"
-      />
-    </svg>
-  );
-}
-
 export function MediaBin() {
   const { t, f } = useI18n();
   const [left, setLeft] = useState<LoadedFile | null>(null);
@@ -100,7 +77,7 @@ export function MediaBin() {
         <div className="card info-card">
           <div className="empty-state">
             <p className="info-head">
-              <InfoIcon />
+              <Info className="info-icon" size={17} aria-hidden />
               <strong>{t.tools.mediaBin.startHeading}</strong>
             </p>
             {t.tools.mediaBin.whereIntro}

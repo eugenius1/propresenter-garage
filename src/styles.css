@@ -1,76 +1,107 @@
+/*
+ * Colour comes from Radix Colors: twelve-step scales with light and dark
+ * counterparts, built so that step 11 text clears 4.5:1 on steps 1-3 and step 9
+ * works as a solid background. Every value here used to be hand-picked, and
+ * none of that contrast was ever measured.
+ *
+ * The dark scales are scoped to `.dark`, which is the class this app already
+ * sets on the root element, so the whole dark palette is inherited rather than
+ * written out a second time.
+ */
+@import "@radix-ui/colors/slate.css";
+@import "@radix-ui/colors/slate-dark.css";
+@import "@radix-ui/colors/indigo.css";
+@import "@radix-ui/colors/indigo-dark.css";
+@import "@radix-ui/colors/green.css";
+@import "@radix-ui/colors/green-dark.css";
+@import "@radix-ui/colors/red.css";
+@import "@radix-ui/colors/red-dark.css";
+@import "@radix-ui/colors/violet.css";
+@import "@radix-ui/colors/violet-dark.css";
+@import "@radix-ui/colors/amber.css";
+@import "@radix-ui/colors/amber-dark.css";
+@import "@radix-ui/colors/cyan.css";
+@import "@radix-ui/colors/cyan-dark.css";
+@import "@radix-ui/colors/pink.css";
+@import "@radix-ui/colors/pink-dark.css";
+@import "@radix-ui/colors/iris.css";
+@import "@radix-ui/colors/iris-dark.css";
+
 :root {
   color-scheme: light;
 
-  --bg: #f6f7f9;
-  --surface: #ffffff;
-  --surface-2: #f0f2f5;
-  --border: #dfe3e8;
-  --border-strong: #c6ccd4;
-  --text: #1b1f24;
-  --text-dim: #5c6672;
-  --text-faint: #8b95a1;
+  /* Surfaces, borders and text, by the scale's own conventions:
+     1-3 backgrounds, 6-8 borders, 11 low-contrast text, 12 high-contrast. */
+  --bg: var(--slate-2);
+  --surface: var(--slate-1);
+  --surface-2: var(--slate-3);
+  --border: var(--slate-6);
+  --border-strong: var(--slate-8);
+  --text: var(--slate-12);
+  --text-dim: var(--slate-11);
+  --text-faint: var(--slate-10);
 
-  --accent: #3b6ef5;
-  --accent-soft: #e8eeff;
+  /*
+   * Indigo rather than blue: step 9 is #3e63dd, within a hair of the #3b6ef5
+   * this app used before the scales arrived. Radix's blue is a much brighter
+   * azure and changed the app's character noticeably.
+   *
+   * It also solved an accessibility problem rather than creating one. White on
+   * blue step 9 measures 3.26:1 -- under AA for a button label -- which needed
+   * a different step per mode to fix. Indigo step 9 is the same #3e63dd in
+   * both light and dark and carries white text at 5.21:1, so the button is
+   * simply the brand colour with white on it.
+   *
+   * Two tokens rather than one, because they answer to different rules:
+   * `--accent` is used as text (links, the active tab, expanders) and needs
+   * 4.5:1, so it takes step 11. `--accent-ui` is never text -- focus rings, the
+   * app mark, a checkbox tint -- where 3:1 applies and the vivid step 9 is
+   * right.
+   */
+  --accent: var(--indigo-11);
+  --accent-ui: var(--indigo-9);
+  --accent-solid: var(--indigo-9);
+  --accent-text: #fff;
+  --accent-soft: var(--indigo-3);
 
-  --added: #1a7f45;
-  --added-soft: #e4f5ea;
-  --removed: #c0392b;
-  --removed-soft: #fdeae7;
-  --moved: #8a5cf6;
-  --moved-soft: #f0e9ff;
-  --renamed: #a86407;
-  --renamed-soft: #fdf1de;
-  --retimed: #0e7490;
-  --retimed-soft: #e0f4f8;
-  --relinked: #b8437a;
-  --relinked-soft: #fceaf3;
-  --restyled: #5b5fc7;
-  --restyled-soft: #eaeaff;
+  /* One hue per kind of change, each paired as step 11 on step 3 -- the
+     combination the scales are designed to make readable. */
+  --added: var(--green-11);
+  --added-soft: var(--green-3);
+  --added-strong: var(--green-12);
+  --removed: var(--red-11);
+  --removed-soft: var(--red-3);
+  --removed-strong: var(--red-12);
+  --moved: var(--violet-11);
+  --moved-soft: var(--violet-3);
+  --moved-strong: var(--violet-12);
+  --renamed: var(--amber-11);
+  --renamed-soft: var(--amber-3);
+  --renamed-strong: var(--amber-12);
+  --retimed: var(--cyan-11);
+  --retimed-soft: var(--cyan-3);
+  --retimed-strong: var(--cyan-12);
+  --relinked: var(--pink-11);
+  --relinked-soft: var(--pink-3);
+  --relinked-strong: var(--pink-12);
+  --restyled: var(--iris-11);
+  --restyled-soft: var(--iris-3);
+  --restyled-strong: var(--iris-12);
 
   --radius: 10px;
   --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
 }
 
 /*
- * Dark palette.
+ * Dark mode needs only this.
  *
- * Applied by a class rather than a bare `prefers-color-scheme` media query, so
- * an explicit choice can override the system without the palette having to be
- * written twice (once in a media rule, once in an attribute rule). The class is
- * set before first paint by an inline script in index.html and kept in step
- * with the system by src/theme.ts. The whole interface needs JavaScript anyway,
- * so there is nothing to degrade to.
+ * Radix redefines every scale step under `.dark`, and the tokens above point at
+ * those steps rather than at fixed values, so the palette swaps itself. What
+ * used to be a second hand-maintained block of thirty colours is now one line
+ * telling the browser which form controls to draw.
  */
 :root.dark {
   color-scheme: dark;
-
-  --bg: #14171a;
-  --surface: #1c2024;
-  --surface-2: #24292e;
-  --border: #2e343b;
-  --border-strong: #414952;
-  --text: #e7eaee;
-  --text-dim: #9aa4b0;
-  --text-faint: #737d89;
-
-  --accent: #6d94ff;
-  --accent-soft: #1e2a47;
-
-  --added: #4ecb80;
-  --added-soft: #16301f;
-  --removed: #ff7a6b;
-  --removed-soft: #35201d;
-  --moved: #b596ff;
-  --moved-soft: #261d3d;
-  --renamed: #e0a63c;
-  --renamed-soft: #322616;
-  --retimed: #4cc4dc;
-  --retimed-soft: #162d33;
-  --relinked: #f07ab0;
-  --relinked-soft: #331d29;
-  --restyled: #9ba0ff;
-  --restyled-soft: #21223d;
 }
 
 * { box-sizing: border-box; }
@@ -101,8 +132,8 @@ body {
   background: var(--surface-2); border: 1px solid var(--border);
   font-size: 11.5px; color: var(--text-dim); white-space: nowrap;
 }
-.chip.ok { background: var(--added-soft); border-color: transparent; color: var(--added); }
-.chip.bad { background: var(--removed-soft); border-color: transparent; color: var(--removed); }
+.chip.ok { background: var(--added-soft); border-color: transparent; color: var(--added-strong); }
+.chip.bad { background: var(--removed-soft); border-color: transparent; color: var(--removed-strong); }
 
 /* ---------- file slots ---------- */
 
@@ -119,7 +150,7 @@ body {
   align-items: center; justify-content: center; text-align: center;
   cursor: pointer; transition: background .12s, border-color .12s;
 }
-.slot.empty:hover, .slot.drag { background: var(--accent-soft); border-color: var(--accent); }
+.slot.empty:hover, .slot.drag { background: var(--accent-soft); border-color: var(--accent-ui); }
 .slot.error { border-color: var(--removed); background: var(--removed-soft); }
 
 .slot-role {
@@ -143,7 +174,7 @@ body {
    background with a pale one while the text stayed white -- leaving the button
    looking empty. */
 .btn:not(.primary):hover:not(:disabled) { background: var(--surface-2); }
-.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.btn.primary { background: var(--accent-solid); border-color: var(--accent-solid); color: var(--accent-text); }
 .btn.primary:hover:not(:disabled) { filter: brightness(1.08); }
 /* Without this a disabled button looks perfectly clickable -- "Apply and
    export" sat in full accent blue while nothing was selected. */
@@ -158,7 +189,7 @@ body {
   color: var(--text-dim); margin-bottom: -1px;
 }
 .tab:hover:not(:disabled) { color: var(--text); }
-.tab[aria-selected="true"] { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
+.tab[aria-selected="true"] { color: var(--accent); border-bottom-color: var(--accent-ui); font-weight: 600; }
 .tab:disabled { opacity: .4; cursor: not-allowed; }
 
 /* ---------- panels & cards ---------- */
@@ -192,7 +223,7 @@ body {
   border-radius: 999px; border: 1px solid var(--border-strong);
   background: var(--surface); color: var(--text-dim);
 }
-.pill[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #fff; }
+.pill[aria-pressed="true"] { background: var(--accent-solid); border-color: var(--accent-solid); color: var(--accent-text); }
 .pill:disabled { opacity: .35; cursor: not-allowed; }
 
 /* ---------- change list ---------- */
@@ -208,13 +239,13 @@ body {
   font-size: 10.5px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase;
   padding: 3px 7px; border-radius: 5px; text-align: center; white-space: nowrap;
 }
-.tag.added { background: var(--added-soft); color: var(--added); }
-.tag.removed { background: var(--removed-soft); color: var(--removed); }
-.tag.moved { background: var(--moved-soft); color: var(--moved); }
-.tag.renamed { background: var(--renamed-soft); color: var(--renamed); }
-.tag.retimed { background: var(--retimed-soft); color: var(--retimed); }
-.tag.relinked { background: var(--relinked-soft); color: var(--relinked); }
-.tag.restyled { background: var(--restyled-soft); color: var(--restyled); }
+.tag.added { background: var(--added-soft); color: var(--added-strong); }
+.tag.removed { background: var(--removed-soft); color: var(--removed-strong); }
+.tag.moved { background: var(--moved-soft); color: var(--moved-strong); }
+.tag.renamed { background: var(--renamed-soft); color: var(--renamed-strong); }
+.tag.retimed { background: var(--retimed-soft); color: var(--retimed-strong); }
+.tag.relinked { background: var(--relinked-soft); color: var(--relinked-strong); }
+.tag.restyled { background: var(--restyled-soft); color: var(--restyled-strong); }
 
 .change-body { min-width: 0; }
 .change-title { font-weight: 550; word-break: break-word; }
@@ -242,7 +273,7 @@ body {
   border-radius: 999px; padding: 1px 8px; font-size: 11px;
   color: var(--text-dim); font-variant-numeric: tabular-nums;
 }
-.count-badge.warn { background: var(--renamed-soft); color: var(--renamed); border-color: transparent; }
+.count-badge.warn { background: var(--renamed-soft); color: var(--renamed-strong); border-color: transparent; }
 
 .rows { list-style: none; margin: 0; padding: 0; font-size: 13px; }
 .rows li { padding: 4px 0; border-top: 1px dashed var(--border); }
@@ -295,7 +326,7 @@ details.more[open] > summary::before { content: "▾ "; }
 }
 .picker:hover { color: var(--text); border-color: var(--border-strong); }
 .picker:focus-within {
-  border-color: var(--accent);
+  border-color: var(--accent-ui);
   color: var(--text);
   outline: 2px solid var(--accent-soft);
   outline-offset: 1px;
@@ -420,21 +451,21 @@ select.mini { max-width: 9em; }
 /* ---------- merge selection ---------- */
 
 .change.selectable { grid-template-columns: auto 92px 1fr; }
-.change-select { margin: 3px 0 0; accent-color: var(--accent); }
+.change-select { margin: 3px 0 0; accent-color: var(--accent-ui); }
 .merge-direction {
   display: inline-flex; align-items: center; gap: 6px;
   font-size: 12.5px; color: var(--text-dim);
 }
 
 /* A playlist deleted and made again: neither purely added nor removed. */
-.tag.recreated { background: var(--renamed-soft); color: var(--renamed); }
+.tag.recreated { background: var(--renamed-soft); color: var(--renamed-strong); }
 
 /* ---------- informational panel ---------- */
 
 /* The two slots above are drop targets; this panel is not, so it deliberately
    drops the dashed border and leads with an icon. */
 .info-card {
-  border-left: 3px solid var(--accent);
+  border-left: 3px solid var(--accent-ui);
   background: linear-gradient(
     to right,
     var(--accent-soft) 0,
@@ -496,6 +527,6 @@ select.mini { max-width: 9em; }
 /* Whitespace made visible in a finding. */
 .whitespace { white-space: pre-wrap; }
 
-.tag.leadingSpace, .tag.trailingSpace { background: var(--renamed-soft); color: var(--renamed); }
-.tag.blankLine { background: var(--moved-soft); color: var(--moved); }
-.tag.repeatedSpace { background: var(--retimed-soft); color: var(--retimed); }
+.tag.leadingSpace, .tag.trailingSpace { background: var(--renamed-soft); color: var(--renamed-strong); }
+.tag.blankLine { background: var(--moved-soft); color: var(--moved-strong); }
+.tag.repeatedSpace { background: var(--retimed-soft); color: var(--retimed-strong); }
