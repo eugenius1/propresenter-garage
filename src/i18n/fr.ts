@@ -260,15 +260,21 @@ export const fr: Dictionary = {
         trailingSpace: "Espace à la fin",
         blankLine: "Ligne vide",
         repeatedSpace: "Espace double",
+        trailingComma: "Virgule finale",
       },
       why: {
         leadingSpace: "La ligne commence par une espace, ce qui la décale vers la droite à l'écran.",
         trailingSpace: "La ligne finit par une espace. Invisible dans l'éditeur, mais cela affecte le centrage.",
         blankLine: "Une ligne entre deux lignes de texte qui n'affiche rien — elle laisse un trou sur la diapositive.",
         repeatedSpace: "Deux espaces ou plus à la suite dans la ligne.",
+        trailingComma:
+          "La ligne se termine par une virgule. Normal dans un texte, mais cela se remarque en fin de diapositive.",
       },
       emptyBoxesNote:
         "Les zones de texte sans aucun texte sont comptées, pas listées : les thèmes ProPresenter en laissent systématiquement sur les diapositives.",
+      commaCheck: "Rechercher aussi les virgules finales",
+      commaCheckWhy:
+        "Désactivé par défaut : une virgule en fin de ligne est une ponctuation ordinaire, et sa place sur une diapositive relève du style de la maison.",
       showAll: "Afficher les {n}",
     },
     mediaBin: {

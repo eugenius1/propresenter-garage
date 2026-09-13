@@ -331,6 +331,13 @@ const TEXT_PRESENTATION = {
     textSlide(5, "Doubled", "\\cb3 two  spaces here"),
     // An empty placeholder: must be counted, never reported as an issue.
     textSlide(6, "Empty", "\\cb3"),
+    // Two ways a line can end with a comma, neither of which is also a
+    // whitespace problem -- so the comma counts stay independent of them.
+    textSlide(
+      7,
+      "Comma",
+      "\\cb3 Que ton nom,\\par\\pard\\cb3 pour toujours ,\\par\\pard\\cb3 sois glorifie"
+    ),
   ],
   cue_groups: [
     {
@@ -339,7 +346,7 @@ const TEXT_PRESENTATION = {
     },
     {
       group: { uuid: uuid(25001), name: "Chorus" },
-      cue_identifiers: [uuid(20003), uuid(20004), uuid(20005), uuid(20006)],
+      cue_identifiers: [uuid(20003), uuid(20004), uuid(20005), uuid(20006), uuid(20007)],
     },
   ],
 };

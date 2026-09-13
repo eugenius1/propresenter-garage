@@ -551,6 +551,7 @@ select.mini { max-width: 9em; }
 .tag.leadingSpace, .tag.trailingSpace { background: var(--renamed-soft); color: var(--renamed-strong); }
 .tag.blankLine { background: var(--moved-soft); color: var(--moved-strong); }
 .tag.repeatedSpace { background: var(--retimed-soft); color: var(--retimed-strong); }
+.tag.trailingComma { background: var(--relinked-soft); color: var(--relinked-strong); }
 
 /* The tagline describes whichever tool is showing, so it sits under the
    switcher rather than beside the app's own name. */
@@ -615,3 +616,19 @@ select.mini { max-width: 9em; }
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* An opt-in check, sitting under the control that chooses what to check. */
+.option {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 10px;
+  font-size: 13px;
+  color: var(--text-dim);
+  cursor: pointer;
+  /* Only as wide as its own text, so the click target is the label and not
+     the empty width of the card beside it. */
+  width: fit-content;
+}
+.option:hover { color: var(--text); }
+.option input { accent-color: var(--accent-ui); cursor: pointer; margin: 0; }

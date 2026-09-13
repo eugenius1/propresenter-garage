@@ -105,6 +105,7 @@ export const KEYS = {
   mediaBinBaseline: "mediaBin.baseline",
   mediaBinCompare: "mediaBin.compare",
   presentationsFolder: "presentations.folder",
+  presentationsChecks: "presentations.checks",
 } as const;
 
 /** A loaded file, small enough to keep whole. */

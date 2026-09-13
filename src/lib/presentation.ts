@@ -38,7 +38,16 @@ export type TextIssueKind =
   | "leadingSpace"
   | "trailingSpace"
   | "blankLine"
-  | "repeatedSpace";
+  | "repeatedSpace"
+  /**
+   * A line whose visible text ends with a comma.
+   *
+   * Reported like any other, but off by default in the interface: a comma at
+   * the end of a line is ordinary punctuation in prose and only looks wrong
+   * once lyrics are broken across slides. Whether it is a problem is a matter
+   * of house style, so it is asked for rather than assumed.
+   */
+  | "trailingComma";
 
 export interface TextIssue {
   kind: TextIssueKind;
@@ -121,6 +130,15 @@ const EDGE_SPACE = /^[ \t   ]|[ \t   ]$/;
 const LEADING_SPACE = /^[ \t   ]/;
 const TRAILING_SPACE = /[ \t   ]$/;
 const REPEATED_SPACE = /\S[ \t]{2,}\S/;
+/**
+ * A line whose visible text ends with a comma.
+ *
+ * Trailing whitespace is allowed for rather than required, so "nom," and
+ * "nom, " are the same finding -- and so is "nom ,", since a space before
+ * the comma does not change what the line ends with. Any stray space is
+ * still reported separately by the checks above.
+ */
+const TRAILING_COMMA = /,[ \t   ]*$/;
 
 /**
  * Check one presentation's text.
@@ -166,6 +184,7 @@ export function checkPresentation(
       if (LEADING_SPACE.test(line.text)) issues.push(at("leadingSpace", line));
       if (TRAILING_SPACE.test(line.text)) issues.push(at("trailingSpace", line));
       if (REPEATED_SPACE.test(line.text)) issues.push(at("repeatedSpace", line));
+      if (TRAILING_COMMA.test(line.text)) issues.push(at("trailingComma", line));
     });
   }
 

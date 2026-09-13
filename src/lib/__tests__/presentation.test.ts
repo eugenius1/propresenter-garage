@@ -6,6 +6,7 @@ import os from "node:os";
 import path from "node:path";
 import { beforeAll, describe, expect, it } from "vitest";
 import {
+  checkPresentation,
   checkPresentationFile,
   decodePresentation,
   encodePresentation,
@@ -20,8 +21,8 @@ describe("reading a presentation", () => {
   it("walks cues into text boxes and names their section", () => {
     const doc = readPresentation(decodePresentation(syntheticTextPresentation()));
     expect(doc.name).toBe("Checked Song");
-    expect(doc.slideCount).toBe(6);
-    expect(doc.textBoxes).toHaveLength(6);
+    expect(doc.slideCount).toBe(7);
+    expect(doc.textBoxes).toHaveLength(7);
     expect(doc.textBoxes[0].groupName).toBe("Verse");
     expect(doc.textBoxes[3].groupName).toBe("Chorus");
   });
@@ -74,6 +75,66 @@ describe("line-level whitespace", () => {
       expect(issue.cueName).toBeTruthy();
       expect(issue.groupName).toBeTruthy();
     }
+  });
+});
+
+describe("trailing commas", () => {
+  it("finds a line that ends with a comma", () => {
+    const found = issuesOf("trailingComma");
+    expect(found).toHaveLength(2);
+    expect(found[0].text).toBe("Que ton nom,");
+    expect(found[0].cueName).toBe("Comma");
+  });
+
+  it("finds one with a space before the comma", () => {
+    // The space does not change what the line ends with.
+    expect(issuesOf("trailingComma")[1].text).toBe("pour toujours ,");
+  });
+
+  it("finds one with whitespace after the comma", () => {
+    // Kept out of the shared fixture: a line ending "nom, " is also a trailing
+    // space, and folding it in there would tangle the two counts together.
+    const report = checkPresentation("One.pro", {
+      name: "One",
+      slideCount: 1,
+      textBoxes: [
+        {
+          slideIndex: 0,
+          cueName: "1",
+          groupName: "Verse",
+          lines: [
+            { index: 0, text: "Que ton nom, ", markupOnly: false },
+            { index: 1, text: "sois glorifie", markupOnly: false },
+          ],
+        },
+      ],
+    });
+    expect(report.issues.filter((i) => i.kind === "trailingComma")).toHaveLength(1);
+    expect(report.issues.filter((i) => i.kind === "trailingSpace")).toHaveLength(1);
+  });
+
+  it("says nothing about a comma inside a line", () => {
+    // Only the end of the line matters; prose commas are not findings.
+    const report = checkPresentation("One.pro", {
+      name: "One",
+      slideCount: 1,
+      textBoxes: [
+        {
+          slideIndex: 0,
+          cueName: "1",
+          lines: [{ index: 0, text: "Seigneur, mon Dieu et mon Roi", markupOnly: false }],
+        },
+      ],
+    });
+    expect(report.issues).toEqual([]);
+  });
+
+  it("leaves the other counts alone", () => {
+    // The comma slide carries no whitespace problems, so switching the check
+    // on cannot inflate the numbers the other checks report.
+    expect(issuesOf("leadingSpace")).toHaveLength(1);
+    expect(issuesOf("trailingSpace")).toHaveLength(1);
+    expect(issuesOf("repeatedSpace")).toHaveLength(1);
   });
 });
 

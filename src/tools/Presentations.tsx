@@ -22,7 +22,22 @@ import {
 import { checkPresentationFile, type PresentationReport, type TextIssueKind } from "../lib/presentation";
 import { useI18n } from "../i18n";
 
-const KINDS: TextIssueKind[] = ["leadingSpace", "trailingSpace", "blankLine", "repeatedSpace"];
+/**
+ * Every kind the checker reports, and the ones shown without being asked for.
+ *
+ * A trailing comma is always detected -- it costs one test per line -- but
+ * stays out of the way until it is switched on. Detecting it regardless is
+ * what makes the switch instant: it filters what is already in hand rather
+ * than sending the whole library back through the reader.
+ */
+const ALL_KINDS: TextIssueKind[] = [
+  "leadingSpace",
+  "trailingSpace",
+  "blankLine",
+  "repeatedSpace",
+  "trailingComma",
+];
+const OPTIONAL_KINDS: TextIssueKind[] = ["trailingComma"];
 
 /**
  * Check the text of every presentation in a library.
@@ -47,7 +62,19 @@ export function Presentations() {
   const [pending, setPending] = useState<{ handle: unknown; name: string } | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [active, setActive] = useState<Set<TextIssueKind>>(new Set(KINDS));
+  const [active, setActive] = useState<Set<TextIssueKind>>(new Set(ALL_KINDS));
+  /** Opt-in checks, remembered so the choice survives a refresh. */
+  const [commas, setCommas] = useState(false);
+
+  const kinds = useMemo(
+    () => ALL_KINDS.filter((kind) => commas || !OPTIONAL_KINDS.includes(kind)),
+    [commas]
+  );
+  /** The kinds both switched on and not filtered out by a pill. */
+  const shown = useMemo(
+    () => new Set(kinds.filter((kind) => active.has(kind))),
+    [kinds, active]
+  );
 
   async function scan(files: FolderFile[]) {
     const out: PresentationReport[] = [];
@@ -68,6 +95,13 @@ export function Presentations() {
    * reread; where it is not, asking again needs a user gesture, so the folder
    * is offered as a button rather than re-requested on load.
    */
+  useEffect(() => {
+    void (async () => {
+      const saved = await remember<{ trailingComma?: boolean }>(KEYS.presentationsChecks);
+      if (saved?.trailingComma) setCommas(true);
+    })();
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
 
@@ -150,13 +184,13 @@ export function Presentations() {
   const choose = () => (access === "readwrite" ? void chooseFolder() : input.current?.click());
 
   const withIssues = useMemo(
-    () => (reports ?? []).filter((r) => r.issues.some((i) => active.has(i.kind)) || r.error),
-    [reports, active]
+    () => (reports ?? []).filter((r) => r.issues.some((i) => shown.has(i.kind)) || r.error),
+    [reports, shown]
   );
 
   const totalIssues = useMemo(
-    () => (reports ?? []).reduce((n, r) => n + r.issues.filter((i) => active.has(i.kind)).length, 0),
-    [reports, active]
+    () => (reports ?? []).reduce((n, r) => n + r.issues.filter((i) => shown.has(i.kind)).length, 0),
+    [reports, shown]
   );
 
   const countOf = (kind: TextIssueKind) =>
@@ -167,8 +201,16 @@ export function Presentations() {
       const next = new Set(prev);
       if (next.has(kind)) next.delete(kind);
       else next.add(kind);
-      return next.size === 0 ? new Set(KINDS) : next;
+      // Switching every pill off would show nothing at all, so it means "all".
+      return kinds.some((k) => next.has(k)) ? next : new Set(ALL_KINDS);
     });
+
+  function toggleCommas(on: boolean) {
+    setCommas(on);
+    // Turning it on should show it, even if the pill was switched off before.
+    if (on) setActive((prev) => new Set(prev).add("trailingComma"));
+    void keep(KEYS.presentationsChecks, { trailingComma: on });
+  }
 
   return (
     <>
@@ -227,6 +269,18 @@ export function Presentations() {
           {busy && <span className="editor-count">{f(p.scanning, { n: busy })}</span>}
         </div>
 
+        {/* An opt-in check, offered where the folder is chosen rather than
+            among the findings: it changes what counts as a problem, which is
+            a decision made before reading rather than while sifting. */}
+        <label className="option" title={p.commaCheckWhy}>
+          <input
+            type="checkbox"
+            checked={commas}
+            onChange={(e) => toggleCommas(e.target.checked)}
+          />
+          <span>{p.commaCheck}</span>
+        </label>
+
         <p className="why">
           {access === "readwrite"
             ? p.readwriteNote
@@ -265,7 +319,7 @@ export function Presentations() {
               <div className="n">{num(reports.length)}</div>
               <div className="l">{p.name}</div>
             </div>
-            {KINDS.map((kind) => (
+            {kinds.map((kind) => (
               <div className="stat" key={kind}>
                 <div className="n">{num(countOf(kind))}</div>
                 <div className="l">{p.kinds[kind]}</div>
@@ -287,7 +341,7 @@ export function Presentations() {
           <p className="sub">{p.emptyBoxesNote}</p>
 
           <div className="filters">
-            {KINDS.map((kind) => (
+            {kinds.map((kind) => (
               <button
                 key={kind}
                 className="pill"
@@ -308,7 +362,7 @@ export function Presentations() {
                 <span className="count-badge">
                   {report.error
                     ? "!"
-                    : num(report.issues.filter((i) => active.has(i.kind)).length)}
+                    : num(report.issues.filter((i) => shown.has(i.kind)).length)}
                 </span>
               </h3>
               <p className="why">
@@ -323,7 +377,7 @@ export function Presentations() {
               {!report.error && (
                 <ul className="rows">
                   {report.issues
-                    .filter((i) => active.has(i.kind))
+                    .filter((i) => shown.has(i.kind))
                     .map((issue, index) => (
                       <li key={index}>
                         <div>

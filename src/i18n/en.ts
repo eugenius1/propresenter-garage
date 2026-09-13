@@ -252,15 +252,21 @@ export const en = {
         trailingSpace: "Trailing space",
         blankLine: "Blank line",
         repeatedSpace: "Double space",
+        trailingComma: "Trailing comma",
       },
       why: {
         leadingSpace: "The line begins with a space, which shifts it right on screen.",
         trailingSpace: "The line ends with a space. Invisible in the editor, but it affects centring.",
         blankLine: "A line between two lines of text that shows nothing — it leaves a gap on the slide.",
         repeatedSpace: "Two or more spaces in a row inside the line.",
+        trailingComma:
+          "The line ends with a comma. Fine in prose, but it reads oddly at the end of a slide.",
       },
       emptyBoxesNote:
         "Text boxes with no text at all are counted, not listed: ProPresenter themes leave them on slides as a matter of course.",
+      commaCheck: "Also look for trailing commas",
+      commaCheckWhy:
+        "Off by default: a comma at the end of a line is ordinary punctuation, and whether it belongs on a slide is a matter of house style.",
       showAll: "Show all {n}",
     },
     mediaBin: {
