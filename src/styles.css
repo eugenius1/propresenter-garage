@@ -92,20 +92,42 @@
   --restyled-soft: var(--iris-3);
   --restyled-strong: var(--iris-12);
 
+  /*
+   * A surface that floats above the page.
+   *
+   * Two tokens rather than reusing --surface, because "raised" means opposite
+   * things in the two modes. On white, a shadow does the work. On a dark
+   * ground a shadow is invisible -- there is nothing darker to cast onto -- so
+   * depth reads as *lighter*, and the dark block below raises the step
+   * instead. Without that the banner sat at the same value as the page and
+   * disappeared into it.
+   */
+  --raised: var(--slate-1);
+  --raised-border: var(--border);
+  --raised-shadow: 0 6px 24px rgb(0 0 0 / .18);
+  --raised-hover: var(--slate-3);
+
   --radius: 10px;
   --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
 }
 
 /*
- * Dark mode needs only this.
+ * Dark mode needs almost nothing.
  *
  * Radix redefines every scale step under `.dark`, and the tokens above point at
  * those steps rather than at fixed values, so the palette swaps itself. What
  * used to be a second hand-maintained block of thirty colours is now one line
- * telling the browser which form controls to draw.
+ * telling the browser which form controls to draw, plus the few tokens whose
+ * meaning genuinely inverts between the modes.
  */
 :root.dark {
   color-scheme: dark;
+
+  /* Raised by value, not by shadow -- see the tokens above. */
+  --raised: var(--slate-5);
+  --raised-border: var(--border-strong);
+  --raised-shadow: 0 8px 28px rgb(0 0 0 / .55);
+  --raised-hover: var(--slate-6);
 }
 
 * { box-sizing: border-box; }
@@ -585,13 +607,18 @@ select.mini { max-width: 9em; }
   align-items: center;
   gap: 10px;
   padding: 10px 12px;
-  border: 1px solid var(--border);
+  border: 1px solid var(--raised-border);
   border-radius: 10px;
-  background: var(--surface);
-  box-shadow: 0 6px 24px rgb(0 0 0 / .18);
+  background: var(--raised);
+  box-shadow: var(--raised-shadow);
   z-index: 20;
 }
 .update-text { font-size: 13px; font-weight: 550; }
+/* The dismiss button belongs to the banner, not to the page underneath it:
+   left at the ordinary button background it read as a dark hole punched
+   through a surface that is lighter than its own fill. */
+.update-bar .btn.icon { background: transparent; border-color: var(--raised-border); }
+.update-bar .btn.icon:hover:not(:disabled) { background: var(--raised-hover); }
 
 /* The folder that is loaded, standing in for the button that chose it. */
 .chosen {

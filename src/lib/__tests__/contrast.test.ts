@@ -55,6 +55,9 @@ function pairings(dark: boolean) {
   const accent = scale("indigo", dark);
   const surface = slate["1"];
   const inset = slate["3"];
+  // The update banner floats above the page: white in light, a lighter step in
+  // dark, since a shadow cannot raise anything on a dark ground.
+  const raised = dark ? slate["5"] : slate["1"];
 
   const rows: { label: string; fg: string; bg: string; need: number }[] = [
     { label: "body text on a card", fg: slate["12"], bg: surface, need: 4.5 },
@@ -64,8 +67,11 @@ function pairings(dark: boolean) {
     // Step 9 is the same hex in light and dark, so the solid button is one
     // colour with white on it in both.
     { label: "button label on the solid accent", fg: "#ffffff", bg: accent["9"], need: 4.5 },
+    { label: "banner text on the raised surface", fg: slate["12"], bg: raised, need: 4.5 },
+    { label: "button label on the solid accent, on the banner", fg: "#ffffff", bg: accent["9"], need: 4.5 },
     // Non-text: focus rings, the app mark, a checkbox tint.
     { label: "focus ring and app mark", fg: accent["9"], bg: surface, need: 3 },
+
   ];
 
   for (const [role, hue] of HUES) {
@@ -87,6 +93,28 @@ describe.each([
       expect(contrast(fg, bg)).toBeGreaterThanOrEqual(need);
     });
   }
+});
+
+describe("the update banner standing off the page", () => {
+  /**
+   * Only asserted in dark mode, and deliberately so.
+   *
+   * In light the banner is white on a near-white page and the *shadow* does
+   * the separating -- something a contrast ratio cannot measure, so there is
+   * nothing here to assert. In dark a shadow has nothing darker to cast onto,
+   * so the step itself has to carry the difference, and that is measurable.
+   */
+  it("is lighter than the page it floats over, in dark", () => {
+    const slate = scale("slate", true);
+    expect(contrast(slate["5"], slate["2"])).toBeGreaterThan(1.3);
+  });
+
+  it("would have been invisible at the surface step it started from", () => {
+    // The bug this fixes: --surface in dark is *darker* than the page, so the
+    // banner read as a hole rather than as something on top.
+    const slate = scale("slate", true);
+    expect(contrast(slate["1"], slate["2"])).toBeLessThan(1.2);
+  });
 });
 
 describe("the reasoning behind the accent choices", () => {
