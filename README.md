@@ -9,16 +9,25 @@ leaves the machine, and once installed the app works with no network at all.
 
 ## Tools
 
+### Presentations
+
+Checks the text of every presentation in a library — a whole folder of `.pro`
+files at once. It finds the things nobody spots by opening thirty songs one at
+a time: a space at the start of a line that shifts it right on screen, a space
+at the end that spoils centring, a doubled space, and lines that show nothing
+while still taking up room. Trailing commas can be checked too, switched on
+separately since whether they belong on a slide is a matter of house style.
+
+It reports; it does not yet change anything.
+
 ### Media Bin
 
 Compares and audits **media-bin playlists** — the file named `Media` inside
 your ProPresenter folder's `Playlists` directory. (`Media` at the top level of
 that folder is the media *assets*; the playlist document is the one under
 `Playlists`.) Load one file to audit it; load two to see exactly what changed
-between them.
-
-Planned: reorganising and exporting (see [the export safety gate](#the-export-safety-gate)),
-then presentation playlists and the library.
+between them, bring changes from one side into the other, and export the
+result as a new file.
 
 ## Why
 
@@ -31,76 +40,15 @@ controls (ProWebRemote, ProPresenter-API) or parsers for the pre-7 XML format
 The name is deliberate: a garage is where the tools live, so new ones can be
 added without the name fighting them.
 
-## Running it
+## What your browser can do
 
-```bash
-npm install
-npm run dev
-```
+Reading works everywhere. Writing back does not: Chrome and Edge can be given
+access to a folder and, in time, save fixes into it, while Safari and Firefox
+can only read copies — they offer no way back to the original files. Both are
+offered automatically; you do not choose between them.
 
-`npm run build` produces a static `dist/`. `npm test` runs the suite, and
-`npm run check` is the same gate CI uses: codegen, lint, both typechecks, tests.
-
-Pushing to `main` deploys to GitHub Pages. The site needs a real HTTP server
-even though it is entirely static -- ES modules and service workers are both
-blocked on `file://`.
-
-## How it reads the files
-
-ProPresenter 7 stores its data as Google protocol buffers. The schema is not
-published, so this uses the reverse-engineered definitions from
-[greyshirtguy/ProPresenter7-Proto](https://github.com/greyshirtguy/ProPresenter7-Proto)
-(MIT), vendored in `proto/`.
-
-`npm run protos:update [ref]` re-vendors from upstream and records the exact
-commit in [`proto/PROVENANCE.json`](proto/PROVENANCE.json), which the build
-threads into the interface — the schema chip's tooltip names the commit, so a
-reported problem can be tied to an exact set of definitions. The update prints
-an added/removed summary, and the resulting diff is reviewable before you
-commit it.
-
-**Why vendored rather than a git submodule.** A submodule pins a commit, which
-is the part worth having, and we get that from the provenance file instead. What
-a submodule also brings is a clone that needs `--recurse-submodules` and CI that
-needs submodule support — forget either and you get an empty `proto/` and a
-confusing build failure. And since upstream is an unofficial reverse-engineered
-schema, a rewrite or takedown would break a submodule while leaving a vendored
-copy untouched. That independence is worth 161 text files.
-
-`npm run protos` collapses the 36 transitively-imported `.proto` files into a
-single JSON descriptor (98 KB, 19 KB gzipped) at build time, so the app loads
-the schema via `Root.fromJSON()` instead of parsing schema text at runtime.
-
-A media-bin file is one `rv.data.PlaylistDocument` with `type = TYPE_MEDIA`,
-holding a recursive `Playlist` tree.
-
-## Three things worth knowing
-
-These each cost a debugging session to find, and each one shapes the code.
-
-**Compare on relative paths, never absolute ones.** Every item stores both an
-`absolute_string` and a `ROOT_*`-relative path. Real libraries accumulate
-inconsistent absolute paths as they move — one 482-item library held five
-different roots, spanning three Windows user accounts and a macOS `file://`
-URL, while every relative path stayed consistent. Diffing on the absolute path
-reports a moved library as "everything changed".
-
-**Detect moves by playlist UUID, not playlist path.** An item's path is derived
-from its ancestors' names, so renaming one playlist rewrites the path of
-everything inside it. Comparing paths turned a single rename into 22 phantom
-"moved" rows.
-
-**Same file ≠ duplicate.** ProPresenter stores mirroring, rotation, cropping,
-blur and effects *per entry*, in `Media.DrawingProperties`. Two entries can
-point at one file and be genuinely different content — the same photo flipped,
-or the same map recoloured via a `Color Swap` effect. Duplicate detection
-compares the file path *and* a fingerprint of those modifications.
-
-Scale behaviour and alignment are deliberately excluded from that fingerprint.
-They look like modifications but are applied on import rather than chosen: in
-the same library, 331 of 482 items carried `BEHAVIOR_FILL` and the other 144
-carried nothing, tracking *when* each item was added. Including them split real
-duplicates into false variants.
+Installing the app changes one thing: permission to read a folder sticks,
+rather than lapsing when you close the last tab.
 
 ## Languages
 
@@ -110,86 +58,23 @@ in preference order, ignoring region subtags, so a machine configured as
 top right overrides it and the choice is remembered, for the case the device
 cannot express: a French operator on an English-configured booth machine.
 
-Adding a locale means one file. `src/i18n/en.ts` is the canonical shape and
-every other dictionary is typed against it, so a missing or misspelled key is a
-build error rather than an English string leaking through. Tests additionally
-assert that the locales share every key, that plural lists have matching
-arity, that placeholders line up, and that no French string is accidentally
-still the English one.
-
-Three things the translation layer does properly rather than approximately:
-
-- **Plurals via `Intl.PluralRules`, not `n === 1`.** French takes the singular
-  for zero ("0 élément"), English the plural ("0 items").
-- **What stays untranslated.** File paths, effect names (`Adjust Color`), effect
-  variable names (`Brightness=0.2`) and schema enum values (`BEHAVIOR_FILL`,
-  `STOP`) are ProPresenter's own vocabulary. Translating them would make them
-  harder to match against what ProPresenter shows, not easier.
-- **Analysis is language-independent.** The duplicate fingerprint is built from
-  structural descriptors, never from display strings, so what counts as a
-  duplicate never shifts with the interface language. An earlier version built
-  it out of English prose; a French reader would have seen a different set of
-  duplicates. `ModDescriptor` exists for exactly this reason, and the diff
-  returns structured `ChangeDetail` values rather than sentences for the same
-  one.
-
-## The export safety gate
-
-protobuf.js discards fields absent from the schema. Since the schema is
-reverse-engineered, a field ProPresenter writes but the protos omit would
-vanish on re-encode and quietly corrupt a library.
-
-So every loaded file is decoded, immediately re-encoded, and checked. The
-result is one of:
-
-| Verdict | Meaning |
-| --- | --- |
-| `identical` | Byte-for-byte match. Safest possible result. |
-| `equivalent` | Bytes differ, decoded content does not — the original was encoded non-canonically. Nothing would be lost. |
-| `lossy` | Decoded content differs. Something is uncovered by the schema; writing this file back could corrupt it. |
-
-Real ProPresenter 21.4.2 files verify as `identical`, which is what makes a
-write path viable at all. Any future write feature must refuse to touch a file
-rated `lossy`, and must emit a new file rather than overwrite the original.
-
-## Testing against real files
-
-Real ProPresenter files are somebody's actual media library and are not
-committed. Point the suite at one:
-
-```bash
-PP_MEDIA_FILE=/path/to/ProPresenter/Media npm test
-```
-
-It defaults to `~/dev/me/ProPresenter/Media`, and the tests that need a real
-file skip cleanly when none is present. They work by decoding a real library,
-mutating a clone (moving an item, renaming a playlist, mirroring an image,
-disabling an effect) and asserting the diff reports exactly that change and
-nothing else.
-
-`scripts/make-mutated-sample.mjs` generates a plausibly-edited copy of a real
-file, which is handy for exercising the diff UI without waiting for two genuine
-weekly snapshots.
-
 ## Status
 
-Implemented: the Media Bin tool — diff, audit, browse — plus the fidelity gate,
-English/French localisation, and light/dark/system appearance.
+Working: the **Presentations** checker, and the **Media Bin** tool — diff,
+audit, browse, reorganise and export — with the fidelity gate behind every
+export, English and French, and light, dark or system appearance.
 
-Not yet implemented: reorganising and exporting. The gate above is the
-prerequisite, and it passes on real files — so the remaining work is the
-editing UI, not the file writing.
+Not yet: fixing the presentation problems it finds, rather than only reporting
+them. The [export safety gate](CONTRIBUTING.md#the-export-safety-gate) is the
+prerequisite and it passes on real files, so what remains is the editing and
+backup design rather than the file writing.
 
-`App.tsx` is the shell — title, appearance and language controls, licence —
-and renders the active tool; `src/tools/MediaBin.tsx` owns everything specific
-to that tool, including its own file state. Tool strings live under
-`tools.mediaBin` in the dictionaries, and `decodeDocument(bytes, kind)` takes
-the playlist kind the caller wants rather than assuming Media.
+## Contributing
 
-Tool selection, routing and a registry are deliberately absent: those are
-answers to questions the second tool has not asked, and inventing extension
-points for one tool tends to produce extension points the second one works
-around.
+See [CONTRIBUTING.md](CONTRIBUTING.md) — how the files are read, the
+invariants the diff depends on, the safety gate, and the traps worth knowing
+before changing anything. Coding agents should start at
+[AGENTS.md](AGENTS.md).
 
 ## Licence
 
