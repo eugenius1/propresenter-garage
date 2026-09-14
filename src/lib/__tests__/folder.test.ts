@@ -176,3 +176,23 @@ describe("capability detection", () => {
     expect(folderAccess()).toBe("unavailable");
   });
 });
+
+describe("what counts as a presentation", () => {
+  it("takes any capitalisation of the extension", () => {
+    expect(isPresentationFile("Song.pro")).toBe(true);
+    expect(isPresentationFile("Song.PRO")).toBe(true);
+  });
+
+  it("leaves dotfiles alone", () => {
+    // Both of these turned up in a real library. `.pro` decodes to a
+    // presentation with no slides in it; a macOS resource fork decodes to
+    // nothing at all and would be reported as a file that could not be read.
+    expect(isPresentationFile(".pro")).toBe(false);
+    expect(isPresentationFile("._Song.pro")).toBe(false);
+  });
+
+  it("ignores anything else", () => {
+    expect(isPresentationFile("Song.proj")).toBe(false);
+    expect(isPresentationFile("Media")).toBe(false);
+  });
+});

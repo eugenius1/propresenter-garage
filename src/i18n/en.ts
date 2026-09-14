@@ -219,7 +219,7 @@ export const en = {
       chooseHint:
         "Pick your ProPresenter workspace, or its Libraries folder. Everything inside is read in your browser; nothing is uploaded.",
       readwriteNote:
-        "This browser can read the folder and, later, save fixes back to it.",
+        "This browser can read the folder and save fixes back to it.",
       readonlyNote:
         "This browser can read a folder but cannot write to it. Safari and Firefox offer no way back to the original files — use Chrome or Edge if you want fixes saved in place.",
       unavailableNote:
@@ -268,6 +268,44 @@ export const en = {
       commaCheckWhy:
         "Off by default: a comma at the end of a line is ordinary punctuation, and whether it belongs on a slide is a matter of house style.",
       showAll: "Show all {n}",
+
+      fix: "Fix these",
+      fixHint:
+        "Nothing is written until you have a backup and have chosen what to change. Every line is shown as it is now and as it would read.",
+      fixable: ["{n} line can be fixed", "{n} lines can be fixed"],
+      inFilesFix: ["in {n} file", "in {n} files"],
+      selectAll: "Select all",
+      selectNone: "Select none",
+      selectFile: "Select every line in this file",
+      becomes: "becomes",
+      lineRemoved: "the line is removed",
+      noFixFor: "No automatic fix — this line has to be edited in ProPresenter.",
+      downloadBackup: "Download a backup first",
+      backupCount: ["Backs up {n} file", "Backs up {n} files"],
+      backupDone: "Backed up as {name}.",
+      backupStale: "Your selection now covers files the backup does not. Download it again.",
+      backupWhy:
+        "A zip of the files as they are now, saved to your downloads. Keep it until you have opened the songs in ProPresenter and are happy with them.",
+      applyFixes: ["Fix {n} line", "Fix {n} lines"],
+      applying: "Saving {n}…",
+      fixedFiles: ["{n} file fixed", "{n} files fixed"],
+      fixedNone: "Nothing was changed.",
+      fixFailed: ["{n} file was left alone", "{n} files were left alone"],
+      downloadFixed: "Download the fixed files",
+      downloadFixedWhy:
+        "This browser cannot write to the folder, so the fixed presentations come as a zip instead. Move them into your library yourself, keeping the originals until you are happy with them.",
+      downloadedFixed: "Saved as {name}. Your library has not been touched.",
+      permissionNeeded:
+        "Saving needs permission to write to the folder. Choose the folder again and allow editing.",
+      refusals: {
+        lossy:
+          "this file uses something the schema does not cover, so saving it could lose data",
+        unreadable: "this file could not be read",
+        unchanged: "nothing was selected in this file",
+        verifyFailed: "the result did not read back as expected, so it was not saved",
+        writeFailed: "the folder would not accept the file",
+        stale: "this file changed since it was scanned, so the fix no longer fits it",
+      },
     },
     mediaBin: {
       name: "Media Bin",

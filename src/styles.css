@@ -575,6 +575,25 @@ select.mini { max-width: 9em; }
 .tag.repeatedSpace { background: var(--retimed-soft); color: var(--retimed-strong); }
 .tag.trailingComma { background: var(--relinked-soft); color: var(--relinked-strong); }
 
+/* A finding row that also offers a fix: the tick sits level with the tags, and
+   the line as it would read sits under the line as it stands. */
+.fix-head { display: flex; align-items: baseline; gap: 8px; }
+.fix-head input { accent-color: var(--accent-ui); cursor: pointer; margin: 0; flex: none; }
+.fix-head .tag + .tag { margin-left: 4px; }
+
+/* Scoped to .rows to outrank `.rows .path`, which sets the dim colour these
+   lines would otherwise inherit -- specificity beats intent. */
+.rows .becomes { color: var(--added-strong); }
+.rows .becomes em { color: var(--text-dim); font-style: italic; }
+.becomes-label {
+  /* Out of the monospace the line itself is set in, so it reads as a label
+     rather than as part of the text. */
+  font-family: system-ui, sans-serif;
+  font-size: 11px;
+  text-transform: lowercase;
+  color: var(--text-faint);
+}
+
 /* The tagline describes whichever tool is showing, so it sits under the
    switcher rather than beside the app's own name. */
 .tool-tagline {

@@ -4,6 +4,7 @@
 import { useMemo, useState } from "react";
 import { planMerges, type MergeDirection } from "../lib/merge";
 import { exportFilename, exportOperations, OperationError } from "../lib/operations";
+import { download } from "../lib/download";
 import type { LoadedFile } from "../lib/loadFile";
 import type { Change, ChangeDetail, ChangeType, DiffResult, PlaylistChange } from "../lib/diff";
 import { useI18n, type I18n } from "../i18n";
@@ -135,18 +136,7 @@ export function DiffView({
     try {
       const bytes = exportOperations(target.doc, plan.operations);
       const name = exportFilename(target.filename);
-      const url = URL.createObjectURL(
-        new Blob([bytes as BlobPart], { type: "application/octet-stream" })
-      );
-      const anchor = document.createElement("a");
-      anchor.href = url;
-      anchor.download = name;
-      anchor.style.display = "none";
-      document.body.append(anchor);
-      anchor.click();
-      anchor.remove();
-      setTimeout(() => URL.revokeObjectURL(url), 0);
-      setExported(name);
+      setExported(download(name, bytes));
     } catch (e) {
       // Two chosen changes can contradict each other -- adopting an entry and
       // removing it, say. Report it rather than writing half a file.

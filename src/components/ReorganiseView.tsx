@@ -4,6 +4,7 @@
 import { useMemo, useState } from "react";
 import { auditLibrary, type FindingId } from "../lib/audit";
 import { diffLibraries } from "../lib/diff";
+import { download } from "../lib/download";
 import { buildLibrary, type MediaItem, type MediaLibrary, type PlaylistNode } from "../lib/model";
 import {
   applyOperations,
@@ -169,28 +170,10 @@ export function ReorganiseView({
 
   const quickFixes = [duplicateFix, emptyPlaylistFix].filter((fix): fix is QuickFix => fix !== null);
 
-  function download() {
+  function exportEdited() {
     const bytes = exportOperations(file.doc, operations);
     const name = exportFilename(file.filename);
-    const url = URL.createObjectURL(
-      new Blob([bytes as BlobPart], { type: "application/octet-stream" })
-    );
-
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.download = name;
-    // Some browsers ignore a click on an anchor that is not in the document.
-    anchor.style.display = "none";
-    document.body.append(anchor);
-    anchor.click();
-    anchor.remove();
-
-    // Revoking synchronously can pull the blob away before the browser has
-    // finished reading it -- Safari is the usual casualty. Let the current task
-    // finish first.
-    setTimeout(() => URL.revokeObjectURL(url), 0);
-
-    setExported(name);
+    setExported(download(name, bytes));
   }
 
   const total = operations.length;
@@ -216,7 +199,7 @@ export function ReorganiseView({
             className="btn primary"
             disabled={total === 0 || !file.exportSafe || !editedDoc}
             title={file.exportSafe ? undefined : r.exportBlocked}
-            onClick={download}
+            onClick={exportEdited}
           >
             {r.exportFile}
           </button>

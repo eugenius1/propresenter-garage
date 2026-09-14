@@ -1,9 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Eusebius Ngemera
 
-import fs from "node:fs";
-import os from "node:os";
-import path from "node:path";
 import { beforeAll, describe, expect, it } from "vitest";
 import {
   checkPresentation,
@@ -11,10 +8,39 @@ import {
   decodePresentation,
   encodePresentation,
   readPresentation,
+  type PresentationDoc,
 } from "../presentation";
+import { extractLines } from "../rtf";
+import { hasRealLibrary, libraryFiles, readLibraryFile } from "./corpus";
 import { syntheticTextPresentation } from "./synthetic";
 
 const report = () => checkPresentationFile("Checked Song.pro", syntheticTextPresentation());
+
+/**
+ * One text box holding the given lines.
+ *
+ * Built by writing RTF and reading it back rather than by listing lines, so
+ * the fixture carries real source offsets and cannot drift from what the
+ * reader actually produces.
+ */
+function boxOf(...texts: string[]): PresentationDoc {
+  const body = texts.map((text) => `\\cb3 ${text}`).join("\\par\\pard");
+  const rtf = `{\\rtf0\\ansi\\uc1\\pard\\f0\\fs100${body}}`;
+  return {
+    name: "One",
+    slideCount: 1,
+    textBoxes: [
+      {
+        boxIndex: 0,
+        slideIndex: 0,
+        cueName: "1",
+        groupName: "Verse",
+        lines: extractLines(rtf),
+        rtf,
+      },
+    ],
+  };
+}
 const issuesOf = (kind: string) => report().issues.filter((i) => i.kind === kind);
 
 describe("reading a presentation", () => {
@@ -94,38 +120,14 @@ describe("trailing commas", () => {
   it("finds one with whitespace after the comma", () => {
     // Kept out of the shared fixture: a line ending "nom, " is also a trailing
     // space, and folding it in there would tangle the two counts together.
-    const report = checkPresentation("One.pro", {
-      name: "One",
-      slideCount: 1,
-      textBoxes: [
-        {
-          slideIndex: 0,
-          cueName: "1",
-          groupName: "Verse",
-          lines: [
-            { index: 0, text: "Que ton nom, ", markupOnly: false },
-            { index: 1, text: "sois glorifie", markupOnly: false },
-          ],
-        },
-      ],
-    });
+    const report = checkPresentation("One.pro", boxOf("Que ton nom, ", "sois glorifie"));
     expect(report.issues.filter((i) => i.kind === "trailingComma")).toHaveLength(1);
     expect(report.issues.filter((i) => i.kind === "trailingSpace")).toHaveLength(1);
   });
 
   it("says nothing about a comma inside a line", () => {
     // Only the end of the line matters; prose commas are not findings.
-    const report = checkPresentation("One.pro", {
-      name: "One",
-      slideCount: 1,
-      textBoxes: [
-        {
-          slideIndex: 0,
-          cueName: "1",
-          lines: [{ index: 0, text: "Seigneur, mon Dieu et mon Roi", markupOnly: false }],
-        },
-      ],
-    });
+    const report = checkPresentation("One.pro", boxOf("Seigneur, mon Dieu et mon Roi"));
     expect(report.issues).toEqual([]);
   });
 
@@ -156,15 +158,6 @@ describe("blank lines", () => {
   });
 });
 
-/**
- * A folder of real presentations, when one is present.
- *
- * Points at a development copy of an installation, not an install location.
- */
-const REAL_LIBRARY =
-  process.env.PP_LIBRARY_DIR ?? path.join(os.homedir(), "dev/me/ProPresenter/Libraries");
-const hasRealLibrary = fs.existsSync(REAL_LIBRARY);
-
 describe.skipIf(!hasRealLibrary)("against real presentations", () => {
   // Listed in beforeAll, not here: vitest runs a describe body during
   // collection even for a suite skipIf will skip, so reading the directory
@@ -172,24 +165,29 @@ describe.skipIf(!hasRealLibrary)("against real presentations", () => {
   let files: string[] = [];
   beforeAll(() => {
     if (!hasRealLibrary) return;
-    files = fs.readdirSync(REAL_LIBRARY).filter((f) => f.toLowerCase().endsWith(".pro"));
+    files = libraryFiles();
   });
 
   it("decodes every file in the library", () => {
     expect(files.length).toBeGreaterThan(0);
+    let slides = 0;
+
     for (const name of files) {
-      const result = checkPresentationFile(
-        name,
-        new Uint8Array(fs.readFileSync(path.join(REAL_LIBRARY, name)))
-      );
+      const result = checkPresentationFile(name, readLibraryFile(name));
       expect(result.error, name).toBeUndefined();
-      expect(result.slideCount).toBeGreaterThan(0);
+      slides += result.slideCount;
     }
+
+    // Counted across the library rather than asserted per file: eight of the
+    // 879 presentations in the library this was written against hold no cues
+    // at all. Somebody made them and never filled them in, which is ordinary
+    // and not something the reader should be told about.
+    expect(slides).toBeGreaterThan(files.length);
   });
 
   it("re-encodes every file byte for byte", () => {
     for (const name of files) {
-      const bytes = new Uint8Array(fs.readFileSync(path.join(REAL_LIBRARY, name)));
+      const bytes = readLibraryFile(name);
       const again = encodePresentation(decodePresentation(bytes));
       expect(Buffer.compare(Buffer.from(bytes), Buffer.from(again)), name).toBe(0);
     }
@@ -201,9 +199,7 @@ describe.skipIf(!hasRealLibrary)("against real presentations", () => {
     let lines = 0;
     let leading = 0;
     for (const name of files) {
-      const doc = readPresentation(
-        decodePresentation(new Uint8Array(fs.readFileSync(path.join(REAL_LIBRARY, name))))
-      );
+      const doc = readPresentation(decodePresentation(readLibraryFile(name)));
       for (const box of doc.textBoxes) {
         for (const line of box.lines) {
           if (line.text.trim() === "") continue;

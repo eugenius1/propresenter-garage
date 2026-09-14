@@ -190,5 +190,14 @@ export function readFolderFromInput(
   return { name: root || "", files, writable: false };
 }
 
-/** The presentations in a ProPresenter workspace. */
-export const isPresentationFile = (name: string) => name.toLowerCase().endsWith(".pro");
+/**
+ * The presentations in a ProPresenter workspace.
+ *
+ * Dotfiles are not presentations, whatever they are named. A real library
+ * turned up a 51 KB file called `.pro` that decodes to a presentation with no
+ * slides in it, and macOS scatters `._Song.pro` resource forks across any
+ * folder that has been near a USB stick -- those decode to nothing at all and
+ * would each be reported as a file that could not be read.
+ */
+export const isPresentationFile = (name: string) =>
+  !name.startsWith(".") && name.toLowerCase().endsWith(".pro");

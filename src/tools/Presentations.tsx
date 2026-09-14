@@ -19,7 +19,17 @@ import {
   remember,
   requestHandlePermission,
 } from "../lib/persistence";
-import { checkPresentationFile, type PresentationReport, type TextIssueKind } from "../lib/presentation";
+import { download, stamp } from "../lib/download";
+import {
+  examine,
+  fixFiles,
+  planFixes,
+  type Examined,
+  type FixOutcome,
+  type LineFix,
+} from "../lib/fixes";
+import type { TextIssue, TextIssueKind } from "../lib/presentation";
+import { zip } from "../lib/zip";
 import { useI18n } from "../i18n";
 
 /**
@@ -39,13 +49,66 @@ const ALL_KINDS: TextIssueKind[] = [
 ];
 const OPTIONAL_KINDS: TextIssueKind[] = ["trailingComma"];
 
+/** One line of one file, as the list shows it and the fix run names it. */
+interface Row {
+  key: string;
+  slideIndex: number;
+  lineIndex: number;
+  groupName?: string;
+  text: string;
+  kinds: TextIssueKind[];
+  fix?: LineFix;
+}
+
+/** Address a line uniquely across the whole library. */
+const rowKey = (filename: string, boxIndex: number, lineIndex: number) =>
+  `${filename} ${boxIndex}:${lineIndex}`;
+
 /**
- * Check the text of every presentation in a library.
+ * Gather the findings on one line into a single row.
+ *
+ * One line can be guilty of three things at once, and listing it three times
+ * asks the reader to approve three edits to the same characters. One row, one
+ * before, one after, one decision.
+ */
+function rowsOf(filename: string, issues: TextIssue[], fixes: LineFix[]): Row[] {
+  const byLine = new Map<string, Row>();
+  const fixFor = new Map(fixes.map((fix) => [rowKey(filename, fix.boxIndex, fix.lineIndex), fix]));
+
+  for (const issue of issues) {
+    const key = rowKey(filename, issue.boxIndex, issue.lineIndex);
+    const existing = byLine.get(key);
+    if (existing) {
+      existing.kinds.push(issue.kind);
+      continue;
+    }
+    byLine.set(key, {
+      key,
+      slideIndex: issue.slideIndex,
+      lineIndex: issue.lineIndex,
+      groupName: issue.groupName,
+      text: issue.text,
+      kinds: [issue.kind],
+      fix: fixFor.get(key),
+    });
+  }
+
+  return [...byLine.values()];
+}
+
+/**
+ * Check the text of every presentation in a library, and put it right.
  *
  * Reads a whole folder at once, because the problems it looks for are the kind
  * nobody finds by opening thirty songs one at a time: a space at the start of a
  * line that shifts it right, a space at the end that spoils centring, a
  * paragraph that shows nothing but still takes up room.
+ *
+ * Writing is three deliberate acts rather than one button. The reader chooses
+ * which lines; they take a backup of those files as they stand; only then does
+ * the fix button do anything. Each file is checked against the schema and read
+ * back after editing before it reaches the folder, so one that cannot be
+ * written faithfully is left exactly as it was.
  */
 export function Presentations() {
   const { t, f, num, plural } = useI18n();
@@ -55,7 +118,9 @@ export function Presentations() {
   const access = useMemo(() => folderAccess(), []);
   const input = useRef<HTMLInputElement>(null);
 
-  const [reports, setReports] = useState<PresentationReport[] | null>(null);
+  const [scanned, setScanned] = useState<Examined[] | null>(null);
+  const [files, setFiles] = useState<FolderFile[]>([]);
+  const [handle, setHandle] = useState<unknown>(null);
   const [folderName, setFolderName] = useState<string>("");
   const [fellBack, setFellBack] = useState(false);
   /** A remembered folder whose permission has lapsed and needs one click back. */
@@ -66,24 +131,51 @@ export function Presentations() {
   /** Opt-in checks, remembered so the choice survives a refresh. */
   const [commas, setCommas] = useState(false);
 
+  /**
+   * The lines the reader has taken *out* of the run, rather than the ones left
+   * in.
+   *
+   * Pressing a filter or switching a check on changes which fixes exist, and a
+   * set of exclusions survives that where a set of inclusions would quietly
+   * drop whatever appeared since.
+   */
+  const [excluded, setExcluded] = useState<Set<string>>(new Set());
+  const [backup, setBackup] = useState<{ name: string; paths: Set<string> } | null>(null);
+  const [outcomes, setOutcomes] = useState<FixOutcome[] | null>(null);
+  const [savedZip, setSavedZip] = useState<string | null>(null);
+  const [fixError, setFixError] = useState<string | null>(null);
+  /** Whether a run is under way, and which file it is on. */
+  const [running, setRunning] = useState(false);
+  const [writing, setWriting] = useState<string | null>(null);
+
+  const reports = useMemo(() => (scanned ?? []).map((one) => one.report), [scanned]);
+
   const kinds = useMemo(
     () => ALL_KINDS.filter((kind) => commas || !OPTIONAL_KINDS.includes(kind)),
     [commas]
   );
   /** The kinds both switched on and not filtered out by a pill. */
-  const shown = useMemo(
-    () => new Set(kinds.filter((kind) => active.has(kind))),
-    [kinds, active]
-  );
+  const shown = useMemo(() => new Set(kinds.filter((kind) => active.has(kind))), [kinds, active]);
 
-  async function scan(files: FolderFile[]) {
-    const out: PresentationReport[] = [];
-    for (const file of files) {
+  /** Whether anything could be written back at all, before the reader chooses. */
+  const canWrite = access === "readwrite" && handle !== null;
+
+  function clearRun() {
+    setBackup(null);
+    setOutcomes(null);
+    setSavedZip(null);
+    setFixError(null);
+  }
+
+  async function scan(list: FolderFile[]) {
+    const out: Examined[] = [];
+    for (const file of list) {
       setBusy(file.name);
-      out.push(checkPresentationFile(file.path, await file.read()));
+      out.push(examine(file.path, await file.read()));
     }
     setBusy(null);
-    setReports(out);
+    setScanned(out);
+    setExcluded(new Set());
   }
 
   /**
@@ -115,6 +207,8 @@ export function Presentations() {
           const folder = await readFolderHandle(saved, isPresentationFile);
           if (cancelled) return;
           setFolderName(folder.name);
+          setFiles(folder.files);
+          setHandle(saved);
           await scan(folder.files);
           return;
         } catch {
@@ -138,7 +232,10 @@ export function Presentations() {
     try {
       const folder = await readFolderHandle(pending.handle, isPresentationFile);
       setPending(null);
+      clearRun();
       setFolderName(folder.name);
+      setFiles(folder.files);
+      setHandle(pending.handle);
       await scan(folder.files);
     } catch (e) {
       setPending(null);
@@ -150,8 +247,11 @@ export function Presentations() {
     setPending(null);
     setFellBack(false);
     setError(null);
-    setReports(null);
+    setScanned(null);
+    setFiles([]);
+    setHandle(null);
     setFolderName("");
+    clearRun();
     void forget(KEYS.presentationsFolder);
   }
 
@@ -162,7 +262,10 @@ export function Presentations() {
       const folder = await pickFolder(isPresentationFile, { write: false });
       if (!folder) return;
       setPending(null);
+      clearRun();
       setFolderName(folder.name);
+      setFiles(folder.files);
+      setHandle(folder.handle ?? null);
       // Only a real handle is worth keeping; the input fallback hands over
       // copies with no path back to the folder.
       if (folder.handle) void keep(KEYS.presentationsFolder, folder.handle);
@@ -184,17 +287,56 @@ export function Presentations() {
   const choose = () => (access === "readwrite" ? void chooseFolder() : input.current?.click());
 
   const withIssues = useMemo(
-    () => (reports ?? []).filter((r) => r.issues.some((i) => shown.has(i.kind)) || r.error),
+    () => reports.filter((r) => r.issues.some((i) => shown.has(i.kind)) || r.error),
     [reports, shown]
   );
 
   const totalIssues = useMemo(
-    () => (reports ?? []).reduce((n, r) => n + r.issues.filter((i) => shown.has(i.kind)).length, 0),
+    () => reports.reduce((n, r) => n + r.issues.filter((i) => shown.has(i.kind)).length, 0),
     [reports, shown]
   );
 
   const countOf = (kind: TextIssueKind) =>
-    (reports ?? []).reduce((n, r) => n + r.issues.filter((i) => i.kind === kind).length, 0);
+    reports.reduce((n, r) => n + r.issues.filter((i) => i.kind === kind).length, 0);
+
+  /**
+   * What is wrong and what could be done about it, file by file.
+   *
+   * Recomputed from the boxes kept during the scan rather than by reading the
+   * folder again, so pressing a filter stays instant on a library of hundreds.
+   */
+  const rows = useMemo(() => {
+    const byFile = new Map<string, Row[]>();
+    for (const { report, fixable } of scanned ?? []) {
+      const issues = report.issues.filter((i) => shown.has(i.kind));
+      if (issues.length === 0) continue;
+      byFile.set(report.filename, rowsOf(report.filename, issues, planFixes(fixable, issues)));
+    }
+    return byFile;
+  }, [scanned, shown]);
+
+  /** The fixes still ticked, grouped by file, in the order they were listed. */
+  const chosen = useMemo(
+    () =>
+      [...rows]
+        .map(([path, lines]) => ({
+          path,
+          fixes: lines.filter((row) => row.fix && !excluded.has(row.key)).map((row) => row.fix!),
+        }))
+        .filter((plan) => plan.fixes.length > 0),
+    [rows, excluded]
+  );
+
+  const chosenLines = useMemo(() => chosen.reduce((n, plan) => n + plan.fixes.length, 0), [chosen]);
+  const fixableLines = useMemo(
+    () => [...rows.values()].reduce((n, lines) => n + lines.filter((r) => r.fix).length, 0),
+    [rows]
+  );
+
+  /** Whether the backup on hand covers every file about to be written. */
+  const backedUp = backup !== null && chosen.every((plan) => backup.paths.has(plan.path));
+
+  const fileByPath = useMemo(() => new Map(files.map((file) => [file.path, file])), [files]);
 
   const toggle = (kind: TextIssueKind) =>
     setActive((prev) => {
@@ -211,6 +353,121 @@ export function Presentations() {
     if (on) setActive((prev) => new Set(prev).add("trailingComma"));
     void keep(KEYS.presentationsChecks, { trailingComma: on });
   }
+
+  function toggleRow(key: string) {
+    setOutcomes(null);
+    setExcluded((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }
+
+  function setFileSelected(filename: string, on: boolean) {
+    setOutcomes(null);
+    setExcluded((prev) => {
+      const next = new Set(prev);
+      for (const row of rows.get(filename) ?? []) {
+        if (!row.fix) continue;
+        if (on) next.delete(row.key);
+        else next.add(row.key);
+      }
+      return next;
+    });
+  }
+
+  function setAllSelected(on: boolean) {
+    setOutcomes(null);
+    if (on) {
+      setExcluded(new Set());
+      return;
+    }
+    const every = new Set<string>();
+    for (const lines of rows.values()) for (const row of lines) if (row.fix) every.add(row.key);
+    setExcluded(every);
+  }
+
+  /** The files about to change, exactly as they stand, as one archive. */
+  async function downloadBackup() {
+    setFixError(null);
+    setRunning(true);
+    try {
+      const entries: { path: string; bytes: Uint8Array }[] = [];
+      for (const plan of chosen) {
+        const file = fileByPath.get(plan.path);
+        if (file) entries.push({ path: plan.path, bytes: await file.read() });
+      }
+      const name = `propresenter-backup-${stamp()}.zip`;
+      download(name, await zip(entries), "application/zip");
+      setBackup({ name, paths: new Set(entries.map((entry) => entry.path)) });
+    } catch (e) {
+      setFixError((e as Error).message);
+    } finally {
+      setRunning(false);
+      setWriting(null);
+    }
+  }
+
+  const readFile = async (path: string) => {
+    const file = fileByPath.get(path);
+    if (!file) throw new Error(path);
+    return file.read();
+  };
+
+  async function saveFixes() {
+    setFixError(null);
+    // Scanning only ever asked to read. Writing is a separate promise, made
+    // here where the reader has just asked for it and a gesture is in hand.
+    if ((await requestHandlePermission(handle, "readwrite")) !== "granted") {
+      setFixError(p.permissionNeeded);
+      return;
+    }
+
+    setRunning(true);
+    try {
+      const result = await fixFiles(chosen, readFile, async (path, bytes) => {
+        setWriting(path);
+        const file = fileByPath.get(path);
+        if (!file?.write) throw new Error(path);
+        await file.write(bytes);
+      });
+      setOutcomes(result);
+      // The backup describes files that no longer look like that.
+      setBackup(null);
+      // Read the folder again, so what is on screen is what is on disk.
+      await scan(files);
+    } catch (e) {
+      setFixError((e as Error).message);
+    } finally {
+      setRunning(false);
+      setWriting(null);
+    }
+  }
+
+  /** The fallback where nothing can be written: hand over corrected copies. */
+  async function downloadFixed() {
+    setFixError(null);
+    setRunning(true);
+    try {
+      const result = await fixFiles(chosen, readFile);
+      const entries = result
+        .filter((outcome) => outcome.bytes)
+        .map((outcome) => ({ path: outcome.path, bytes: outcome.bytes! }));
+      const name = `propresenter-fixed-${stamp()}.zip`;
+      download(name, await zip(entries), "application/zip");
+      setOutcomes(result);
+      setSavedZip(name);
+    } catch (e) {
+      setFixError((e as Error).message);
+    } finally {
+      setRunning(false);
+      setWriting(null);
+    }
+  }
+
+  const saved = outcomes?.filter((outcome) => !outcome.reason) ?? [];
+  const refused = outcomes?.filter((outcome) => outcome.reason) ?? [];
 
   return (
     <>
@@ -258,11 +515,14 @@ export function Presentations() {
             // ones with no directory picker -- it just cannot write back.
             {...(access === "unavailable" ? {} : { webkitdirectory: "" })}
             onChange={(e) => {
-              const list = e.target.files;
-              if (!list) return;
+              const picked = e.target.files;
+              if (!picked) return;
               setError(null);
-              const folder = readFolderFromInput(list, isPresentationFile);
+              clearRun();
+              const folder = readFolderFromInput(picked, isPresentationFile);
               setFolderName(folder.name);
+              setFiles(folder.files);
+              setHandle(null);
               void scan(folder.files);
             }}
           />
@@ -273,11 +533,7 @@ export function Presentations() {
             among the findings: it changes what counts as a problem, which is
             a decision made before reading rather than while sifting. */}
         <label className="option" title={p.commaCheckWhy}>
-          <input
-            type="checkbox"
-            checked={commas}
-            onChange={(e) => toggleCommas(e.target.checked)}
-          />
+          <input type="checkbox" checked={commas} onChange={(e) => toggleCommas(e.target.checked)} />
           <span>{p.commaCheck}</span>
         </label>
 
@@ -306,12 +562,12 @@ export function Presentations() {
         {fellBack && <p className="why warn-inline">{p.pickerFailed}</p>}
         {error && <p className="why warn-inline">{error}</p>}
 
-        {reports && reports.length === 0 && (
+        {scanned && reports.length === 0 && (
           <p className="sub warn-inline">{f(p.noneFound, { folder: folderName || "—" })}</p>
         )}
       </div>
 
-      {reports && reports.length > 0 && (
+      {reports.length > 0 && (
         <div className="card">
           <h2>{p.summary}</h2>
           <div className="stats">
@@ -329,7 +585,92 @@ export function Presentations() {
         </div>
       )}
 
-      {reports && reports.length > 0 && (
+      {/* Above the findings rather than below them: on a library of hundreds
+          the list is long, and a control at the bottom of it is a control
+          nobody finds. It stays on screen after a run that leaves nothing to
+          fix, because that is exactly when the reader wants to know what
+          happened. */}
+      {(fixableLines > 0 || outcomes) && (
+        <div className="card">
+          <h2>{p.fix}</h2>
+          <p className="sub">{p.fixHint}</p>
+
+          <div className="editor-bar">
+            <span className="editor-count">
+              {plural(p.fixable, chosenLines)} {plural(p.inFilesFix, chosen.length)}
+            </span>
+            <span className="spacer" />
+            <button
+              className="btn"
+              onClick={() => setAllSelected(excluded.size > 0)}
+              disabled={running}
+            >
+              {excluded.size > 0 ? p.selectAll : p.selectNone}
+            </button>
+
+            {canWrite ? (
+              <>
+                <button
+                  className={backedUp ? "btn" : "btn primary"}
+                  onClick={() => void downloadBackup()}
+                  disabled={chosenLines === 0 || running}
+                >
+                  {p.downloadBackup}
+                </button>
+                <button
+                  className="btn primary"
+                  onClick={() => void saveFixes()}
+                  disabled={!backedUp || chosenLines === 0 || running}
+                >
+                  {plural(p.applyFixes, chosenLines)}
+                </button>
+              </>
+            ) : (
+              <button
+                className="btn primary"
+                onClick={() => void downloadFixed()}
+                disabled={chosenLines === 0 || running}
+              >
+                {p.downloadFixed}
+              </button>
+            )}
+          </div>
+
+          {writing && <p className="why">{f(p.applying, { n: writing })}</p>}
+
+          <p className="why">
+            {!canWrite
+              ? p.downloadFixedWhy
+              : backup
+                ? backedUp
+                  ? f(p.backupDone, { name: backup.name })
+                  : p.backupStale
+                : `${plural(p.backupCount, chosen.length)}. ${p.backupWhy}`}
+          </p>
+
+          {savedZip && <p className="why">{f(p.downloadedFixed, { name: savedZip })}</p>}
+          {fixError && <p className="why warn-inline">{fixError}</p>}
+
+          {outcomes && (
+            <p className="sub">
+              {saved.length > 0 ? plural(p.fixedFiles, saved.length) : p.fixedNone}
+              {refused.length > 0 && ` · ${plural(p.fixFailed, refused.length)}`}
+            </p>
+          )}
+          {refused.length > 0 && (
+            <ul className="rows">
+              {refused.map((outcome) => (
+                <li key={outcome.path}>
+                  <span className="path">{outcome.path}</span>{" "}
+                  <span className="node-count">{p.refusals[outcome.reason!]}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+
+      {reports.length > 0 && (
         <div className="card">
           <h2>
             {totalIssues === 0
@@ -355,63 +696,118 @@ export function Presentations() {
             ))}
           </div>
 
-          {withIssues.map((report) => (
-            <div className="finding" key={report.filename}>
-              <h3>
-                {report.name || report.filename}
-                <span className="count-badge">
-                  {report.error
-                    ? "!"
-                    : num(report.issues.filter((i) => shown.has(i.kind)).length)}
-                </span>
-              </h3>
-              <p className="why">
-                {report.error
-                  ? f(p.unreadable, { reason: report.error })
-                  : f(p.slidesAndBoxes, {
-                      slides: num(report.slideCount),
-                      empty: num(report.emptyTextBoxes),
-                    })}
-              </p>
+          {withIssues.map((report) => {
+            const lines = rows.get(report.filename) ?? [];
+            const fixable = lines.filter((row) => row.fix);
+            const allOn = fixable.length > 0 && fixable.every((row) => !excluded.has(row.key));
 
-              {!report.error && (
-                <ul className="rows">
-                  {report.issues
-                    .filter((i) => shown.has(i.kind))
-                    .map((issue, index) => (
-                      <li key={index}>
-                        <div>
-                          <span className={`tag ${issue.kind}`}>{p.kinds[issue.kind]}</span>{" "}
-                          <span className="node-count">
-                            {f(p.slide, { n: num(issue.slideIndex + 1) })}
-                            {issue.groupName ? ` · ${issue.groupName}` : ""} ·{" "}
-                            {f(p.line, { n: num(issue.lineIndex + 1) })}
+            return (
+              <div className="finding" key={report.filename}>
+                <h3>
+                  {report.name || report.filename}
+                  <span className="count-badge">{report.error ? "!" : num(lines.length)}</span>
+                </h3>
+                <p className="why">
+                  {report.error
+                    ? f(p.unreadable, { reason: report.error })
+                    : f(p.slidesAndBoxes, {
+                        slides: num(report.slideCount),
+                        empty: num(report.emptyTextBoxes),
+                      })}
+                </p>
+
+                {fixable.length > 0 && (
+                  <label className="option">
+                    <input
+                      type="checkbox"
+                      checked={allOn}
+                      onChange={(e) => setFileSelected(report.filename, e.target.checked)}
+                      disabled={running}
+                    />
+                    <span>{p.selectFile}</span>
+                  </label>
+                )}
+
+                {!report.error && (
+                  <ul className="rows">
+                    {lines.map((row) => (
+                      <li key={row.key}>
+                        <div className="fix-head">
+                          {row.fix && (
+                            <input
+                              type="checkbox"
+                              // Named by where the line is rather than by what
+                              // it says: the text is on screen beside it, and
+                              // a label of " leading space" would announce the
+                              // problem instead of the choice.
+                              aria-label={`${f(p.slide, { n: num(row.slideIndex + 1) })} ${f(
+                                p.line,
+                                { n: num(row.lineIndex + 1) }
+                              )}`}
+                              checked={!excluded.has(row.key)}
+                              onChange={() => toggleRow(row.key)}
+                              disabled={running}
+                            />
+                          )}
+                          <span>
+                            {row.kinds.map((kind) => (
+                              <span className={`tag ${kind}`} key={kind}>
+                                {p.kinds[kind]}
+                              </span>
+                            ))}{" "}
+                            <span className="node-count">
+                              {f(p.slide, { n: num(row.slideIndex + 1) })}
+                              {row.groupName ? ` · ${row.groupName}` : ""} {"·"}{" "}
+                              {f(p.line, { n: num(row.lineIndex + 1) })}
+                            </span>
                           </span>
                         </div>
+
                         {/* Rendered with the whitespace made visible, since the
                             whole point is characters you cannot otherwise see. */}
                         <div className="path whitespace">
-                          {issue.text === "" ? "—" : visibleWhitespace(issue.text)}
+                          {row.text === "" ? "—" : visibleWhitespace(row.text)}
                         </div>
+
+                        {row.fix ? (
+                          <div className="path whitespace becomes">
+                            <span className="becomes-label">{p.becomes}</span>{" "}
+                            {row.fix.after === null ? (
+                              <em>{p.lineRemoved}</em>
+                            ) : row.fix.after === "" ? (
+                              "—"
+                            ) : (
+                              visibleWhitespace(row.fix.after)
+                            )}
+                          </div>
+                        ) : (
+                          <div className="why">{p.noFixFor}</div>
+                        )}
                       </li>
                     ))}
-                </ul>
-              )}
-            </div>
-          ))}
+                  </ul>
+                )}
+              </div>
+            );
+          })}
         </div>
       )}
     </>
   );
 }
 
-/** Show leading and trailing spaces as middle dots, so they can be seen. */
+/**
+ * Show whitespace that is the finding as middle dots, so it can be seen.
+ *
+ * The edges of a line and any run of two or more inside it -- the three things
+ * the checks report. Tabs and non-breaking spaces count: they are exactly as
+ * invisible as a plain space and rather more surprising to find.
+ */
+const GAP = /[ \t\u00a0\u202f\u2007]/;
+const EDGES = /^[ \t\u00a0\u202f\u2007]+|[ \t\u00a0\u202f\u2007]+$/g;
+const INSIDE = /[ \t\u00a0\u202f\u2007]{2,}/g;
+
 function visibleWhitespace(text: string): string {
-  const leading = text.length - text.trimStart().length;
-  const trailing = text.length - text.trimEnd().length;
-  return (
-    "·".repeat(leading) +
-    text.slice(leading, text.length - trailing).replace(/ {2,}/g, (run) => "·".repeat(run.length)) +
-    "·".repeat(trailing)
-  );
+  const dots = (run: string) => "\u00b7".repeat(run.length);
+  return text.replace(EDGES, dots).replace(INSIDE, dots).replace(GAP, (c) => (c === " " ? c : dots(c)));
 }

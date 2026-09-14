@@ -227,7 +227,7 @@ export const fr: Dictionary = {
       chooseHint:
         "Choisissez votre espace de travail ProPresenter, ou son dossier Libraries. Tout est lu dans votre navigateur ; rien n'est envoyé.",
       readwriteNote:
-        "Ce navigateur peut lire le dossier et, plus tard, y enregistrer les corrections.",
+        "Ce navigateur peut lire le dossier et y enregistrer les corrections.",
       readonlyNote:
         "Ce navigateur peut lire un dossier mais pas y écrire. Safari et Firefox n'offrent aucun retour vers les fichiers d'origine — utilisez Chrome ou Edge pour enregistrer les corrections sur place.",
       unavailableNote:
@@ -275,7 +275,49 @@ export const fr: Dictionary = {
       commaCheck: "Rechercher aussi les virgules finales",
       commaCheckWhy:
         "Désactivé par défaut : une virgule en fin de ligne est une ponctuation ordinaire, et sa place sur une diapositive relève du style de la maison.",
-      showAll: "Afficher les {n}",
+      showAll: "Tout afficher ({n})",
+
+      fix: "Corriger",
+      fixHint:
+        "Rien n’est écrit tant que vous n’avez pas de sauvegarde et que vous n’avez pas choisi quoi modifier. Chaque ligne est montrée telle qu’elle est et telle qu’elle deviendrait.",
+      fixable: ["{n} ligne peut être corrigée", "{n} lignes peuvent être corrigées"],
+      inFilesFix: ["dans {n} fichier", "dans {n} fichiers"],
+      selectAll: "Tout sélectionner",
+      selectNone: "Tout désélectionner",
+      selectFile: "Sélectionner toutes les lignes de ce fichier",
+      becomes: "devient",
+      lineRemoved: "la ligne est supprimée",
+      noFixFor: "Pas de correction automatique — cette ligne doit être modifiée dans ProPresenter.",
+      downloadBackup: "Télécharger d’abord une sauvegarde",
+      backupCount: ["Sauvegarde {n} fichier", "Sauvegarde {n} fichiers"],
+      backupDone: "Sauvegardé sous {name}.",
+      backupStale:
+        "Votre sélection couvre maintenant des fichiers absents de la sauvegarde. Téléchargez-la de nouveau.",
+      backupWhy:
+        "Un zip des fichiers tels qu’ils sont aujourd’hui, placé dans vos téléchargements. Gardez-le jusqu’à ce que vous ayez ouvert les chants dans ProPresenter et qu’ils vous conviennent.",
+      applyFixes: ["Corriger {n} ligne", "Corriger {n} lignes"],
+      applying: "Enregistrement de {n}…",
+      fixedFiles: ["{n} fichier corrigé", "{n} fichiers corrigés"],
+      fixedNone: "Rien n’a été modifié.",
+      fixFailed: ["{n} fichier a été laissé intact", "{n} fichiers ont été laissés intacts"],
+      downloadFixed: "Télécharger les fichiers corrigés",
+      downloadFixedWhy:
+        "Ce navigateur ne peut pas écrire dans le dossier : les présentations corrigées arrivent donc sous forme de zip. Déplacez-les vous-même dans votre bibliothèque, en gardant les originaux jusqu’à ce qu’ils vous conviennent.",
+      downloadedFixed:
+        "Enregistré sous {name}. Votre bibliothèque n’a pas été touchée.",
+      permissionNeeded:
+        "L’enregistrement nécessite l’autorisation d’écrire dans le dossier. Choisissez de nouveau le dossier et autorisez la modification.",
+      refusals: {
+        lossy:
+          "ce fichier utilise quelque chose que le schéma ne couvre pas : l’enregistrer pourrait perdre des données",
+        unreadable: "ce fichier n’a pas pu être lu",
+        unchanged: "rien n’a été sélectionné dans ce fichier",
+        verifyFailed:
+          "le résultat ne s’est pas relu comme prévu : il n’a donc pas été enregistré",
+        writeFailed: "le dossier a refusé le fichier",
+        stale:
+          "ce fichier a changé depuis l’analyse : la correction ne lui correspond plus",
+      },
     },
     mediaBin: {
       name: "Médias",

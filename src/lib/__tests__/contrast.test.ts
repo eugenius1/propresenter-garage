@@ -69,6 +69,10 @@ function pairings(dark: boolean) {
     { label: "button label on the solid accent", fg: "#ffffff", bg: accent["9"], need: 4.5 },
     { label: "banner text on the raised surface", fg: slate["12"], bg: raised, need: 4.5 },
     { label: "button label on the solid accent, on the banner", fg: "#ffffff", bg: accent["9"], need: 4.5 },
+    // The line a fix would produce, set on the card rather than on a tag: the
+    // strong step, not the text step, because it is the row's whole point and
+    // the text step only just clears the threshold in light mode.
+    { label: "a fixed line on a card", fg: scale("green", dark)["12"], bg: surface, need: 4.5 },
     // Non-text: focus rings, the app mark, a checkbox tint.
     { label: "focus ring and app mark", fg: accent["9"], bg: surface, need: 3 },
 

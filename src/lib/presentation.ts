@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Eusebius Ngemera
 
-import { messageType, type RawDoc } from "./decode";
-import { extractLines, type RtfLine } from "./rtf";
+import { checkTypeFidelity, messageType, type FidelityReport, type RawDoc } from "./decode";
+import { decodeRtf, encodeRtf, extractLines, type RtfLine } from "./rtf";
 
 /**
  * Reading ProPresenter presentations (`.pro` files) and checking their text.
@@ -19,6 +19,15 @@ import { extractLines, type RtfLine } from "./rtf";
 const Presentation = messageType("rv.data.Presentation");
 
 export interface TextBox {
+  /**
+   * Position of this box among every text box in the file.
+   *
+   * The address a fix is written back to. Walking the cues is deterministic,
+   * so the same ordinal reaches the same box on a later pass -- and it keeps
+   * the model free of protobuf objects, which the checking code has no
+   * business holding on to.
+   */
+  boxIndex: number;
   /** Position of the slide within the presentation, zero-based. */
   slideIndex: number;
   /** The cue's own label, which ProPresenter often leaves as digits. */
@@ -26,6 +35,13 @@ export interface TextBox {
   /** The arrangement group the slide belongs to, e.g. "Refrain". */
   groupName?: string;
   lines: RtfLine[];
+  /**
+   * The box's RTF document as characters.
+   *
+   * Kept because a fix is a splice of it: the extracted text is a projection
+   * and cannot be written back.
+   */
+  rtf: string;
 }
 
 export interface PresentationDoc {
@@ -51,6 +67,8 @@ export type TextIssueKind =
 
 export interface TextIssue {
   kind: TextIssueKind;
+  /** Which text box this was found in -- see {@link TextBox.boxIndex}. */
+  boxIndex: number;
   slideIndex: number;
   cueName: string;
   groupName?: string;
@@ -87,8 +105,26 @@ export function encodePresentation(doc: RawDoc): Uint8Array {
   return Presentation.encode(doc).finish();
 }
 
-/** Walk the presentation into the text boxes it actually renders. */
-export function readPresentation(doc: RawDoc): PresentationDoc {
+/** Where one text box lives, as the walk below reports it. */
+interface TextBoxSite {
+  boxIndex: number;
+  slideIndex: number;
+  cueName: string;
+  groupName?: string;
+  /** The message holding the payload, so a caller can replace it. */
+  text: { rtf_data: Uint8Array };
+}
+
+/**
+ * Visit every text box in the file, in a fixed order.
+ *
+ * One walk serving both reading and writing, on purpose. `boxIndex` is the
+ * address a fix is written back to, so if the reader and the writer disagreed
+ * about the order -- even in some corner neither was thought about -- a fix
+ * would land in the wrong box. Sharing the traversal makes that impossible
+ * rather than merely unlikely.
+ */
+function eachTextBox(doc: RawDoc, visit: (site: TextBoxSite) => void): number {
   const raw = doc as any;
 
   // Cues carry the slides; groups name the sections and reference cues by uuid.
@@ -100,8 +136,8 @@ export function readPresentation(doc: RawDoc): PresentationDoc {
     }
   }
 
-  const textBoxes: TextBox[] = [];
   const cues: any[] = raw.cues ?? [];
+  let boxIndex = 0;
 
   cues.forEach((cue, slideIndex) => {
     const cueName: string = cue.name ?? "";
@@ -110,26 +146,83 @@ export function readPresentation(doc: RawDoc): PresentationDoc {
     for (const action of cue.actions ?? []) {
       const elements = action.slide?.presentation?.base_slide?.elements ?? [];
       for (const wrapper of elements) {
-        const rtf = wrapper?.element?.text?.rtf_data;
-        if (!(rtf instanceof Uint8Array)) continue;
-        textBoxes.push({
+        const text = wrapper?.element?.text;
+        // `ArrayBuffer.isView` rather than `instanceof Uint8Array`: the array
+        // protobuf.js hands back can come from a different realm than the one
+        // this code runs in, and `instanceof` answers no across that boundary.
+        // The symptom is a file that decodes cleanly and reports no text at
+        // all, which is indistinguishable from a presentation with none.
+        if (!ArrayBuffer.isView(text?.rtf_data)) continue;
+        visit({
+          boxIndex: boxIndex++,
           slideIndex,
           cueName,
           groupName: groupName || undefined,
-          lines: extractLines(new TextDecoder().decode(rtf)),
+          text: text as { rtf_data: Uint8Array },
         });
       }
     }
   });
 
-  return { name: raw.name ?? "", slideCount: cues.length, textBoxes };
+  return cues.length;
 }
 
-/** Whitespace that shows as a gap: ordinary spaces, tabs, non-breaking spaces. */
-const EDGE_SPACE = /^[ \t   ]|[ \t   ]$/;
-const LEADING_SPACE = /^[ \t   ]/;
-const TRAILING_SPACE = /[ \t   ]$/;
-const REPEATED_SPACE = /\S[ \t]{2,}\S/;
+/** Walk the presentation into the text boxes it actually renders. */
+export function readPresentation(doc: RawDoc): PresentationDoc {
+  const textBoxes: TextBox[] = [];
+
+  const slideCount = eachTextBox(doc, (site) => {
+    const rtf = decodeRtf(site.text.rtf_data);
+    textBoxes.push({
+      boxIndex: site.boxIndex,
+      slideIndex: site.slideIndex,
+      cueName: site.cueName,
+      groupName: site.groupName,
+      lines: extractLines(rtf),
+      rtf,
+    });
+  });
+
+  return { name: (doc as any).name ?? "", slideCount, textBoxes };
+}
+
+/**
+ * Replace the RTF of the named boxes, leaving every other field untouched.
+ *
+ * Edits the decoded message rather than rebuilding it: the model above is a
+ * projection of what the checks need, and regenerating a file from it would
+ * discard everything ProPresenter writes that this app does not read.
+ */
+export function writeTextBoxes(doc: RawDoc, replacements: ReadonlyMap<number, string>): void {
+  eachTextBox(doc, (site) => {
+    const replacement = replacements.get(site.boxIndex);
+    if (replacement !== undefined) site.text.rtf_data = encodeRtf(replacement);
+  });
+}
+
+/**
+ * Whitespace that shows as a gap: ordinary spaces, tabs, non-breaking spaces.
+ *
+ * Exported as a pattern rather than only as the regular expressions built from
+ * it, so that what a fix removes is defined in exactly one place as what a
+ * check reports. The two drifting apart would mean a preview promising one
+ * thing and an edit doing another.
+ */
+export const SPACE_CLASS = "[ \\t\\u00a0\\u202f\\u2007]";
+
+/**
+ * The narrower class the doubled-space check looks in: spaces and tabs only.
+ *
+ * Two non-breaking spaces in a row are deliberate far more often than they are
+ * a slip -- they are how someone forces a gap that centring would otherwise
+ * close -- so they are left alone.
+ */
+export const RUN_CLASS = "[ \\t]";
+
+const EDGE_SPACE = new RegExp(`^${SPACE_CLASS}|${SPACE_CLASS}$`);
+const LEADING_SPACE = new RegExp(`^${SPACE_CLASS}`);
+const TRAILING_SPACE = new RegExp(`${SPACE_CLASS}$`);
+const REPEATED_SPACE = new RegExp(`\\S${RUN_CLASS}{2,}\\S`);
 /**
  * A line whose visible text ends with a comma.
  *
@@ -138,7 +231,7 @@ const REPEATED_SPACE = /\S[ \t]{2,}\S/;
  * the comma does not change what the line ends with. Any stray space is
  * still reported separately by the checks above.
  */
-const TRAILING_COMMA = /,[ \t   ]*$/;
+const TRAILING_COMMA = new RegExp(`,${SPACE_CLASS}*$`);
 
 /**
  * Check one presentation's text.
@@ -167,6 +260,7 @@ export function checkPresentation(
 
     const at = (kind: TextIssueKind, line: RtfLine): TextIssue => ({
       kind,
+      boxIndex: box.boxIndex,
       slideIndex: box.slideIndex,
       cueName: box.cueName,
       groupName: box.groupName,
@@ -216,7 +310,18 @@ export function checkPresentationFile(
   }
 }
 
-/** Trim the edges of every line in an RTF document, leaving formatting alone. */
 export function hasEdgeSpace(line: string): boolean {
   return EDGE_SPACE.test(line);
+}
+
+/**
+ * Whether this presentation survives being written back out.
+ *
+ * The same gate the playlist tools use, against `rv.data.Presentation`. Every
+ * real 21.4 file checked so far comes back `identical`, which is what makes a
+ * write path viable -- but the schema is reverse-engineered, so the file in
+ * front of the reader is checked rather than the corpus being taken as proof.
+ */
+export function checkPresentationFidelity(bytes: Uint8Array): FidelityReport {
+  return checkTypeFidelity(Presentation, bytes);
 }

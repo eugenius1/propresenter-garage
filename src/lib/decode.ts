@@ -135,34 +135,32 @@ const TO_OBJECT: protobuf.IConversionOptions = {
   bytes: String,
 };
 
-function canonical(bytes: Uint8Array): string {
-  const msg = PlaylistDocument.decode(bytes);
-  return JSON.stringify(PlaylistDocument.toObject(msg, TO_OBJECT));
-}
-
-/** Decode without checking the kind -- for fidelity work, where it is irrelevant. */
-function decodeAnyKind(bytes: Uint8Array): RawDoc {
-  return PlaylistDocument.decode(bytes) as RawDoc;
+function canonical(type: protobuf.Type, bytes: Uint8Array): string {
+  return JSON.stringify(type.toObject(type.decode(bytes), TO_OBJECT));
 }
 
 /**
- * The safety gate on the export feature.
+ * The safety gate on every path that writes a file.
  *
  * protobuf.js discards fields the schema does not declare. Since the schema is
  * reverse-engineered from the application, a field ProPresenter writes but the
  * protos omit would silently vanish on re-encode and corrupt the library. This
  * decodes, re-encodes, and then checks both the bytes and the decoded content
  * so a merely non-canonical original is not mistaken for data loss.
+ *
+ * Takes the message type rather than assuming one: a presentation is a
+ * different root message from a playlist, and needs exactly the same gate
+ * before anything is written back.
  */
-export function checkFidelity(bytes: Uint8Array): FidelityReport {
-  const reEncoded = encodeDocument(decodeAnyKind(bytes));
+export function checkTypeFidelity(type: protobuf.Type, bytes: Uint8Array): FidelityReport {
+  const reEncoded = type.encode(type.decode(bytes)).finish();
 
   const sameBytes =
     reEncoded.length === bytes.length && reEncoded.every((b, i) => b === bytes[i]);
 
   const fidelity: Fidelity = sameBytes
     ? "identical"
-    : canonical(bytes) === canonical(reEncoded)
+    : canonical(type, bytes) === canonical(type, reEncoded)
       ? "equivalent"
       : "lossy";
 
@@ -172,4 +170,9 @@ export function checkFidelity(bytes: Uint8Array): FidelityReport {
     reEncodedSize: reEncoded.length,
     exportSafe: fidelity !== "lossy",
   };
+}
+
+/** The gate for a playlist document, which is what the export feature writes. */
+export function checkFidelity(bytes: Uint8Array): FidelityReport {
+  return checkTypeFidelity(PlaylistDocument, bytes);
 }
