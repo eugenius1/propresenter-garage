@@ -44,12 +44,30 @@ check, delete them before committing.
 Tests that need real files read them from `PP_MEDIA_FILE` and `PP_LIBRARY_DIR`
 and skip cleanly when absent, so CI stays green without them.
 
-## Never write over an original ProPresenter file
+## Never write over an original ProPresenter file unguarded
 
 Writing back over the file ProPresenter owns is how a library gets destroyed.
-Exports are always a differently named copy that the user moves into place
-themselves — see `exportFilename()` in `src/lib/operations.ts`.
+The Media Bin tool never does it at all: its exports are a differently named
+copy the user moves into place themselves — see `exportFilename()` in
+`src/lib/operations.ts`.
 
-Any write path must also pass the fidelity gate first: the schema is
-reverse-engineered, and protobuf.js silently drops fields it does not declare.
-See *The export safety gate* in CONTRIBUTING.md.
+The presentation fixer is the one path that does write in place, and it is
+allowed to only because all four of these hold. Do not add a fifth write path
+that keeps fewer of them, and do not quietly drop one from this one:
+
+1. **The fidelity gate passes on that file**, checked as the file is written
+   rather than inferred from the corpus. The schema is reverse-engineered and
+   protobuf.js silently drops fields it does not declare. See *The export
+   safety gate* in CONTRIBUTING.md.
+2. **The user has downloaded a backup** of exactly the files about to change.
+   The button that writes is disabled until they have, and goes back to being
+   disabled if the selection grows past what the backup covers.
+3. **Every line was shown and ticked.** The user sees the line as it is and as
+   it would read before anything happens, and the fix run touches only what is
+   still ticked.
+4. **The result is read back and compared** to what was promised, for every
+   line of every box including the ones no fix touched. A file that comes back
+   saying anything else is not written.
+
+`applyFixes()` in `src/lib/fixes.ts` enforces 1 and 4 and cannot be bypassed;
+2 and 3 live in `src/tools/Presentations.tsx`.

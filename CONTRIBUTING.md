@@ -123,8 +123,14 @@ result is one of:
 | `lossy` | Decoded content differs. Something is uncovered by the schema; writing this file back could corrupt it. |
 
 Real ProPresenter 21.4.2 files verify as `identical`, which is what makes a
-write path viable at all. Any future write feature must refuse to touch a file
-rated `lossy`, and must emit a new file rather than overwrite the original.
+write path viable at all. Any write path must refuse to touch a file rated
+`lossy`, and must check the file in front of it rather than trusting that the
+corpus checked out once — `checkTypeFidelity()` takes the message type, so a
+presentation goes through the same gate as a playlist.
+
+The Media Bin's exports emit a differently named file rather than overwriting.
+The presentation fixer does write in place, under four conditions listed in
+[AGENTS.md](AGENTS.md) — read those before adding anything that writes.
 
 ## Testing against real files
 
@@ -149,6 +155,20 @@ nothing else.
 file, which is handy for exercising the diff UI without waiting for two genuine
 weekly snapshots.
 
+**The gate the write path rests on** is in
+`src/lib/__tests__/rtf-splice.test.ts`, and it is the reason any of this is
+safe to ship. For every one of the 604,966 visible characters in the 15,930
+text boxes of a real library, it deletes that character and re-reads the
+document, asserting the line lost exactly that character and no other line
+changed at all. It found the control-word trap above within a minute of being
+written. It takes about eight seconds, which is why the comparison is plain
+JavaScript and only a failure reaches `expect` — half a million assertions take
+minutes where the work itself takes seconds.
+
+`src/lib/__tests__/fixes.test.ts` then runs the real thing: every findable
+problem in every file fixed, read back, and checked both for being gone and for
+having left every untouched box alone.
+
 ## Things that will bite you
 
 Each of these has already cost someone a debugging session, and several have
@@ -171,7 +191,47 @@ space that is syntax: in `\cb2 Que ton nom`, the space after `\cb2` is a
 delimiter. Matching spaces with a regular expression reports a leading space on
 nearly every line in every file. `src/lib/rtf.ts` exists solely for this, and
 the text it returns is a *projection* — writing a fix means editing the
-original RTF, not the extracted string.
+original RTF, not the extracted string. Every visible character carries the
+source range it came from, so a fix is a splice rather than a rewrite.
+
+**And deleting text changes how the rest is read.** The same trap running
+backwards, caught by the corpus test within a minute of it being written. A box
+reading `\cb2\u212 ? ce nom` shows " ce nom" with a leading space — the
+escape is what separates `\cb2` from the text. Remove the escape and you have
+`\cb2 ce nom`, where that space is now the delimiter and the leading space is
+gone. `\qc\u212 ?abc` is worse: it becomes `\qcabc`, a different control word
+entirely. So a cut that leaves a control word exposed puts a delimiter space
+back, and only where the word has not already got one.
+
+**An escape owns its fallback character.** `\u233 ?` is seven source characters
+for one "é": the `?` is there for readers without Unicode and is swallowed on
+the way in. A span covering only `\u233 ` would leave a stray "?" on the slide
+when the é is deleted.
+
+**`instanceof Uint8Array` fails across realms.** The array protobuf.js hands
+back is not always built from the same global as the code reading it, and
+`instanceof` answers no across that boundary. The symptom is a file that
+decodes cleanly and reports no text at all, which looks exactly like a
+presentation with none — it went unnoticed until a component test ran the
+reader under jsdom. `ArrayBuffer.isView` is the check that works.
+
+**RTF payloads are decoded as latin-1, not UTF-8.** Every byte maps to one
+character and back, so a spliced document is byte-identical wherever it was not
+edited, whatever the bytes were. ProPresenter escapes everything above ASCII as
+`\uNNN` anyway — 15,930 text boxes across 880 real files carry no byte above
+0x7F — so nothing is misread by it.
+
+**A zip says its names are UTF-8 with a flag, and old tools ignore it.** macOS
+ships Info-ZIP 6.00 from 2009, which predates bit 11 and mangles an accented
+name on extraction. Modern extractors honour it and a real library is full of
+accented names, so the flag stays; `src/lib/__tests__/zip.test.ts` asks
+Info-ZIP only to verify the container and leaves extraction to Python.
+
+**A real library holds files that are not presentations.** One turned up a
+51 KB file named `.pro`, and macOS scatters `._Song.pro` resource forks through
+any folder that has been near a USB stick. `isPresentationFile` excludes
+dotfiles for both. Eight of the 879 real presentations also hold no cues at
+all, so "every file has slides" is not true of real data.
 
 **The browser never reveals a folder's path.** `showDirectoryPicker` hands back
 a handle carrying a name and nothing more, and the `webkitdirectory` fallback
@@ -214,7 +274,8 @@ eyeballing a new colour.
 ## Conventions
 
 - **`npm run check` must pass.** Codegen, `oxlint`, both TypeScript projects,
-  and the full suite.
+  and the full suite -- 360 tests. The ones that matter most only run where
+  `PP_LIBRARY_DIR` points at a real library; CI skips them.
 - **Every source file** opens with `// SPDX-License-Identifier: GPL-3.0-or-later`
   and `// Copyright (C) 2026 Eusebius Ngemera`.
 - **Comments explain why, not what.** `src/lib/rtf.ts` and `src/lib/decode.ts`
@@ -223,9 +284,11 @@ eyeballing a new colour.
   canonical and `fr.ts` is typed against it; tests assert matching keys, plural
   arity, placeholders, and that no French string is accidentally the English
   one.
-- **Never write over an original ProPresenter file.** `exportFilename()` in
-  `src/lib/operations.ts` exists for this — exports are always a differently
-  named copy that the reader moves into place themselves.
+- **Never write over an original ProPresenter file unguarded.** Media Bin
+  exports are always a differently named copy the reader moves into place
+  themselves, via `exportFilename()` in `src/lib/operations.ts`. The one path
+  that writes in place is the presentation fixer, under the four conditions
+  set out in [AGENTS.md](AGENTS.md).
 - **Never commit a real ProPresenter library.** Real `.pro` files, media-bin
   playlists and media folders are somebody's personal data. `public/__dev-*` is
   gitignored for exactly this; development copies go there and nowhere else.

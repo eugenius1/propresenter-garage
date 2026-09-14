@@ -18,7 +18,17 @@ at the end that spoils centring, a doubled space, and lines that show nothing
 while still taking up room. Trailing commas can be checked too, switched on
 separately since whether they belong on a slide is a matter of house style.
 
-It reports; it does not yet change anything.
+It can also put them right. Every fix is shown first as the line is now and
+as it would read, one row per line and a tick beside each, so nothing is
+changed that you have not looked at. In Chrome and Edge the corrected files go
+back into the folder — but only after you have downloaded a zip of those files
+exactly as they stand, which the button insists on. Everywhere else, the
+corrected presentations come as a zip for you to move into place yourself, and
+your library is not touched at all.
+
+Behind that: each file is checked against the schema before it is written, and
+read back afterwards to confirm it says what was promised. Anything that fails
+either check is left exactly as it was and named in the results.
 
 ### Media Bin
 
@@ -43,9 +53,10 @@ added without the name fighting them.
 ## What your browser can do
 
 Reading works everywhere. Writing back does not: Chrome and Edge can be given
-access to a folder and, in time, save fixes into it, while Safari and Firefox
-can only read copies — they offer no way back to the original files. Both are
-offered automatically; you do not choose between them.
+access to a folder and save fixes into it, while Safari and Firefox can only
+read copies — they offer no way back to the original files, so there the fixes
+arrive as a zip instead. Both routes are offered automatically; you do not
+choose between them.
 
 Installing the app changes one thing: permission to read a folder sticks,
 rather than lapsing when you close the last tab.
@@ -60,14 +71,10 @@ cannot express: a French operator on an English-configured booth machine.
 
 ## Status
 
-Working: the **Presentations** checker, and the **Media Bin** tool — diff,
-audit, browse, reorganise and export — with the fidelity gate behind every
-export, English and French, and light, dark or system appearance.
-
-Not yet: fixing the presentation problems it finds, rather than only reporting
-them. The [export safety gate](CONTRIBUTING.md#the-export-safety-gate) is the
-prerequisite and it passes on real files, so what remains is the editing and
-backup design rather than the file writing.
+Working: the **Presentations** checker and its fixes, and the **Media Bin**
+tool — diff, audit, browse, reorganise and export — with the fidelity gate
+behind everything written, English and French, and light, dark or system
+appearance.
 
 ## Contributing
 
