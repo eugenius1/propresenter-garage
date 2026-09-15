@@ -240,6 +240,18 @@ any folder that has been near a USB stick. `isPresentationFile` excludes
 dotfiles for both. Eight of the 879 real presentations also hold no cues at
 all, so "every file has slides" is not true of real data.
 
+**`.pro` is ChordPro's extension too.** A chord chart sitting in a library is
+indistinguishable from a presentation until it is opened, and one turned up
+among 2,847 real files. Reported as a decode failure it read "invalid end group
+tag", which tells its owner nothing; `readProblem` in `src/lib/presentation.ts`
+separates the cases so the interface can say what the file actually is. The
+text test needs both halves -- no control characters *and* valid UTF-8 -- since
+`3c ff fe` has no control characters and is not text.
+
+**An empty file decodes perfectly well.** Protobuf reads no bytes as a message
+with no fields, so an empty `.pro` becomes a presentation with no slides rather
+than an error. Emptiness is checked before decoding, not after it fails.
+
 **The browser never reveals a folder's path.** `showDirectoryPicker` hands back
 a handle carrying a name and nothing more, and the `webkitdirectory` fallback
 gives paths relative to the chosen folder. Do not build interface text that
@@ -281,7 +293,7 @@ eyeballing a new colour.
 ## Conventions
 
 - **`npm run check` must pass.** Codegen, `oxlint`, both TypeScript projects,
-  and the full suite -- 375 tests. The ones that matter most only run where
+  and the full suite -- 387 tests. The ones that matter most only run where
   `PP_LIBRARY_DIR` points at a real library; CI skips them.
 - **Every source file** opens with `// SPDX-License-Identifier: GPL-3.0-or-later`
   and `// Copyright (C) 2026 Eusebius Ngemera`.

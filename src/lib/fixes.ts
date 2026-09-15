@@ -7,12 +7,15 @@ import {
   decodePresentation,
   encodePresentation,
   readPresentation,
+  readProblem,
   RUN_CLASS,
   SPACE_CLASS,
   TRAILING_PUNCTUATION,
+  unreadableReport,
   writeTextBoxes,
   type PresentationDoc,
   type PresentationReport,
+  type ReadProblem,
   type TextIssue,
   type TextIssueKind,
   type TrailingPunctuation,
@@ -397,25 +400,21 @@ export function examine(filename: string, bytes: Uint8Array): Examined {
   let doc: PresentationDoc;
   let report: PresentationReport;
 
+  // Nothing to fix in a file that will not open, and nothing goes wrong
+  // decoding no bytes -- so emptiness is caught before the decoder makes a
+  // presentation out of it.
+  const nothing = (problem: ReadProblem, detail?: string): Examined => ({
+    report: unreadableReport(filename, problem, detail),
+    fixable: { name: filename, slideCount: 0, textBoxes: [] },
+  });
+
+  if (bytes.length === 0) return nothing("empty");
+
   try {
     doc = readPresentation(decodePresentation(bytes));
     report = checkPresentation(filename, doc);
   } catch (e) {
-    return {
-      report: {
-        filename,
-        // The presentation's own name is inside the file and the file will not
-        // open, so its last path segment is the best that can be said. The
-        // full path is already `filename`, and the interface shows the folder
-        // separately where it matters.
-        name: filename.split("/").pop() ?? filename,
-        slideCount: 0,
-        issues: [],
-        emptyTextBoxes: 0,
-        error: (e as Error).message,
-      },
-      fixable: { name: filename, slideCount: 0, textBoxes: [] },
-    };
+    return nothing(readProblem(bytes), (e as Error).message);
   }
 
   const wanted = new Set(report.issues.map((issue) => issue.boxIndex));

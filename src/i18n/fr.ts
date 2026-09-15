@@ -251,7 +251,12 @@ export const fr: Dictionary = {
       issuesFound: ["{n} problème dans {files}", "{n} problèmes dans {files}"],
       inFiles: ["{n} fichier", "{n} fichiers"],
       slidesAndBoxes: "{slides} diapositives · {empty} zones de texte vides",
-      unreadable: "Lecture impossible : {reason}",
+      problems: {
+        empty: "Ce fichier est vide.",
+        notPresentation:
+          "Ceci est un fichier texte, pas une présentation ProPresenter. Les grilles d’accords utilisent aussi l’extension .pro : un fichier ChordPro ou OnSong rangé dans une bibliothèque y ressemble tant qu’on ne l’ouvre pas.",
+        unreadable: "Lecture impossible : {reason}",
+      },
 
       slide: "diapositive {n}",
       line: "ligne {n}",

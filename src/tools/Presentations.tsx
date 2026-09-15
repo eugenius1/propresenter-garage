@@ -854,7 +854,9 @@ export function Presentations() {
                 </h3>
                 <p className="why">
                   {report.error
-                    ? f(p.unreadable, { reason: report.error })
+                    ? report.error === "unreadable"
+                      ? f(p.problems.unreadable, { reason: report.errorDetail ?? "" })
+                      : p.problems[report.error]
                     : f(p.slidesAndBoxes, {
                         slides: num(report.slideCount),
                         empty: num(report.emptyTextBoxes),

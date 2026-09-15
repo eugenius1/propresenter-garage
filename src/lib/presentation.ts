@@ -97,8 +97,56 @@ export interface PresentationReport {
    * bury the handful of findings that matter.
    */
   emptyTextBoxes: number;
-  /** Set when the file could not be read at all. */
-  error?: string;
+  /**
+   * Set when the file could not be read at all.
+   *
+   * A code rather than a sentence, so the interface says it in the reader's
+   * language -- and so the commonest cause can be named instead of handing
+   * over the decoder's own words.
+   */
+  error?: ReadProblem;
+  /** The decoder's own words, kept for the case nothing better can be said. */
+  errorDetail?: string;
+}
+
+/**
+ * Why a `.pro` file could not be read.
+ *
+ * `notPresentation` is worth separating from a decode failure because the
+ * extension is shared: ChordPro chord charts are `.pro` files too, and one
+ * turned up among 2,847 real ones. Told "invalid end group tag", a reader has
+ * no way to know they are looking at a chord chart rather than a broken
+ * presentation.
+ */
+export type ReadProblem = "empty" | "notPresentation" | "unreadable";
+
+/**
+ * Whether the bytes look like text rather than a protocol buffer.
+ *
+ * Two tests, because either alone is too easily fooled. Control characters
+ * rule out most binary, but `3c ff fe` has none and is not text; valid UTF-8
+ * rules out the rest, since stray high bytes are not a legal encoding of
+ * anything. A character cut in half by the sample boundary would decode as a
+ * replacement character, so the last few are not counted.
+ */
+function looksLikeText(bytes: Uint8Array): boolean {
+  const head = bytes.subarray(0, 512);
+  if (head.some((b) => b < 9 || (b > 13 && b < 32))) return false;
+
+  const decoded = new TextDecoder("utf-8").decode(head);
+  const whole = head.length < bytes.length ? decoded.slice(0, -2) : decoded;
+  return !whole.includes("\ufffd");
+}
+
+/**
+ * Classify a file that could not be read as a presentation.
+ *
+ * Empty is checked by the caller rather than here, because an empty file
+ * decodes perfectly well -- as a presentation with nothing in it.
+ */
+export function readProblem(bytes: Uint8Array): ReadProblem {
+  if (bytes.length === 0) return "empty";
+  return looksLikeText(bytes) ? "notPresentation" : "unreadable";
 }
 
 export function decodePresentation(bytes: Uint8Array): RawDoc {
@@ -326,22 +374,37 @@ export function checkPresentation(
   };
 }
 
+/** A report for a file that could not be read at all. */
+export function unreadableReport(
+  filename: string,
+  problem: ReadProblem,
+  detail?: string
+): PresentationReport {
+  return {
+    filename,
+    name: filename.split("/").pop() ?? filename,
+    slideCount: 0,
+    issues: [],
+    emptyTextBoxes: 0,
+    error: problem,
+    errorDetail: detail,
+  };
+}
+
 /** Decode, read and check a file in one step. */
 export function checkPresentationFile(
   filename: string,
   bytes: Uint8Array
 ): PresentationReport {
+  // Before decoding, because nothing goes wrong decoding no bytes: protobuf
+  // reads them as a presentation with nothing in it, and the reader is told
+  // about a song with no slides rather than about a file with no content.
+  if (bytes.length === 0) return unreadableReport(filename, "empty");
+
   try {
     return checkPresentation(filename, readPresentation(decodePresentation(bytes)));
   } catch (e) {
-    return {
-      filename,
-      name: filename,
-      slideCount: 0,
-      issues: [],
-      emptyTextBoxes: 0,
-      error: (e as Error).message,
-    };
+    return unreadableReport(filename, readProblem(bytes), (e as Error).message);
   }
 }
 

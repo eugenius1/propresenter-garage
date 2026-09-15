@@ -243,7 +243,12 @@ export const en = {
       issuesFound: ["{n} problem in {files}", "{n} problems in {files}"],
       inFiles: ["{n} file", "{n} files"],
       slidesAndBoxes: "{slides} slides · {empty} empty text boxes",
-      unreadable: "Could not be read: {reason}",
+      problems: {
+        empty: "This file is empty.",
+        notPresentation:
+          "This is a text file, not a ProPresenter presentation. Chord charts use the .pro extension too, so a ChordPro or OnSong file sitting in a library looks like one until it is opened.",
+        unreadable: "Could not be read: {reason}",
+      },
 
       slide: "slide {n}",
       line: "line {n}",

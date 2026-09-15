@@ -8,6 +8,7 @@ import {
   decodePresentation,
   encodePresentation,
   readPresentation,
+  readProblem,
   type PresentationDoc,
 } from "../presentation";
 import { extractLines } from "../rtf";
@@ -63,8 +64,31 @@ describe("reading a presentation", () => {
 
   it("reports a decode failure rather than throwing", () => {
     const result = checkPresentationFile("broken.pro", new Uint8Array([0x3c, 0xff, 0xfe]));
-    expect(result.error).toBeTruthy();
+    expect(result.error).toBe("unreadable");
+    expect(result.errorDetail).toBeTruthy();
     expect(result.issues).toEqual([]);
+  });
+
+  it("knows a chord chart from a broken presentation", () => {
+    // `.pro` is ChordPro's extension as well as ProPresenter's, and one such
+    // file turned up among 2,847 real ones. "invalid end group tag" told its
+    // owner nothing; that it is a chord chart tells them everything.
+    const chart = new TextEncoder().encode(
+      "{title: Amour Parfait}\n{subtitle: Dan Luiten}\n{key: D}\n\n" +
+        "{c: Couplet 1}\n[D]Du sommet des [D]cieux\n{soc}\n{eoc}\n"
+    );
+    const result = checkPresentationFile("Amour Parfait.pro", chart);
+    expect(result.error).toBe("notPresentation");
+  });
+
+  it("knows an empty file from an unreadable one", () => {
+    expect(checkPresentationFile("nothing.pro", new Uint8Array()).error).toBe("empty");
+  });
+
+  it("does not mistake a presentation for text", () => {
+    // The guard is control characters, and a real presentation is full of
+    // them -- but the check only ever runs on something that failed to decode.
+    expect(readProblem(syntheticTextPresentation())).toBe("unreadable");
   });
 });
 
