@@ -75,6 +75,10 @@ function pairings(dark: boolean) {
     { label: "a fixed line on a card", fg: scale("green", dark)["12"], bg: surface, need: 4.5 },
     // Non-text: focus rings, the app mark, a checkbox tint.
     { label: "focus ring and app mark", fg: accent["9"], bg: surface, need: 3 },
+    // The filled part of a progress bar against its own track. Dark is the
+    // tighter of the two at 3.06, so the track cannot move a step lighter
+    // without this failing.
+    { label: "a progress bar in its track", fg: accent["9"], bg: inset, need: 3 },
 
   ];
 

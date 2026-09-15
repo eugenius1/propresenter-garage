@@ -283,7 +283,7 @@ describe("running over several files", () => {
       path,
       fixes: plan(synthetic(), ["leadingSpace"]),
     }));
-    const outcomes = await fixFiles(plans, read);
+    const outcomes = await fixFiles(plans, { read });
 
     expect(outcomes.map((o) => o.path)).toEqual(["a.pro", "Chants/b.pro"]);
     for (const outcome of outcomes) {
@@ -294,11 +294,10 @@ describe("running over several files", () => {
 
   it("writes through the folder when one is given", async () => {
     const written = new Map<string, Uint8Array>();
-    await fixFiles(
-      [{ path: "a.pro", fixes: plan(synthetic(), ["leadingSpace"]) }],
+    await fixFiles([{ path: "a.pro", fixes: plan(synthetic(), ["leadingSpace"]) }], {
       read,
-      async (path, bytes) => void written.set(path, bytes)
-    );
+      write: async (path, bytes) => void written.set(path, bytes),
+    });
     expect(linesOf(written.get("a.pro")!)[1]).toEqual(["Fine here", "leading space"]);
   });
 
@@ -311,7 +310,7 @@ describe("running over several files", () => {
         { path: "broken.pro", fixes },
         { path: "fine.pro", fixes },
       ],
-      async (path) => (path === "broken.pro" ? new Uint8Array([0x3c, 0xff]) : synthetic())
+      { read: async (path) => (path === "broken.pro" ? new Uint8Array([0x3c, 0xff]) : synthetic()) }
     );
 
     expect(outcomes[0].reason).toBe("unreadable");
@@ -320,13 +319,41 @@ describe("running over several files", () => {
   });
 
   it("reports a file the folder would not take", async () => {
-    const outcomes = await fixFiles(
-      [{ path: "a.pro", fixes: plan(synthetic(), ["leadingSpace"]) }],
+    const outcomes = await fixFiles([{ path: "a.pro", fixes: plan(synthetic(), ["leadingSpace"]) }], {
       read,
-      async () => {
+      write: async () => {
         throw new Error("permission lapsed");
-      }
-    );
+      },
+    });
     expect(outcomes[0].reason).toBe("writeFailed");
+  });
+
+  it("says which file it is on before it starts on it", async () => {
+    // Before rather than after: during a run of several hundred the useful
+    // question is what is happening now, not what has just finished.
+    const seen: [string, number, number][] = [];
+    const fixes = plan(synthetic(), ["leadingSpace"]);
+
+    await fixFiles(
+      ["a.pro", "b.pro", "c.pro"].map((path) => ({ path, fixes })),
+      { read, onFile: (path, done, total) => void seen.push([path, done, total]) }
+    );
+
+    expect(seen).toEqual([
+      ["a.pro", 0, 3],
+      ["b.pro", 1, 3],
+      ["c.pro", 2, 3],
+    ]);
+  });
+
+  it("reports a file it goes on to refuse", async () => {
+    // The count has to cover every file the run walks, or a run holding one
+    // unreadable presentation would stop short of the end.
+    const seen: number[] = [];
+    await fixFiles([{ path: "broken.pro", fixes: plan(synthetic(), ["leadingSpace"]) }], {
+      read: async () => new Uint8Array([0x3c, 0xff]),
+      onFile: (_path, done) => void seen.push(done),
+    });
+    expect(seen).toEqual([0]);
   });
 });

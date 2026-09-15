@@ -21,6 +21,8 @@ import type { FolderAccess, PickedFolder } from "../../lib/folder";
 const store = new Map<string, Uint8Array>();
 let access: FolderAccess = "readwrite";
 let writable = true;
+/** Set by a test that wants to watch a run part-way through. */
+let beforeRead: ((path: string) => Promise<void>) | null = null;
 
 function fakeFolder(): PickedFolder {
   return {
@@ -31,7 +33,10 @@ function fakeFolder(): PickedFolder {
       path,
       name: path.split("/").pop()!,
       size: 0,
-      read: async () => store.get(path)!,
+      read: async () => {
+        await beforeRead?.(path);
+        return store.get(path)!;
+      },
       write: writable ? async (bytes: Uint8Array) => void store.set(path, bytes) : undefined,
     })),
   };
@@ -52,7 +57,6 @@ vi.mock("../../lib/persistence", async (importOriginal) => ({
 function captureDownloads() {
   const captured: { name: string; blob: Blob }[] = [];
   let pending: Blob | undefined;
-  const realCreate = URL.createObjectURL;
 
   vi.stubGlobal("URL", {
     ...URL,
@@ -93,6 +97,7 @@ beforeEach(() => {
   vi.unstubAllGlobals();
   access = "readwrite";
   writable = true;
+  beforeRead = null;
   store.clear();
   store.set("Chants/Checked Song.pro", syntheticTextPresentation());
 });
@@ -374,6 +379,148 @@ describe("the guard before anything is written", () => {
       "trailingSemicolon",
       "trailingFullStop",
     ]);
+
+    downloads.restore();
+  });
+});
+
+describe("showing how far a run has got", () => {
+  const bar = () => screen.queryByRole("progressbar");
+
+  /**
+   * Reads that do not resolve until they are let go, one at a time.
+   *
+   * The whole point of a progress bar is the state part-way through, and fakes
+   * that resolve straight away would only ever show it finished.
+   */
+  function holdReads() {
+    const waiting: (() => void)[] = [];
+    beforeRead = () => new Promise<void>((resolve) => waiting.push(resolve));
+    return {
+      /** Let the file currently being read through. */
+      next: async () => {
+        await waitFor(() => expect(waiting.length).toBeGreaterThan(0));
+        waiting.shift()!();
+      },
+      release: () => {
+        beforeRead = null;
+        for (const resolve of waiting.splice(0)) resolve();
+      },
+    };
+  }
+
+  beforeEach(() => {
+    store.clear();
+    // Named so they sort Deux, Trois, Un -- the order the run works through.
+    for (const name of ["Un", "Deux", "Trois"]) {
+      store.set(`Chants/${name}.pro`, syntheticTextPresentation(name));
+    }
+  });
+
+  it("shows nothing until a run starts", async () => {
+    const user = userEvent.setup();
+    renderTool();
+    await openFolder(user);
+    expect(bar()).not.toBeInTheDocument();
+  });
+
+  it("counts files finished, naming the one it is on", async () => {
+    const user = userEvent.setup();
+    const downloads = captureDownloads();
+    renderTool();
+    await openFolder(user);
+
+    const held = holdReads();
+    await user.click(screen.getByRole("button", { name: /Download a backup/ }));
+
+    // Nothing finished yet, and the caption names the file being read.
+    await waitFor(() => expect(bar()).toBeInTheDocument());
+    expect(bar()).toHaveAttribute("aria-valuenow", "0");
+    expect(bar()).toHaveAttribute("aria-valuemax", "3");
+    expect(bar()).toHaveAttribute("aria-valuetext", "0 of 3");
+    expect(screen.getByText("Backing up Chants/Deux.pro…")).toBeInTheDocument();
+
+    await held.next();
+    await waitFor(() => expect(bar()).toHaveAttribute("aria-valuenow", "1"));
+    expect(screen.getByText("Backing up Chants/Trois.pro…")).toBeInTheDocument();
+    expect(screen.getByText("1 of 3")).toBeInTheDocument();
+
+    await held.next();
+    await waitFor(() => expect(bar()).toHaveAttribute("aria-valuenow", "2"));
+
+    held.release();
+    await waitFor(() => expect(downloads.captured).toHaveLength(1));
+    // Gone once there is nothing left to report.
+    await waitFor(() => expect(bar()).not.toBeInTheDocument());
+
+    downloads.restore();
+  });
+
+  it("never runs ahead of the work", async () => {
+    // The bar counts files finished, not files started: a bar that reached the
+    // end while the last file was still being written would be a lie at
+    // exactly the moment it matters.
+    const user = userEvent.setup();
+    const downloads = captureDownloads();
+    renderTool();
+    await openFolder(user);
+
+    const held = holdReads();
+    await user.click(screen.getByRole("button", { name: /Download a backup/ }));
+    await waitFor(() => expect(bar()).toBeInTheDocument());
+
+    for (const expected of ["0", "1", "2"]) {
+      await waitFor(() => expect(bar()).toHaveAttribute("aria-valuenow", expected));
+      const fill = document.querySelector(".progress-fill") as HTMLElement;
+      expect(fill.style.width).not.toBe("100%");
+      await held.next();
+    }
+
+    held.release();
+    await waitFor(() => expect(downloads.captured).toHaveLength(1));
+    downloads.restore();
+  });
+
+  it("says what it is doing, which is not the same in every phase", async () => {
+    const user = userEvent.setup();
+    const downloads = captureDownloads();
+    renderTool();
+    await openFolder(user);
+
+    await user.click(screen.getByRole("button", { name: /Download a backup/ }));
+    await waitFor(() => expect(downloads.captured).toHaveLength(1));
+
+    const held = holdReads();
+    await user.click(await screen.findByRole("button", { name: /^Fix / }));
+
+    // Writing back into the folder is a different phase from backing up, and
+    // says so.
+    await waitFor(() => expect(screen.getByText(/^Saving /)).toBeInTheDocument());
+    expect(screen.queryByText(/^Backing up /)).not.toBeInTheDocument();
+
+    held.release();
+    await screen.findByText("3 files fixed");
+    expect(bar()).not.toBeInTheDocument();
+
+    downloads.restore();
+  });
+
+  it("reports the run that hands over a zip instead", async () => {
+    writable = false;
+    const user = userEvent.setup();
+    const downloads = captureDownloads();
+    renderTool();
+    await openFolder(user);
+
+    const held = holdReads();
+    await user.click(screen.getByRole("button", { name: "Download the fixed files" }));
+
+    await waitFor(() => expect(screen.getByText(/^Fixing /)).toBeInTheDocument());
+    expect(bar()).toHaveAttribute("aria-valuemax", "3");
+
+    held.release();
+    await waitFor(() => expect(downloads.captured).toHaveLength(1));
+    await waitFor(() => expect(bar()).not.toBeInTheDocument());
 
     downloads.restore();
   });

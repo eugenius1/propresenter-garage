@@ -591,6 +591,38 @@ select.mini { max-width: 9em; }
   background: var(--relinked-soft); color: var(--relinked-strong);
 }
 
+/* How far a long run has got. The track is the inset surface so it reads as a
+   groove in both themes; the fill is the accent, which is measured against
+   that surface in the contrast test. */
+.progress-block { margin-top: 12px; }
+.progress {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  overflow: hidden;
+}
+.progress-fill {
+  height: 100%;
+  background: var(--accent-solid);
+  border-radius: inherit;
+  /* Eased, so a run that jumps several files at once still reads as motion
+     rather than as a redraw. Off where the reader has asked for less. */
+  transition: width 180ms ease-out;
+}
+@media (prefers-reduced-motion: reduce) {
+  .progress-fill { transition: none; }
+}
+
+.progress-caption {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 5px;
+}
+/* The path is the part that can be long, so it is the part that truncates. */
+.progress-file { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.progress-count { flex: none; font-variant-numeric: tabular-nums; }
+
 /* A finding row that also offers a fix: the tick sits level with the tags, and
    the line as it would read sits under the line as it stands. */
 .fix-head { display: flex; align-items: baseline; gap: 8px; }

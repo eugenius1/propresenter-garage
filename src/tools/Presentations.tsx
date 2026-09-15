@@ -62,6 +62,44 @@ const OPTIONAL_KINDS: readonly TrailingPunctuation[] = [
 /** The same set, for asking whether a kind is one of them. */
 const OPTIONAL = new Set<TextIssueKind>(OPTIONAL_KINDS);
 
+/**
+ * Let the browser paint, at most once a frame.
+ *
+ * Reading, decoding, editing and re-encoding a file are quick enough that a
+ * run of several hundred never gives the main thread back on its own: the
+ * awaits inside it resolve as microtasks, so React flushes the progress state
+ * and nothing is drawn. Measured on a real run of 57 files, the bar painted
+ * three times -- it showed 14, then 56, then disappeared.
+ *
+ * Yielding on every file would cost more than it buys: `setTimeout` is clamped
+ * to about four milliseconds, which on a whole library is seconds of waiting
+ * added to make a bar move. So the main thread goes back only once the frame
+ * it would have been drawn in has passed, and through `scheduler.yield` where
+ * the browser has it, which returns without the clamp.
+ */
+function painter() {
+  const scheduler = (globalThis as { scheduler?: { yield?: () => Promise<void> } }).scheduler;
+  let last = performance.now();
+
+  return async () => {
+    const now = performance.now();
+    if (now - last < 16) return;
+    last = now;
+    if (scheduler?.yield) await scheduler.yield();
+    else await new Promise((resolve) => setTimeout(resolve, 0));
+  };
+}
+
+/** How far a run has got, and which phase it is. */
+interface Progress {
+  /** The phase's template: "Saving {n}…", "Backing up {n}…", "Fixing {n}…". */
+  verb: string;
+  path: string;
+  /** Files finished, and how many there are altogether. */
+  done: number;
+  total: number;
+}
+
 /** One line of one file, as the list shows it and the fix run names it. */
 interface Row {
   key: string;
@@ -157,9 +195,17 @@ export function Presentations() {
   const [outcomes, setOutcomes] = useState<FixOutcome[] | null>(null);
   const [savedZip, setSavedZip] = useState<string | null>(null);
   const [fixError, setFixError] = useState<string | null>(null);
-  /** Whether a run is under way, and which file it is on. */
+  /**
+   * Whether a run is under way, and how far through it is.
+   *
+   * A library is hundreds of files and every one is decoded, edited,
+   * re-encoded and read back, so a run lasts long enough that a reader needs
+   * to see it moving. Kept as a count rather than a fraction so the caption
+   * can say "12 of 57" -- a bar alone shows that something is happening but
+   * not how much of it is left.
+   */
   const [running, setRunning] = useState(false);
-  const [writing, setWriting] = useState<string | null>(null);
+  const [progress, setProgress] = useState<Progress | null>(null);
 
   /**
    * The files in alphabetical order.
@@ -465,10 +511,15 @@ export function Presentations() {
     setRunning(true);
     try {
       const entries: { path: string; bytes: Uint8Array }[] = [];
-      for (const plan of chosen) {
+      const paint = painter();
+      for (const [index, plan] of chosen.entries()) {
+        setProgress({ verb: p.backingUp, path: plan.path, done: index, total: chosen.length });
+        await paint();
         const file = fileByPath.get(plan.path);
         if (file) entries.push({ path: plan.path, bytes: await file.read() });
       }
+      // Compressing the lot gets no step of its own: a whole library is 37 MB
+      // of presentations and deflates in under three hundred milliseconds.
       const name = `propresenter-backup-${stamp()}.zip`;
       download(name, await zip(entries), "application/zip");
       setBackup({ name, paths: new Set(entries.map((entry) => entry.path)) });
@@ -476,7 +527,7 @@ export function Presentations() {
       setFixError((e as Error).message);
     } finally {
       setRunning(false);
-      setWriting(null);
+      setProgress(null);
     }
   }
 
@@ -497,11 +548,18 @@ export function Presentations() {
 
     setRunning(true);
     try {
-      const result = await fixFiles(chosen, readFile, async (path, bytes) => {
-        setWriting(path);
-        const file = fileByPath.get(path);
-        if (!file?.write) throw new Error(path);
-        await file.write(bytes);
+      const paint = painter();
+      const result = await fixFiles(chosen, {
+        read: readFile,
+        write: async (path, bytes) => {
+          const file = fileByPath.get(path);
+          if (!file?.write) throw new Error(path);
+          await file.write(bytes);
+        },
+        onFile: async (path, done, total) => {
+          setProgress({ verb: p.applying, path, done, total });
+          await paint();
+        },
       });
       setOutcomes(result);
       // The backup describes files that no longer look like that.
@@ -512,7 +570,7 @@ export function Presentations() {
       setFixError((e as Error).message);
     } finally {
       setRunning(false);
-      setWriting(null);
+      setProgress(null);
     }
   }
 
@@ -521,7 +579,14 @@ export function Presentations() {
     setFixError(null);
     setRunning(true);
     try {
-      const result = await fixFiles(chosen, readFile);
+      const paint = painter();
+      const result = await fixFiles(chosen, {
+        read: readFile,
+        onFile: async (path, done, total) => {
+          setProgress({ verb: p.fixing, path, done, total });
+          await paint();
+        },
+      });
       const entries = result
         .filter((outcome) => outcome.bytes)
         .map((outcome) => ({ path: outcome.path, bytes: outcome.bytes! }));
@@ -533,7 +598,7 @@ export function Presentations() {
       setFixError((e as Error).message);
     } finally {
       setRunning(false);
-      setWriting(null);
+      setProgress(null);
     }
   }
 
@@ -713,7 +778,7 @@ export function Presentations() {
             )}
           </div>
 
-          {writing && <p className="why">{f(p.applying, { n: writing })}</p>}
+          {progress && <ProgressBar progress={progress} />}
 
           <p className="why">
             {!canWrite
@@ -873,6 +938,46 @@ export function Presentations() {
         </div>
       )}
     </>
+  );
+}
+
+/**
+ * How far a run has got.
+ *
+ * `role="progressbar"` rather than a native `<progress>`: the vendor
+ * pseudo-elements a native one needs before it can be styled for both themes
+ * buy nothing these four aria attributes do not already say.
+ *
+ * The caption names the file as well as the count, because when a run of
+ * several hundred reports a refusal afterwards, the useful question is which
+ * file it was on at the time.
+ */
+function ProgressBar({ progress }: { progress: Progress }) {
+  const { t, f, num } = useI18n();
+  const p = t.tools.presentations;
+  const { done, total, path, verb } = progress;
+  // Files finished rather than files started, so the bar is never ahead of
+  // the work it is reporting.
+  const percent = total === 0 ? 0 : Math.round((done / total) * 100);
+  const counted = f(p.progressCount, { done: num(done), total: num(total) });
+
+  return (
+    <div className="progress-block">
+      <div
+        className="progress"
+        role="progressbar"
+        aria-valuemin={0}
+        aria-valuemax={total}
+        aria-valuenow={done}
+        aria-valuetext={counted}
+      >
+        <div className="progress-fill" style={{ width: `${percent}%` }} />
+      </div>
+      <p className="why progress-caption">
+        <span className="progress-file">{f(verb, { n: path })}</span>
+        <span className="progress-count">{counted}</span>
+      </p>
+    </div>
   );
 }
 

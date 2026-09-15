@@ -309,6 +309,24 @@ export interface FixOutcome {
   reason?: FixRefusal | "writeFailed";
 }
 
+/** How a run reaches the files, and what it reports back while it works. */
+export interface FixRun {
+  read: (path: string) => Promise<Uint8Array>;
+  /** Absent when the fixed files are not going back into the folder. */
+  write?: (path: string, bytes: Uint8Array) => Promise<void>;
+  /**
+   * Called before each file, so a caller can say where it has got to.
+   *
+   * Before rather than after, because the interesting question during a long
+   * run is which file is being worked on now, not which one has just finished.
+   *
+   * Awaited, so a caller in a browser can hand the main thread back and let
+   * the report it just made actually reach the screen. Deciding what that is
+   * worth is the caller's business; this only makes it possible.
+   */
+  onFile?: (path: string, done: number, total: number) => void | Promise<void>;
+}
+
 /**
  * Run a set of fixes over several files.
  *
@@ -322,14 +340,15 @@ export interface FixOutcome {
  */
 export async function fixFiles(
   plans: readonly FileFixPlan[],
-  read: (path: string) => Promise<Uint8Array>,
-  write?: (path: string, bytes: Uint8Array) => Promise<void>
+  { read, write, onFile }: FixRun
 ): Promise<FixOutcome[]> {
   const outcomes: FixOutcome[] = [];
 
-  for (const plan of plans) {
+  for (const [index, plan] of plans.entries()) {
     const lines = plan.fixes.length;
     let bytes: Uint8Array;
+
+    await onFile?.(plan.path, index, plans.length);
 
     try {
       bytes = applyFixes(await read(plan.path), plan.fixes);
