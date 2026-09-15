@@ -9,11 +9,13 @@ import {
   readPresentation,
   RUN_CLASS,
   SPACE_CLASS,
+  TRAILING_PUNCTUATION,
   writeTextBoxes,
   type PresentationDoc,
   type PresentationReport,
   type TextIssue,
   type TextIssueKind,
+  type TrailingPunctuation,
 } from "./presentation";
 import {
   applyEdits,
@@ -45,8 +47,18 @@ const LEADING = new RegExp(`^${SPACE_CLASS}+`);
 const TRAILING = new RegExp(`${SPACE_CLASS}+$`);
 /** A run of two or more, with text on both sides of it. */
 const RUN = new RegExp(`(?<=\\S)${RUN_CLASS}{2,}(?=\\S)`, "g");
-/** The comma that ends a line, with whatever whitespace surrounds it. */
-const COMMA = new RegExp(`${SPACE_CLASS}*,${SPACE_CLASS}*$`);
+/**
+ * The punctuation that ends a line, with whatever whitespace surrounds it.
+ *
+ * Built from the checker's own patterns, so the full stop that is not reported
+ * at the end of "Gloire..." is not removed there either.
+ */
+const ENDING = Object.fromEntries(
+  Object.entries(TRAILING_PUNCTUATION).map(([kind, mark]) => [
+    kind,
+    new RegExp(`${SPACE_CLASS}*${mark}${SPACE_CLASS}*$`),
+  ])
+) as Record<TrailingPunctuation, RegExp>;
 
 export interface LineFix {
   /** Which text box, as {@link TextBox.boxIndex} numbers them. */
@@ -94,15 +106,15 @@ function cutsFor(kind: TextIssueKind, text: string): TextCut[] {
           { start: m.index + keep + 1, end: m.index + m[0].length },
         ];
       });
-    case "trailingComma": {
-      // The whitespace around it goes too. Otherwise "nom ," becomes "nom ",
-      // trading one finding for another.
-      const found = COMMA.exec(text);
-      return found ? [{ start: text.length - found[0].length, end: text.length }] : [];
-    }
     case "blankLine":
       // Handled as a whole-line removal; a blank line has no text to cut.
       return [];
+    default: {
+      // The whitespace around it goes too. Otherwise "nom ," becomes "nom ",
+      // trading one finding for another.
+      const found = ENDING[kind].exec(text);
+      return found ? [{ start: text.length - found[0].length, end: text.length }] : [];
+    }
   }
 }
 

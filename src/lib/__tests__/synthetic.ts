@@ -338,6 +338,15 @@ const TEXT_PRESENTATION = {
       "Comma",
       "\\cb3 Que ton nom,\\par\\pard\\cb3 pour toujours ,\\par\\pard\\cb3 sois glorifie"
     ),
+    // The other two marks a line can end with, and the two ways a line can end
+    // in dots without ending in a full stop -- an ellipsis is a line running
+    // on into the next slide, which is the opposite of the finding.
+    textSlide(
+      8,
+      "Punctuation",
+      "\\cb3 Tu es saint;\\par\\pard\\cb3 je te loue.\\par\\pard\\cb3 et je chanterai\\u8230 ?" +
+        "\\par\\pard\\cb3 Gloire..."
+    ),
   ],
   cue_groups: [
     {
@@ -346,7 +355,14 @@ const TEXT_PRESENTATION = {
     },
     {
       group: { uuid: uuid(25001), name: "Chorus" },
-      cue_identifiers: [uuid(20003), uuid(20004), uuid(20005), uuid(20006), uuid(20007)],
+      cue_identifiers: [
+        uuid(20003),
+        uuid(20004),
+        uuid(20005),
+        uuid(20006),
+        uuid(20007),
+        uuid(20008),
+      ],
     },
   ],
 };

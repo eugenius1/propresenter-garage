@@ -15,8 +15,15 @@ Checks the text of every presentation in a library — a whole folder of `.pro`
 files at once. It finds the things nobody spots by opening thirty songs one at
 a time: a space at the start of a line that shifts it right on screen, a space
 at the end that spoils centring, a doubled space, and lines that show nothing
-while still taking up room. Trailing commas can be checked too, switched on
-separately since whether they belong on a slide is a matter of house style.
+while still taking up room.
+
+Trailing punctuation is checked too — commas, semicolons and full stops — each
+switched on separately, since whether they belong on a slide is a matter of
+house style and not one decision: a library of 24,000 lines ends 999 of them
+with a full stop and 43 with a semicolon, so a house that strips commas may
+well keep the full stop that closes a verse. A line ending in an ellipsis is
+left alone either way: that is a line running on into the next slide, which is
+the opposite of the problem.
 
 It can also put them right. Every fix is shown first as the line is now and
 as it would read, one row per line and a tick beside each, so nothing is

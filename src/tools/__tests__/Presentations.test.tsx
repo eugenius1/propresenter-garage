@@ -135,6 +135,52 @@ describe("finding and showing fixes", () => {
   });
 });
 
+describe("the opt-in checks", () => {
+  it("offers one switch per mark, all off to begin with", async () => {
+    const user = userEvent.setup();
+    renderTool();
+    await openFolder(user);
+
+    for (const label of [
+      "Also look for trailing commas",
+      "Also look for trailing semicolons",
+      "Also look for trailing full stops",
+    ]) {
+      expect(screen.getByRole("checkbox", { name: label })).not.toBeChecked();
+    }
+    // Nothing punctuation-related is reported until one is asked for.
+    expect(screen.queryByRole("button", { name: /^Trailing full stop/ })).not.toBeInTheDocument();
+  });
+
+  it("shows only the mark that was switched on", async () => {
+    const user = userEvent.setup();
+    renderTool();
+    await openFolder(user);
+
+    await user.click(screen.getByRole("checkbox", { name: "Also look for trailing full stops" }));
+
+    expect(await screen.findByRole("button", { name: "Trailing full stop 1" })).toBeInTheDocument();
+    // The comma check is a separate decision and stays off.
+    expect(screen.queryByRole("button", { name: /^Trailing comma/ })).not.toBeInTheDocument();
+    // One more line to fix than before, and it is the full stop.
+    expect(screen.getByRole("button", { name: "Fix 5 lines" })).toBeInTheDocument();
+    expect(screen.getByText("je te loue")).toBeInTheDocument();
+  });
+
+  it("leaves a line ending in an ellipsis alone", async () => {
+    const user = userEvent.setup();
+    renderTool();
+    await openFolder(user);
+
+    await user.click(screen.getByRole("checkbox", { name: "Also look for trailing full stops" }));
+    await screen.findByRole("button", { name: "Trailing full stop 1" });
+
+    // Both spellings are in the fixture and neither is a finding.
+    expect(screen.queryByText(/chanterai/)).not.toBeInTheDocument();
+    expect(screen.queryByText("Gloire...")).not.toBeInTheDocument();
+  });
+});
+
 describe("the order files are listed in", () => {
   /**
    * The file headings, in the order they appear on screen.
@@ -268,10 +314,15 @@ describe("the guard before anything is written", () => {
     await screen.findByText("1 file fixed");
     const written = store.get("Chants/Checked Song.pro")!;
     expect(written).not.toBe(original);
-    // Everything the reader was shown is gone. The trailing commas remain
-    // because that check is off by default, which is the point of it being
-    // off: nothing is fixed that was never reported.
-    expect(issuesIn(written).map((i) => i.kind)).toEqual(["trailingComma", "trailingComma"]);
+    // Everything the reader was shown is gone. The trailing punctuation
+    // remains because those checks are off by default, which is the point of
+    // them being off: nothing is fixed that was never reported.
+    expect(issuesIn(written).map((i) => i.kind)).toEqual([
+      "trailingComma",
+      "trailingComma",
+      "trailingSemicolon",
+      "trailingFullStop",
+    ]);
 
     downloads.restore();
   });
@@ -314,8 +365,15 @@ describe("the guard before anything is written", () => {
 
     await screen.findByText("1 file fixed");
     const kinds = issuesIn(store.get("Chants/Checked Song.pro")!).map((i) => i.kind);
-    // The line left unticked is untouched; so are the commas nobody asked for.
-    expect(kinds).toEqual(["leadingSpace", "trailingComma", "trailingComma"]);
+    // The line left unticked is untouched; so is the punctuation nobody asked
+    // for.
+    expect(kinds).toEqual([
+      "leadingSpace",
+      "trailingComma",
+      "trailingComma",
+      "trailingSemicolon",
+      "trailingFullStop",
+    ]);
 
     downloads.restore();
   });

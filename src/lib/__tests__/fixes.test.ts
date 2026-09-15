@@ -19,6 +19,8 @@ const ALL: TextIssueKind[] = [
   "blankLine",
   "repeatedSpace",
   "trailingComma",
+  "trailingSemicolon",
+  "trailingFullStop",
 ];
 
 function plan(bytes: Uint8Array, kinds: TextIssueKind[] = ALL) {
@@ -92,6 +94,30 @@ describe("planning", () => {
     // finding for another.
     const fixes = plan(synthetic(), ["trailingComma"]);
     expect(fixes.map((f) => f.after)).toEqual(["Que ton nom", "pour toujours"]);
+  });
+
+  it("removes a trailing semicolon and a trailing full stop", () => {
+    expect(plan(synthetic(), ["trailingSemicolon"]).map((f) => f.after)).toEqual(["Tu es saint"]);
+    expect(plan(synthetic(), ["trailingFullStop"]).map((f) => f.after)).toEqual(["je te loue"]);
+  });
+
+  it("offers nothing for a line that ends in an ellipsis", () => {
+    // Nothing reports it, so nothing plans it -- but the cut regex is a second
+    // place the distinction could be lost, so it is asserted here too.
+    const doc = docOf("et je chanterai\\u8230 ?");
+    expect(doc.textBoxes[0].lines[0].text).toBe("et je chanterai\u2026");
+    expect(
+      planFixes(doc, [
+        {
+          kind: "trailingFullStop",
+          boxIndex: 0,
+          slideIndex: 0,
+          cueName: "1",
+          lineIndex: 0,
+          text: doc.textBoxes[0].lines[0].text,
+        },
+      ])
+    ).toEqual([]);
   });
 
   it("removes a blank line rather than rewriting it", () => {

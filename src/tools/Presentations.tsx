@@ -28,17 +28,22 @@ import {
   type FixOutcome,
   type LineFix,
 } from "../lib/fixes";
-import type { TextIssue, TextIssueKind } from "../lib/presentation";
+import type { TextIssue, TextIssueKind, TrailingPunctuation } from "../lib/presentation";
 import { zip } from "../lib/zip";
 import { useI18n } from "../i18n";
 
 /**
  * Every kind the checker reports, and the ones shown without being asked for.
  *
- * A trailing comma is always detected -- it costs one test per line -- but
+ * Trailing punctuation is always detected -- it costs one test per line -- but
  * stays out of the way until it is switched on. Detecting it regardless is
  * what makes the switch instant: it filters what is already in hand rather
  * than sending the whole library back through the reader.
+ *
+ * One switch each rather than one for all three. They are not one decision: a
+ * library of 24,181 lines ends 999 of them with a full stop and 43 with a
+ * semicolon, and a house that strips commas may well keep the full stop that
+ * closes a verse.
  */
 const ALL_KINDS: TextIssueKind[] = [
   "leadingSpace",
@@ -46,8 +51,16 @@ const ALL_KINDS: TextIssueKind[] = [
   "blankLine",
   "repeatedSpace",
   "trailingComma",
+  "trailingSemicolon",
+  "trailingFullStop",
 ];
-const OPTIONAL_KINDS: TextIssueKind[] = ["trailingComma"];
+const OPTIONAL_KINDS: readonly TrailingPunctuation[] = [
+  "trailingComma",
+  "trailingSemicolon",
+  "trailingFullStop",
+];
+/** The same set, for asking whether a kind is one of them. */
+const OPTIONAL = new Set<TextIssueKind>(OPTIONAL_KINDS);
 
 /** One line of one file, as the list shows it and the fix run names it. */
 interface Row {
@@ -128,8 +141,8 @@ export function Presentations() {
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [active, setActive] = useState<Set<TextIssueKind>>(new Set(ALL_KINDS));
-  /** Opt-in checks, remembered so the choice survives a refresh. */
-  const [commas, setCommas] = useState(false);
+  /** Opt-in checks, remembered so the choices survive a refresh. */
+  const [optional, setOptional] = useState<Set<TextIssueKind>>(new Set());
 
   /**
    * The lines the reader has taken *out* of the run, rather than the ones left
@@ -199,8 +212,8 @@ export function Presentations() {
     [folderName, folderOf(filename)].filter(Boolean).join("/");
 
   const kinds = useMemo(
-    () => ALL_KINDS.filter((kind) => commas || !OPTIONAL_KINDS.includes(kind)),
-    [commas]
+    () => ALL_KINDS.filter((kind) => !OPTIONAL.has(kind) || optional.has(kind)),
+    [optional]
   );
   /** The kinds both switched on and not filtered out by a pill. */
   const shown = useMemo(() => new Set(kinds.filter((kind) => active.has(kind))), [kinds, active]);
@@ -237,8 +250,12 @@ export function Presentations() {
    */
   useEffect(() => {
     void (async () => {
-      const saved = await remember<{ trailingComma?: boolean }>(KEYS.presentationsChecks);
-      if (saved?.trailingComma) setCommas(true);
+      // A record rather than a flag, so a dictionary that gains another
+      // optional check reads back what was stored before it existed.
+      const saved = await remember<Partial<Record<TextIssueKind, boolean>>>(
+        KEYS.presentationsChecks
+      );
+      if (saved) setOptional(new Set<TextIssueKind>(OPTIONAL_KINDS.filter((k) => saved[k])));
     })();
   }, []);
 
@@ -395,11 +412,17 @@ export function Presentations() {
       return kinds.some((k) => next.has(k)) ? next : new Set(ALL_KINDS);
     });
 
-  function toggleCommas(on: boolean) {
-    setCommas(on);
-    // Turning it on should show it, even if the pill was switched off before.
-    if (on) setActive((prev) => new Set(prev).add("trailingComma"));
-    void keep(KEYS.presentationsChecks, { trailingComma: on });
+  function toggleOptional(kind: TrailingPunctuation, on: boolean) {
+    const next = new Set(optional);
+    if (on) next.add(kind);
+    else next.delete(kind);
+    setOptional(next);
+    // Turning one on should show it, even if the pill was switched off before.
+    if (on) setActive((prev) => new Set(prev).add(kind));
+    void keep(
+      KEYS.presentationsChecks,
+      Object.fromEntries(OPTIONAL_KINDS.map((k) => [k, next.has(k)]))
+    );
   }
 
   function toggleRow(key: string) {
@@ -577,13 +600,19 @@ export function Presentations() {
           {busy && <span className="editor-count">{f(p.scanning, { n: busy })}</span>}
         </div>
 
-        {/* An opt-in check, offered where the folder is chosen rather than
-            among the findings: it changes what counts as a problem, which is
+        {/* The opt-in checks, offered where the folder is chosen rather than
+            among the findings: they change what counts as a problem, which is
             a decision made before reading rather than while sifting. */}
-        <label className="option" title={p.commaCheckWhy}>
-          <input type="checkbox" checked={commas} onChange={(e) => toggleCommas(e.target.checked)} />
-          <span>{p.commaCheck}</span>
-        </label>
+        {OPTIONAL_KINDS.map((kind) => (
+          <label className="option" key={kind} title={p.optionalWhy[kind]}>
+            <input
+              type="checkbox"
+              checked={optional.has(kind)}
+              onChange={(e) => toggleOptional(kind, e.target.checked)}
+            />
+            <span>{p.optionalChecks[kind]}</span>
+          </label>
+        ))}
 
         <p className="why">
           {access === "readwrite"

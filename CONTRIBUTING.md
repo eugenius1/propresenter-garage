@@ -227,6 +227,13 @@ name on extraction. Modern extractors honour it and a real library is full of
 accented names, so the flag stays; `src/lib/__tests__/zip.test.ts` asks
 Info-ZIP only to verify the container and leaves extraction to Python.
 
+**An ellipsis is not a full stop.** "Gloire..." and "Gloire…" mark a line
+running on into the next slide, which is the opposite of the thing the
+trailing-full-stop check reports -- 30 of them in a real library of 24,181
+lines. `TRAILING_PUNCTUATION` in `src/lib/presentation.ts` carries the
+lookbehind that separates the two, and it is exported as a pattern rather than
+a finished expression so the check and the fix cannot disagree about it.
+
 **A real library holds files that are not presentations.** One turned up a
 51 KB file named `.pro`, and macOS scatters `._Song.pro` resource forks through
 any folder that has been near a USB stick. `isPresentationFile` excludes
@@ -274,7 +281,7 @@ eyeballing a new colour.
 ## Conventions
 
 - **`npm run check` must pass.** Codegen, `oxlint`, both TypeScript projects,
-  and the full suite -- 360 tests. The ones that matter most only run where
+  and the full suite -- 375 tests. The ones that matter most only run where
   `PP_LIBRARY_DIR` points at a real library; CI skips them.
 - **Every source file** opens with `// SPDX-License-Identifier: GPL-3.0-or-later`
   and `// Copyright (C) 2026 Eusebius Ngemera`.

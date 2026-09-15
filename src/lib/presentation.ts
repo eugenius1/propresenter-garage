@@ -56,14 +56,18 @@ export type TextIssueKind =
   | "blankLine"
   | "repeatedSpace"
   /**
-   * A line whose visible text ends with a comma.
+   * A line whose visible text ends with punctuation that carries on.
    *
-   * Reported like any other, but off by default in the interface: a comma at
-   * the end of a line is ordinary punctuation in prose and only looks wrong
-   * once lyrics are broken across slides. Whether it is a problem is a matter
-   * of house style, so it is asked for rather than assumed.
+   * Reported like any other, but off by default in the interface: a comma or a
+   * full stop at the end of a line is ordinary punctuation in prose, and only
+   * looks wrong once lyrics are broken across slides. Whether it is a problem
+   * is a matter of house style, so each is asked for rather than assumed --
+   * and separately, since a house that strips commas may well keep the full
+   * stop that ends a verse. In a real library of 24,181 lines, 999 end with a
+   * full stop against 43 with a semicolon, which is the difference between a
+   * habit and a slip.
    */
-  | "trailingComma";
+  | TrailingPunctuation;
 
 export interface TextIssue {
   kind: TextIssueKind;
@@ -224,14 +228,43 @@ const LEADING_SPACE = new RegExp(`^${SPACE_CLASS}`);
 const TRAILING_SPACE = new RegExp(`${SPACE_CLASS}$`);
 const REPEATED_SPACE = new RegExp(`\\S${RUN_CLASS}{2,}\\S`);
 /**
- * A line whose visible text ends with a comma.
+ * Punctuation a line ends with.
  *
  * Trailing whitespace is allowed for rather than required, so "nom," and
- * "nom, " are the same finding -- and so is "nom ,", since a space before
- * the comma does not change what the line ends with. Any stray space is
- * still reported separately by the checks above.
+ * "nom, " are the same finding -- and so is "nom ,", since a space before the
+ * comma does not change what the line ends with. Any stray space is still
+ * reported separately by the checks above.
  */
-const TRAILING_COMMA = new RegExp(`,${SPACE_CLASS}*$`);
+export type TrailingPunctuation = "trailingComma" | "trailingSemicolon" | "trailingFullStop";
+
+/**
+ * What each trailing-punctuation check looks for, as a pattern rather than a
+ * finished expression.
+ *
+ * Exported in this form so the check and the fix are built from one
+ * definition: the check anchors it to the end of a line, the fix takes the
+ * whitespace around it too, and neither can drift from the other.
+ */
+export const TRAILING_PUNCTUATION: Record<TrailingPunctuation, string> = {
+  trailingComma: ",",
+  trailingSemicolon: ";",
+  /**
+   * A single full stop, and deliberately not an ellipsis.
+   *
+   * "Gloire..." and "Gloire\u2026" are a line running on into the next slide,
+   * which is the opposite of the thing being reported -- 30 of them in a real
+   * library of 24,181 lines. The lookbehind is what separates the two: the
+   * last stop of "..." has another before it, so it never matches.
+   */
+  trailingFullStop: "(?<![.\\u2026])\\.",
+};
+
+const ENDS_WITH = Object.fromEntries(
+  Object.entries(TRAILING_PUNCTUATION).map(([kind, mark]) => [
+    kind,
+    new RegExp(`${mark}${SPACE_CLASS}*$`),
+  ])
+) as Record<TrailingPunctuation, RegExp>;
 
 /**
  * Check one presentation's text.
@@ -278,7 +311,9 @@ export function checkPresentation(
       if (LEADING_SPACE.test(line.text)) issues.push(at("leadingSpace", line));
       if (TRAILING_SPACE.test(line.text)) issues.push(at("trailingSpace", line));
       if (REPEATED_SPACE.test(line.text)) issues.push(at("repeatedSpace", line));
-      if (TRAILING_COMMA.test(line.text)) issues.push(at("trailingComma", line));
+      for (const kind of Object.keys(ENDS_WITH) as TrailingPunctuation[]) {
+        if (ENDS_WITH[kind].test(line.text)) issues.push(at(kind, line));
+      }
     });
   }
 

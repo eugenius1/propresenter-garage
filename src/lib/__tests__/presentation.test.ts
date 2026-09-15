@@ -47,8 +47,8 @@ describe("reading a presentation", () => {
   it("walks cues into text boxes and names their section", () => {
     const doc = readPresentation(decodePresentation(syntheticTextPresentation()));
     expect(doc.name).toBe("Checked Song");
-    expect(doc.slideCount).toBe(7);
-    expect(doc.textBoxes).toHaveLength(7);
+    expect(doc.slideCount).toBe(8);
+    expect(doc.textBoxes).toHaveLength(8);
     expect(doc.textBoxes[0].groupName).toBe("Verse");
     expect(doc.textBoxes[3].groupName).toBe("Chorus");
   });
@@ -137,6 +137,53 @@ describe("trailing commas", () => {
     expect(issuesOf("leadingSpace")).toHaveLength(1);
     expect(issuesOf("trailingSpace")).toHaveLength(1);
     expect(issuesOf("repeatedSpace")).toHaveLength(1);
+  });
+});
+
+describe("trailing semicolons and full stops", () => {
+  it("finds a line that ends with a semicolon", () => {
+    const found = issuesOf("trailingSemicolon");
+    expect(found).toHaveLength(1);
+    expect(found[0].text).toBe("Tu es saint;");
+  });
+
+  it("finds a line that ends with a full stop", () => {
+    const found = issuesOf("trailingFullStop");
+    expect(found).toHaveLength(1);
+    expect(found[0].text).toBe("je te loue.");
+  });
+
+  it("says nothing about a line that ends in an ellipsis", () => {
+    // Both spellings. An ellipsis is a line running on into the next slide,
+    // which is the opposite of the thing being reported -- 30 of them in a
+    // real library of 24,181 lines.
+    const doc = readPresentation(decodePresentation(syntheticTextPresentation()));
+    const punctuation = doc.textBoxes[7];
+    expect(punctuation.lines.map((l) => l.text)).toEqual([
+      "Tu es saint;",
+      "je te loue.",
+      "et je chanterai\u2026",
+      "Gloire...",
+    ]);
+    expect(report().issues.filter((i) => i.text.includes("chanterai"))).toEqual([]);
+    expect(report().issues.filter((i) => i.text === "Gloire...")).toEqual([]);
+  });
+
+  it("keeps the three punctuation counts independent", () => {
+    // The punctuation slide carries no whitespace problems and no commas, so
+    // switching one check on cannot inflate what another reports.
+    expect(issuesOf("trailingComma")).toHaveLength(2);
+    expect(issuesOf("leadingSpace")).toHaveLength(1);
+    expect(issuesOf("trailingSpace")).toHaveLength(1);
+  });
+
+  it("treats a mark with trailing whitespace after it the same way", () => {
+    const report = checkPresentation("One.pro", boxOf("Tu es saint. ", "je te loue ;"));
+    expect(report.issues.map((i) => i.kind)).toEqual([
+      "trailingSpace",
+      "trailingFullStop",
+      "trailingSemicolon",
+    ]);
   });
 });
 

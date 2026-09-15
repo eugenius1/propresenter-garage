@@ -585,7 +585,11 @@ select.mini { max-width: 9em; }
 .tag.leadingSpace, .tag.trailingSpace { background: var(--renamed-soft); color: var(--renamed-strong); }
 .tag.blankLine { background: var(--moved-soft); color: var(--moved-strong); }
 .tag.repeatedSpace { background: var(--retimed-soft); color: var(--retimed-strong); }
-.tag.trailingComma { background: var(--relinked-soft); color: var(--relinked-strong); }
+/* One hue for all three trailing-punctuation checks: they are one family and
+   the label already says which mark it is. */
+.tag.trailingComma, .tag.trailingSemicolon, .tag.trailingFullStop {
+  background: var(--relinked-soft); color: var(--relinked-strong);
+}
 
 /* A finding row that also offers a fix: the tick sits level with the tags, and
    the line as it would read sits under the line as it stands. */

@@ -253,6 +253,8 @@ export const en = {
         blankLine: "Blank line",
         repeatedSpace: "Double space",
         trailingComma: "Trailing comma",
+        trailingSemicolon: "Trailing semicolon",
+        trailingFullStop: "Trailing full stop",
       },
       why: {
         leadingSpace: "The line begins with a space, which shifts it right on screen.",
@@ -261,12 +263,26 @@ export const en = {
         repeatedSpace: "Two or more spaces in a row inside the line.",
         trailingComma:
           "The line ends with a comma. Fine in prose, but it reads oddly at the end of a slide.",
+        trailingSemicolon:
+          "The line ends with a semicolon, which almost never survives being broken across slides.",
+        trailingFullStop:
+          "The line ends with a full stop. A line trailing off into the next slide is written with an ellipsis, which is left alone.",
       },
       emptyBoxesNote:
         "Text boxes with no text at all are counted, not listed: ProPresenter themes leave them on slides as a matter of course.",
-      commaCheck: "Also look for trailing commas",
-      commaCheckWhy:
-        "Off by default: a comma at the end of a line is ordinary punctuation, and whether it belongs on a slide is a matter of house style.",
+      optionalChecks: {
+        trailingComma: "Also look for trailing commas",
+        trailingSemicolon: "Also look for trailing semicolons",
+        trailingFullStop: "Also look for trailing full stops",
+      },
+      optionalWhy: {
+        trailingComma:
+          "Off by default: a comma at the end of a line is ordinary punctuation, and whether it belongs on a slide is a matter of house style.",
+        trailingSemicolon:
+          "Off by default, and rare: 43 lines in a library of 24,000 end with one.",
+        trailingFullStop:
+          "Off by default, and much the commonest of the three: a house that strips commas may well keep the full stop that ends a verse.",
+      },
       showAll: "Show all {n}",
 
       fix: "Fix these",

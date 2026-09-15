@@ -261,6 +261,8 @@ export const fr: Dictionary = {
         blankLine: "Ligne vide",
         repeatedSpace: "Espace double",
         trailingComma: "Virgule finale",
+        trailingSemicolon: "Point-virgule final",
+        trailingFullStop: "Point final",
       },
       why: {
         leadingSpace: "La ligne commence par une espace, ce qui la décale vers la droite à l'écran.",
@@ -269,12 +271,26 @@ export const fr: Dictionary = {
         repeatedSpace: "Deux espaces ou plus à la suite dans la ligne.",
         trailingComma:
           "La ligne se termine par une virgule. Normal dans un texte, mais cela se remarque en fin de diapositive.",
+        trailingSemicolon:
+          "La ligne se termine par un point-virgule, qui survit rarement à une coupure entre diapositives.",
+        trailingFullStop:
+          "La ligne se termine par un point. Une ligne qui se poursuit sur la diapositive suivante s’écrit avec des points de suspension, qui sont laissés tels quels.",
       },
       emptyBoxesNote:
         "Les zones de texte sans aucun texte sont comptées, pas listées : les thèmes ProPresenter en laissent systématiquement sur les diapositives.",
-      commaCheck: "Rechercher aussi les virgules finales",
-      commaCheckWhy:
-        "Désactivé par défaut : une virgule en fin de ligne est une ponctuation ordinaire, et sa place sur une diapositive relève du style de la maison.",
+      optionalChecks: {
+        trailingComma: "Rechercher aussi les virgules finales",
+        trailingSemicolon: "Rechercher aussi les points-virgules finaux",
+        trailingFullStop: "Rechercher aussi les points finaux",
+      },
+      optionalWhy: {
+        trailingComma:
+          "Désactivé par défaut : une virgule en fin de ligne est une ponctuation ordinaire, et sa place sur une diapositive relève du style de la maison.",
+        trailingSemicolon:
+          "Désactivé par défaut, et rare : 43 lignes sur 24 000 dans une bibliothèque réelle se terminent ainsi.",
+        trailingFullStop:
+          "Désactivé par défaut, et de loin le plus fréquent des trois : une maison qui supprime les virgules garde souvent le point qui termine un couplet.",
+      },
       showAll: "Tout afficher ({n})",
 
       fix: "Corriger",
