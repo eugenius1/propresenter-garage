@@ -148,7 +148,55 @@ export function Presentations() {
   const [running, setRunning] = useState(false);
   const [writing, setWriting] = useState<string | null>(null);
 
-  const reports = useMemo(() => (scanned ?? []).map((one) => one.report), [scanned]);
+  /**
+   * The files in alphabetical order.
+   *
+   * Sorted here rather than in the scan because the order is a display
+   * decision and depends on the language: a collator puts "élever" beside
+   * "elever" rather than after "z", and `numeric` keeps "Psaume 9" ahead of
+   * "Psaume 10". Doing it at render means switching language re-sorts rather
+   * than leaving the previous locale's order on screen.
+   *
+   * By the name on screen rather than by the filename, because those are not
+   * the same thing: the heading is the presentation's own name, which a reader
+   * can change without renaming the file. Sorting by the path would leave a
+   * list that is ordered by something invisible and looks wrong. The path
+   * breaks ties, so two songs of the same name always sit in the same order.
+   */
+  const collator = useMemo(
+    () => new Intl.Collator(t.meta.localeTag, { numeric: true, sensitivity: "base" }),
+    [t.meta.localeTag]
+  );
+
+  const examined = useMemo(() => {
+    const label = (one: Examined) => one.report.name || one.report.filename;
+    return [...(scanned ?? [])].sort(
+      (a, b) =>
+        collator.compare(label(a), label(b)) ||
+        collator.compare(a.report.filename, b.report.filename)
+    );
+  }, [scanned, collator]);
+
+  const reports = useMemo(() => examined.map((one) => one.report), [examined]);
+
+  /**
+   * The folder each file sits in, shown only when they do not all share one.
+   *
+   * A library kept in subfolders can hold two songs of the same name, and the
+   * heading is the presentation's own name rather than its filename -- so
+   * without this there would be no way to tell them apart. Judged across every
+   * file scanned rather than only those with findings, so the folder does not
+   * appear and disappear as the filters change.
+   */
+  const folderOf = (filename: string) => filename.split("/").slice(0, -1).join("/");
+
+  const showFolders = useMemo(
+    () => new Set(reports.map((r) => folderOf(r.filename))).size > 1,
+    [reports]
+  );
+
+  const folderLabel = (filename: string) =>
+    [folderName, folderOf(filename)].filter(Boolean).join("/");
 
   const kinds = useMemo(
     () => ALL_KINDS.filter((kind) => commas || !OPTIONAL_KINDS.includes(kind)),
@@ -307,13 +355,13 @@ export function Presentations() {
    */
   const rows = useMemo(() => {
     const byFile = new Map<string, Row[]>();
-    for (const { report, fixable } of scanned ?? []) {
+    for (const { report, fixable } of examined) {
       const issues = report.issues.filter((i) => shown.has(i.kind));
       if (issues.length === 0) continue;
       byFile.set(report.filename, rowsOf(report.filename, issues, planFixes(fixable, issues)));
     }
     return byFile;
-  }, [scanned, shown]);
+  }, [examined, shown]);
 
   /** The fixes still ticked, grouped by file, in the order they were listed. */
   const chosen = useMemo(
@@ -704,6 +752,9 @@ export function Presentations() {
             return (
               <div className="finding" key={report.filename}>
                 <h3>
+                  {showFolders && (
+                    <span className="finding-folder">{folderLabel(report.filename)}</span>
+                  )}
                   {report.name || report.filename}
                   <span className="count-badge">{report.error ? "!" : num(lines.length)}</span>
                 </h3>

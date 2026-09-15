@@ -351,15 +351,25 @@ const TEXT_PRESENTATION = {
   ],
 };
 
-let cachedTextPresentation: Uint8Array | undefined;
+const cachedTextPresentations = new Map<string, Uint8Array>();
 
-/** A presentation with known text problems, for the checker's tests. */
-export function syntheticTextPresentation(): Uint8Array {
+/**
+ * A presentation with known text problems, for the checker's tests.
+ *
+ * Takes a name because a presentation's own name is not its filename, and
+ * anything that orders or labels a list of them needs two files that differ by
+ * one and not the other.
+ */
+export function syntheticTextPresentation(name = "Checked Song"): Uint8Array {
+  const existing = cachedTextPresentations.get(name);
+  if (existing) return existing;
+
   const Presentation = root.lookupType("rv.data.Presentation");
-  cachedTextPresentation ??= Presentation.encode(
-    Presentation.fromObject(TEXT_PRESENTATION)
+  const bytes = Presentation.encode(
+    Presentation.fromObject({ ...TEXT_PRESENTATION, name })
   ).finish();
-  return cachedTextPresentation;
+  cachedTextPresentations.set(name, bytes);
+  return bytes;
 }
 
 let cachedPresentation: Uint8Array | undefined;

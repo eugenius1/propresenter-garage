@@ -373,7 +373,11 @@ export function examine(filename: string, bytes: Uint8Array): Examined {
     return {
       report: {
         filename,
-        name: filename,
+        // The presentation's own name is inside the file and the file will not
+        // open, so its last path segment is the best that can be said. The
+        // full path is already `filename`, and the interface shows the folder
+        // separately where it matters.
+        name: filename.split("/").pop() ?? filename,
         slideCount: 0,
         issues: [],
         emptyTextBoxes: 0,

@@ -135,6 +135,105 @@ describe("finding and showing fixes", () => {
   });
 });
 
+describe("the order files are listed in", () => {
+  /**
+   * The file headings, in the order they appear on screen.
+   *
+   * The count badge lives inside the heading, so it is dropped by element
+   * rather than by stripping trailing digits -- which would also eat the 9 in
+   * "Psaume 9".
+   */
+  const headings = () =>
+    screen.getAllByRole("heading", { level: 3 }).map((h) =>
+      [...h.childNodes]
+        .filter((n) => !(n instanceof Element && n.classList.contains("count-badge")))
+        .map((n) => n.textContent)
+        .join("")
+    );
+
+  /** A file whose presentation name differs from its path, as real ones do. */
+  const put = (path: string, name: string) => store.set(path, syntheticTextPresentation(name));
+
+  it("sorts by the name on screen, not by whatever the folder handed back", async () => {
+    store.clear();
+    put("Chants/zzz-01.pro", "Zacharie");
+    put("Chants/aaa-02.pro", "Merveilleux");
+    put("Chants/mmm-03.pro", "Acclamons");
+
+    const user = userEvent.setup();
+    renderTool();
+    await openFolder(user);
+
+    // Alphabetical by the heading, which is the presentation's own name --
+    // sorting by the filename would have produced exactly the reverse.
+    expect(headings()).toEqual(["Acclamons", "Merveilleux", "Zacharie"]);
+  });
+
+  it("ignores accents when sorting, and counts numbers as numbers", async () => {
+    // A French library sorts "Élever" beside "Elever", not after "Z", and
+    // "Psaume 9" comes before "Psaume 10" rather than after it.
+    store.clear();
+    for (const name of ["Psaume 10", "Zacharie", "Psaume 9", "Élever"]) {
+      put(`Chants/${name}.pro`, name);
+    }
+
+    const user = userEvent.setup();
+    renderTool();
+    await openFolder(user);
+
+    expect(headings()).toEqual(["Élever", "Psaume 9", "Psaume 10", "Zacharie"]);
+  });
+
+  it("puts two songs of the same name in a settled order", async () => {
+    store.clear();
+    put("Noël/Acclamons.pro", "Acclamons");
+    put("Chants/Acclamons.pro", "Acclamons");
+
+    const user = userEvent.setup();
+    const view = renderTool();
+    await openFolder(user);
+
+    // The names tie, so the path decides -- and the path is what tells them
+    // apart on screen.
+    expect([...view.container.querySelectorAll(".finding-folder")].map((e) => e.textContent)).toEqual([
+      "Libraries/Chants",
+      "Libraries/Noël",
+    ]);
+  });
+
+  it("names the folder only when the files are not all in one", async () => {
+    store.clear();
+    put("Chants/Acclamons.pro", "Acclamons");
+    put("Chants/Zacharie.pro", "Zacharie");
+
+    const user = userEvent.setup();
+    const view = renderTool();
+    await openFolder(user);
+    expect(view.container.querySelector(".finding-folder")).toBeNull();
+
+    put("Noël/Merveilleux.pro", "Merveilleux");
+    await user.click(screen.getByRole("button", { name: "Change" }));
+    await waitFor(() =>
+      expect(
+        [...view.container.querySelectorAll(".finding-folder")].map((e) => e.textContent)
+      ).toEqual(["Libraries/Chants", "Libraries/Noël", "Libraries/Chants"])
+    );
+  });
+
+  it("names an unreadable file by its own name, not its whole path", async () => {
+    store.clear();
+    store.set("Chants/Broken.pro", new Uint8Array([0x3c, 0xff, 0xfe]));
+    put("Noël/Zacharie.pro", "Zacharie");
+
+    const user = userEvent.setup();
+    renderTool();
+    await openFolder(user);
+
+    // The folder is named once, beside the heading -- not again inside it.
+    expect(headings()[0]).toBe("Libraries/ChantsBroken.pro");
+  });
+});
+
 describe("the guard before anything is written", () => {
   it("will not save until a backup has been taken", async () => {
     const user = userEvent.setup();
