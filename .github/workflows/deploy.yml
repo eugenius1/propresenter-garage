@@ -37,7 +37,7 @@ jobs:
 
       - run: npm run build
 
-      - uses: actions/configure-pages@v5
+      - uses: actions/configure-pages@v6
 
       # No .nojekyll needed: the Actions deployment serves the artifact
       # directly and never runs Jekyll over it.
