@@ -41,7 +41,7 @@ jobs:
 
       # No .nojekyll needed: the Actions deployment serves the artifact
       # directly and never runs Jekyll over it.
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/upload-pages-artifact@v5
         with:
           path: dist
 
