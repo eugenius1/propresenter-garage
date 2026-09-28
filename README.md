@@ -23,11 +23,11 @@ while still taking up room.
 
 Trailing punctuation is checked too — commas, semicolons and full stops — each
 switched on separately, since whether they belong on a slide is a matter of
-house style and not one decision: a library of 24,000 lines ends 999 of them
-with a full stop and 43 with a semicolon, so a house that strips commas may
-well keep the full stop that closes a verse. A line ending in an ellipsis is
-left alone either way: that is a line running on into the next slide, which is
-the opposite of the problem.
+house style and not one decision: a library of 24,000 lines ends nearly a
+thousand of them with a full stop and 43 with a semicolon, so a house that
+strips commas may well keep the full stop that closes a verse. A line ending
+in an ellipsis is left alone either way: that is a line running on into the
+next slide, which is the opposite of the problem.
 
 It can also put them right. Every fix is shown first as the line is now and
 as it would read, one row per line and a tick beside each, so nothing is

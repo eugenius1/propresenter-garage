@@ -60,9 +60,9 @@ export type TextIssueKind =
    * looks wrong once lyrics are broken across slides. Whether it is a problem
    * is a matter of house style, so each is asked for rather than assumed --
    * and separately, since a house that strips commas may well keep the full
-   * stop that ends a verse. In a real library of 24,181 lines, 999 end with a
-   * full stop against 43 with a semicolon, which is the difference between a
-   * habit and a slip.
+   * stop that ends a verse. In a real library of 24,181 lines, nearly a
+   * thousand end with a full stop against 43 with a semicolon, which is the
+   * difference between a habit and a slip.
    */
   | TrailingPunctuation;
 
