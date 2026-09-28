@@ -1,6 +1,3 @@
-// SPDX-License-Identifier: GPL-3.0-or-later
-// Copyright (C) 2026 Eusebius Ngemera
-
 import { checkTypeFidelity, messageType, type FidelityReport, type RawDoc } from "./decode";
 import { decodeRtf, encodeRtf, extractLines, type RtfLine } from "./rtf";
 

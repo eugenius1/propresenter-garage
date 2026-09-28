@@ -11,3 +11,6 @@ src/generated/
 # The pattern is deliberately broad: it used to name one filename, which left
 # every other scratch copy dropped in here unprotected.
 public/__dev-*
+
+# Written by `npm run coverage` and by the suite in CI.
+coverage/

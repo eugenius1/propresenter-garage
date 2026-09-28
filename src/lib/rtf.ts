@@ -1,6 +1,3 @@
-// SPDX-License-Identifier: GPL-3.0-or-later
-// Copyright (C) 2026 Eusebius Ngemera
-
 /**
  * Just enough RTF to recover the text a slide actually shows -- and to put it
  * back.

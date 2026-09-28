@@ -1,6 +1,3 @@
-<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
-<!-- Copyright (C) 2026 Eusebius Ngemera -->
-
 # Notes for coding agents
 
 Deliberately short: this file is loaded into context on every session, so it

@@ -1,6 +1,3 @@
-// SPDX-License-Identifier: GPL-3.0-or-later
-// Copyright (C) 2026 Eusebius Ngemera
-
 import { useMemo, useState } from "react";
 import { auditLibrary, type FindingId } from "../lib/audit";
 import { diffLibraries } from "../lib/diff";

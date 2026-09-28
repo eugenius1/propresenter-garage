@@ -1,6 +1,3 @@
-// SPDX-License-Identifier: GPL-3.0-or-later
-// Copyright (C) 2026 Eusebius Ngemera
-
 import { beforeAll, describe, expect, it } from "vitest";
 import {
   applyEdits,

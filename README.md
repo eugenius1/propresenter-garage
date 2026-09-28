@@ -1,5 +1,10 @@
 # ProPresenter Garage
 
+[![CI](https://github.com/eugenius1/propresenter-garage/actions/workflows/ci.yml/badge.svg)](https://github.com/eugenius1/propresenter-garage/actions/workflows/ci.yml)
+[![Deploy](https://github.com/eugenius1/propresenter-garage/actions/workflows/deploy.yml/badge.svg)](https://github.com/eugenius1/propresenter-garage/actions/workflows/deploy.yml)
+[![codecov](https://codecov.io/gh/eugenius1/propresenter-garage/graph/badge.svg)](https://codecov.io/gh/eugenius1/propresenter-garage)
+[![Licence: GPL v3](https://img.shields.io/badge/licence-GPLv3-blue.svg)](LICENSE)
+
 An installable web app holding a suite of utilities for ProPresenter 7 files.
 
 **<https://eusebius.tech/propresenter-garage/>**
@@ -92,8 +97,6 @@ before changing anything. Coding agents should start at
 
 ## Licence
 
-Copyright (C) 2026 Eusebius Ngemera
-
 This program is free software: you can redistribute it and/or modify it under
 the terms of the GNU General Public License as published by the Free Software
 Foundation, either version 3 of the License, or (at your option) any later
@@ -104,9 +107,6 @@ WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
 PARTICULAR PURPOSE. See the GNU General Public License for more details. You
 should have received a copy of the licence along with this program — see
 [LICENSE](LICENSE), or <https://www.gnu.org/licenses/>.
-
-Source files carry an [SPDX](https://spdx.dev/) header rather than the full
-notice, which keeps them readable while staying machine-checkable.
 
 The vendored schema in `proto/` is a separate work, MIT-licensed by its author
 and kept under its own notice at

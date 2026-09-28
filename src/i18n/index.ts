@@ -1,6 +1,3 @@
-// SPDX-License-Identifier: GPL-3.0-or-later
-// Copyright (C) 2026 Eusebius Ngemera
-
 /**
  * Public surface of the translation layer.
  *

@@ -1,6 +1,3 @@
-// SPDX-License-Identifier: GPL-3.0-or-later
-// Copyright (C) 2026 Eusebius Ngemera
-
 import type { ReactNode } from "react";
 import { FINDING_DOM_ID, type AuditResult, type FindingId } from "../lib/audit";
 import type { MediaLibrary } from "../lib/model";

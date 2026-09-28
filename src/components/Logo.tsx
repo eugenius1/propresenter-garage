@@ -1,6 +1,3 @@
-// SPDX-License-Identifier: GPL-3.0-or-later
-// Copyright (C) 2026 Eusebius Ngemera
-
 /**
  * The app mark: two columns of bars, reading as one list set against another.
  *

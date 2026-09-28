@@ -1,6 +1,3 @@
-// SPDX-License-Identifier: GPL-3.0-or-later
-// Copyright (C) 2026 Eusebius Ngemera
-
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import { VitePWA } from "vite-plugin-pwa";
@@ -47,5 +44,13 @@ export default defineConfig({
     environment: "node",
     include: ["src/**/*.test.{ts,tsx}"],
     setupFiles: ["src/__tests__/setup.ts"],
+    // Only CI measures coverage, for the Codecov upload; locally it would slow
+    // every `npm test` for a number nobody reads. `npm run coverage` forces it.
+    coverage: {
+      enabled: !!process.env.CI,
+      include: ["src/**"],
+      exclude: ["src/**/__tests__/**", "src/**/*.test.{ts,tsx}", "src/generated/**"],
+      reporter: ["lcov", "text-summary"],
+    },
   },
 });

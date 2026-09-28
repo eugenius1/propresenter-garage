@@ -1,6 +1,3 @@
-// SPDX-License-Identifier: GPL-3.0-or-later
-// Copyright (C) 2026 Eusebius Ngemera
-
 import { useEffect, useMemo, useRef, useState } from "react";
 import { FolderOpen, X } from "lucide-react";
 import {
