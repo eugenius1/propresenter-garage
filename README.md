@@ -3,7 +3,6 @@
 [![CI](https://github.com/eugenius1/propresenter-garage/actions/workflows/ci.yml/badge.svg)](https://github.com/eugenius1/propresenter-garage/actions/workflows/ci.yml)
 [![Deploy](https://github.com/eugenius1/propresenter-garage/actions/workflows/deploy.yml/badge.svg)](https://github.com/eugenius1/propresenter-garage/actions/workflows/deploy.yml)
 [![codecov](https://codecov.io/gh/eugenius1/propresenter-garage/graph/badge.svg)](https://codecov.io/gh/eugenius1/propresenter-garage)
-[![Licence: GPL v3](https://img.shields.io/badge/licence-GPLv3-blue.svg)](LICENSE)
 
 An installable web app holding a suite of utilities for ProPresenter 7 files.
 
