@@ -38,9 +38,9 @@ import { useI18n } from "../i18n";
  * than sending the whole library back through the reader.
  *
  * One switch each rather than one for all three. They are not one decision: a
- * library of 24,181 lines ends 999 of them with a full stop and 43 with a
- * semicolon, and a house that strips commas may well keep the full stop that
- * closes a verse.
+ * library of 24,181 lines ends nearly a thousand of them with a full stop and
+ * 43 with a semicolon, and a house that strips commas may well keep the full
+ * stop that closes a verse.
  */
 const ALL_KINDS: TextIssueKind[] = [
   "leadingSpace",
