@@ -1,6 +1,3 @@
-// SPDX-License-Identifier: GPL-3.0-or-later
-// Copyright (C) 2026 Eusebius Ngemera
-
 // Re-vendor proto/ from upstream and record exactly which commit it came from.
 //
 //   node scripts/update-protos.mjs [ref]

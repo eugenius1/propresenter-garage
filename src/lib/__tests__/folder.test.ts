@@ -1,6 +1,3 @@
-// SPDX-License-Identifier: GPL-3.0-or-later
-// Copyright (C) 2026 Eusebius Ngemera
-
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { folderAccess, isPresentationFile, pickFolder, readFolderFromInput } from "../folder";
 

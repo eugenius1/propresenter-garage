@@ -1,6 +1,3 @@
-// SPDX-License-Identifier: GPL-3.0-or-later
-// Copyright (C) 2026 Eusebius Ngemera
-
 import { decodeMediaDocument } from "./model";
 import { encodeDocument, messageType, type RawDoc } from "./decode";
 

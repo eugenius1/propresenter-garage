@@ -1,6 +1,3 @@
-// SPDX-License-Identifier: GPL-3.0-or-later
-// Copyright (C) 2026 Eusebius Ngemera
-
 // Copy index.html to 404.html after building.
 //
 // GitHub Pages serves only static files and has no rewrite rules, so a deep

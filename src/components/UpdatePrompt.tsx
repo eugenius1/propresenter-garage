@@ -1,6 +1,3 @@
-// SPDX-License-Identifier: GPL-3.0-or-later
-// Copyright (C) 2026 Eusebius Ngemera
-
 import { useEffect, useState } from "react";
 import { RefreshCw, X } from "lucide-react";
 import { useI18n } from "../i18n";

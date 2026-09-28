@@ -1,6 +1,3 @@
-<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
-<!-- Copyright (C) 2026 Eusebius Ngemera -->
-
 # Developing ProPresenter Garage
 
 Everything a contributor needs. The [README](README.md) is for people using the
@@ -24,6 +21,12 @@ blocked on `file://`.
 `npm run check` is the gate, and it is the one CI runs. Run it before every
 commit — it includes the codegen step, so it also catches the case where a
 clean checkout would not build.
+
+In CI the suite also measures coverage and uploads `coverage/lcov.info` to
+[Codecov](https://codecov.io/gh/eugenius1/propresenter-garage), through OIDC so
+there is no token to keep. `npm run coverage` gives the same report locally.
+Coverage only counts what CI can run, so the tests that need a real library
+show up as gaps there.
 
 ## How it reads the files
 
@@ -295,8 +298,9 @@ eyeballing a new colour.
 - **`npm run check` must pass.** Codegen, `oxlint`, both TypeScript projects,
   and the full suite -- 387 tests. The ones that matter most only run where
   `PP_LIBRARY_DIR` points at a real library; CI skips them.
-- **Every source file** opens with `// SPDX-License-Identifier: GPL-3.0-or-later`
-  and `// Copyright (C) 2026 Eusebius Ngemera`.
+- **No licence headers in source files**: no `SPDX-License-Identifier` line
+  and no `Copyright (C)` line. `LICENSE` and the `license` field in
+  `package.json` cover the whole repository.
 - **Comments explain why, not what.** `src/lib/rtf.ts` and `src/lib/decode.ts`
   are the register to aim for: each one says what went wrong without it.
 - **Every user-visible string goes in both dictionaries.** `src/i18n/en.ts` is

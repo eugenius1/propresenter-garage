@@ -1,6 +1,3 @@
-// SPDX-License-Identifier: GPL-3.0-or-later
-// Copyright (C) 2026 Eusebius Ngemera
-
 /** @vitest-environment jsdom */
 
 import { render, screen, waitFor, within } from "@testing-library/react";

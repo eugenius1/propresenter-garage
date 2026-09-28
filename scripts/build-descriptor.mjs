@@ -1,6 +1,3 @@
-// SPDX-License-Identifier: GPL-3.0-or-later
-// Copyright (C) 2026 Eusebius Ngemera
-
 // Build-time step: collapse the vendored .proto tree into one JSON descriptor.
 // Shipping the descriptor instead of the .proto files means the app never parses
 // schema text at runtime -- protobuf.js loads it via Root.fromJSON() instantly.

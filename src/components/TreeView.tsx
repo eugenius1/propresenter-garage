@@ -1,6 +1,3 @@
-// SPDX-License-Identifier: GPL-3.0-or-later
-// Copyright (C) 2026 Eusebius Ngemera
-
 import { useMemo, useState } from "react";
 import type { MediaLibrary, PlaylistNode } from "../lib/model";
 import { fold } from "../lib/search";

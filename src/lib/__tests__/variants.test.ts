@@ -1,6 +1,3 @@
-// SPDX-License-Identifier: GPL-3.0-or-later
-// Copyright (C) 2026 Eusebius Ngemera
-
 import { beforeAll, describe, expect, it as baseIt } from "vitest";
 import { encodeDocument } from "../decode";
 import { buildLibrary, decodeMediaDocument } from "../model";

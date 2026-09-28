@@ -1,6 +1,3 @@
-// SPDX-License-Identifier: GPL-3.0-or-later
-// Copyright (C) 2026 Eusebius Ngemera
-
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import App from "./App";

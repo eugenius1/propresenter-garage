@@ -1,6 +1,3 @@
-// SPDX-License-Identifier: GPL-3.0-or-later
-// Copyright (C) 2026 Eusebius Ngemera
-
 import { useMemo, useState } from "react";
 import { planMerges, type MergeDirection } from "../lib/merge";
 import { exportFilename, exportOperations, OperationError } from "../lib/operations";

@@ -1,6 +1,3 @@
-// SPDX-License-Identifier: GPL-3.0-or-later
-// Copyright (C) 2026 Eusebius Ngemera
-
 import { ChevronDown, Globe } from "lucide-react";
 import { DICTIONARIES, LANGUAGES, useI18n, type Lang } from "../i18n";
 

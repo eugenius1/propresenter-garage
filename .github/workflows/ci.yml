@@ -15,6 +15,8 @@ concurrency:
 
 permissions:
   contents: read
+  # Codecov authenticates the upload with a GitHub OIDC token, not a secret.
+  id-token: write
 
 jobs:
   check:
@@ -37,7 +39,14 @@ jobs:
 
       # Generates the proto descriptor, then lints, typechecks and tests.
       # Tests needing a real ProPresenter file skip here by design -- see
-      # src/lib/__tests__/fixtures.ts.
+      # src/lib/__tests__/fixtures.ts. CI=true also turns on coverage.
       - run: npm run check
 
       - run: npm run build
+
+      # Reporting, not a gate: a Codecov outage must not block a merge.
+      - uses: codecov/codecov-action@v7
+        with:
+          use_oidc: true
+          files: coverage/lcov.info
+          fail_ci_if_error: false

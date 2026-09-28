@@ -1,6 +1,3 @@
-// SPDX-License-Identifier: GPL-3.0-or-later
-// Copyright (C) 2026 Eusebius Ngemera
-
 /**
  * English strings. This file is the canonical shape -- every other locale is
  * typed against it, so a missing or misspelled key fails the build rather than

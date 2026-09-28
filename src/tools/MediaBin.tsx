@@ -1,6 +1,3 @@
-// SPDX-License-Identifier: GPL-3.0-or-later
-// Copyright (C) 2026 Eusebius Ngemera
-
 import { useEffect, useMemo, useState } from "react";
 import { Info } from "lucide-react";
 import { FileSlot } from "../components/FileSlot";
