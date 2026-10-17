@@ -296,7 +296,7 @@ eyeballing a new colour.
 ## Conventions
 
 - **`npm run check` must pass.** Codegen, `oxlint`, both TypeScript projects,
-  and the full suite -- 387 tests. The ones that matter most only run where
+  and the full suite -- 407 tests. The ones that matter most only run where
   `PP_LIBRARY_DIR` points at a real library; CI skips them.
 - **No licence headers in source files**: no `SPDX-License-Identifier` line
   and no `Copyright (C)` line. `LICENSE` and the `license` field in

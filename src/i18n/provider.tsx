@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
-import { createI18n, detectLanguage, type I18n, type Lang } from "./core";
+import { createI18n, detectLanguage, isLang, type I18n, type Lang } from "./core";
 
 /**
  * React binding for the translation core.
@@ -8,10 +8,6 @@ import { createI18n, detectLanguage, type I18n, type Lang } from "./core";
  * -- which is what keeps fast refresh granular during development.
  */
 const STORAGE_KEY = "propresenter-garage.lang";
-
-function isLang(value: unknown): value is Lang {
-  return value === "en" || value === "fr";
-}
 
 /** A language the reader chose explicitly, which outranks the device default. */
 function storedLanguage(): Lang | null {

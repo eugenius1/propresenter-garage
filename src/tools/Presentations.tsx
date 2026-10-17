@@ -25,7 +25,13 @@ import {
   type FixOutcome,
   type LineFix,
 } from "../lib/fixes";
-import type { TextIssue, TextIssueKind, TrailingPunctuation } from "../lib/presentation";
+import {
+  SPACE_CLASS,
+  unreadableReport,
+  type TextIssue,
+  type TextIssueKind,
+  type TrailingPunctuation,
+} from "../lib/presentation";
 import { zip } from "../lib/zip";
 import { useI18n } from "../i18n";
 
@@ -89,8 +95,12 @@ function painter() {
 
 /** How far a run has got, and which phase it is. */
 interface Progress {
-  /** The phase's template: "Saving {n}…", "Backing up {n}…", "Fixing {n}…". */
-  verb: string;
+  /**
+   * Which phase: "Saving {n}…", "Backing up {n}…", "Fixing {n}…". A key into
+   * the dictionary rather than its text, so a language switched mid-run is
+   * the language the caption is in.
+   */
+  verb: "applying" | "backingUp" | "fixing";
   path: string;
   /** Files finished, and how many there are altogether. */
   done: number;
@@ -191,7 +201,9 @@ export function Presentations() {
   const [backup, setBackup] = useState<{ name: string; paths: Set<string> } | null>(null);
   const [outcomes, setOutcomes] = useState<FixOutcome[] | null>(null);
   const [savedZip, setSavedZip] = useState<string | null>(null);
-  const [fixError, setFixError] = useState<string | null>(null);
+  // The permission refusal is ours to word, so it is kept as a fact and
+  // worded at render; anything else is an error's own message.
+  const [fixError, setFixError] = useState<"permissionNeeded" | { message: string } | null>(null);
   /**
    * Whether a run is under way, and how far through it is.
    *
@@ -275,7 +287,19 @@ export function Presentations() {
     const out: Examined[] = [];
     for (const file of list) {
       setBusy(file.name);
-      out.push(examine(file.path, await file.read()));
+      let bytes: Uint8Array;
+      try {
+        bytes = await file.read();
+      } catch (e) {
+        // A file locked or removed mid-scan is that file's problem, not the
+        // folder's: report it like any other file that will not open.
+        out.push({
+          report: unreadableReport(file.path, "unreadable", (e as Error).message),
+          fixable: { name: file.path, slideCount: 0, textBoxes: [] },
+        });
+        continue;
+      }
+      out.push(examine(file.path, bytes));
     }
     setBusy(null);
     setScanned(out);
@@ -311,19 +335,20 @@ export function Presentations() {
 
       const name = (saved as { name?: string }).name ?? "";
       if ((await handlePermission(saved, "read")) === "granted") {
+        let folder;
         try {
-          const folder = await readFolderHandle(saved, isPresentationFile);
-          if (cancelled) return;
-          setFolderName(folder.name);
-          setFiles(folder.files);
-          setHandle(saved);
-          await scan(folder.files);
-          return;
+          folder = await readFolderHandle(saved, isPresentationFile);
         } catch {
           // The folder may have moved or been removed since.
           await forget(KEYS.presentationsFolder);
           return;
         }
+        if (cancelled) return;
+        setFolderName(folder.name);
+        setFiles(folder.files);
+        setHandle(saved);
+        await scan(folder.files);
+        return;
       }
 
       if (!cancelled) setPending({ handle: saved, name });
@@ -366,29 +391,30 @@ export function Presentations() {
   async function chooseFolder() {
     setError(null);
     setFellBack(false);
+    let folder;
     try {
-      const folder = await pickFolder(isPresentationFile, { write: false });
-      if (!folder) return;
-      setPending(null);
-      clearRun();
-      setFolderName(folder.name);
-      setFiles(folder.files);
-      setHandle(folder.handle ?? null);
-      // Only a real handle is worth keeping; the input fallback hands over
-      // copies with no path back to the folder.
-      if (folder.handle) void keep(KEYS.presentationsFolder, folder.handle);
-      await scan(folder.files);
-    } catch (e) {
-      setBusy(null);
+      folder = await pickFolder(isPresentationFile, { write: false });
+    } catch {
       // The picker can be unavailable for reasons the reader cannot act on --
       // an embedded frame, a policy, a browser that claims the API and then
       // refuses. Falling back to the directory input gets them a result
       // instead of an error, at the cost of not being able to write back.
+      // Only the picker: a folder that was picked and then failed to read is
+      // not a picker that is missing.
       setFellBack(true);
-      setError(null);
       input.current?.click();
-      void e;
+      return;
     }
+    if (!folder) return;
+    setPending(null);
+    clearRun();
+    setFolderName(folder.name);
+    setFiles(folder.files);
+    setHandle(folder.handle ?? null);
+    // Only a real handle is worth keeping; the input fallback hands over
+    // copies with no path back to the folder.
+    if (folder.handle) void keep(KEYS.presentationsFolder, folder.handle);
+    await scan(folder.files);
   }
 
   /** The picker where this browser has one, the directory input otherwise. */
@@ -404,8 +430,14 @@ export function Presentations() {
     [reports, shown]
   );
 
-  const countOf = (kind: TextIssueKind) =>
-    reports.reduce((n, r) => n + r.issues.filter((i) => i.kind === kind).length, 0);
+  // One pass over every finding, rather than one per kind per use per render:
+  // a large library holds thousands, and every tick of a box re-renders.
+  const counts = useMemo(() => {
+    const out = new Map<TextIssueKind, number>();
+    for (const r of reports) for (const i of r.issues) out.set(i.kind, (out.get(i.kind) ?? 0) + 1);
+    return out;
+  }, [reports]);
+  const countOf = (kind: TextIssueKind) => counts.get(kind) ?? 0;
 
   /**
    * What is wrong and what could be done about it, file by file.
@@ -510,7 +542,7 @@ export function Presentations() {
       const entries: { path: string; bytes: Uint8Array }[] = [];
       const paint = painter();
       for (const [index, plan] of chosen.entries()) {
-        setProgress({ verb: p.backingUp, path: plan.path, done: index, total: chosen.length });
+        setProgress({ verb: "backingUp", path: plan.path, done: index, total: chosen.length });
         await paint();
         const file = fileByPath.get(plan.path);
         if (file) entries.push({ path: plan.path, bytes: await file.read() });
@@ -521,7 +553,7 @@ export function Presentations() {
       download(name, await zip(entries), "application/zip");
       setBackup({ name, paths: new Set(entries.map((entry) => entry.path)) });
     } catch (e) {
-      setFixError((e as Error).message);
+      setFixError({ message: (e as Error).message });
     } finally {
       setRunning(false);
       setProgress(null);
@@ -539,7 +571,7 @@ export function Presentations() {
     // Scanning only ever asked to read. Writing is a separate promise, made
     // here where the reader has just asked for it and a gesture is in hand.
     if ((await requestHandlePermission(handle, "readwrite")) !== "granted") {
-      setFixError(p.permissionNeeded);
+      setFixError("permissionNeeded");
       return;
     }
 
@@ -554,7 +586,7 @@ export function Presentations() {
           await file.write(bytes);
         },
         onFile: async (path, done, total) => {
-          setProgress({ verb: p.applying, path, done, total });
+          setProgress({ verb: "applying", path, done, total });
           await paint();
         },
       });
@@ -564,7 +596,7 @@ export function Presentations() {
       // Read the folder again, so what is on screen is what is on disk.
       await scan(files);
     } catch (e) {
-      setFixError((e as Error).message);
+      setFixError({ message: (e as Error).message });
     } finally {
       setRunning(false);
       setProgress(null);
@@ -580,7 +612,7 @@ export function Presentations() {
       const result = await fixFiles(chosen, {
         read: readFile,
         onFile: async (path, done, total) => {
-          setProgress({ verb: p.fixing, path, done, total });
+          setProgress({ verb: "fixing", path, done, total });
           await paint();
         },
       });
@@ -592,7 +624,7 @@ export function Presentations() {
       setOutcomes(result);
       setSavedZip(name);
     } catch (e) {
-      setFixError((e as Error).message);
+      setFixError({ message: (e as Error).message });
     } finally {
       setRunning(false);
       setProgress(null);
@@ -618,7 +650,9 @@ export function Presentations() {
                 <FolderOpen size={15} aria-hidden="true" />
                 <span className="chosen-name">{folderName}</span>
               </span>
-              <button className="btn" onClick={choose} disabled={busy !== null}>
+              {/* Not while a run is going either: it rereads the folder it
+                  started with when it finishes, over whatever replaced it. */}
+              <button className="btn" onClick={choose} disabled={busy !== null || running}>
                 {p.changeFolder}
               </button>
               <button
@@ -626,7 +660,7 @@ export function Presentations() {
                 aria-label={p.clearFolder}
                 title={p.clearFolder}
                 onClick={forgetFolder}
-                disabled={busy !== null}
+                disabled={busy !== null || running}
               >
                 <X size={13} aria-hidden="true" />
               </button>
@@ -653,6 +687,9 @@ export function Presentations() {
               setError(null);
               clearRun();
               const folder = readFolderFromInput(picked, isPresentationFile);
+              // Cleared, or choosing the same folder again to rescan it after
+              // an edit would fire no change at all.
+              e.target.value = "";
               setFolderName(folder.name);
               setFiles(folder.files);
               setHandle(null);
@@ -788,7 +825,11 @@ export function Presentations() {
           </p>
 
           {savedZip && <p className="why">{f(p.downloadedFixed, { name: savedZip })}</p>}
-          {fixError && <p className="why warn-inline">{fixError}</p>}
+          {fixError && (
+            <p className="why warn-inline">
+              {fixError === "permissionNeeded" ? p.permissionNeeded : fixError.message}
+            </p>
+          )}
 
           {outcomes && (
             <p className="sub">
@@ -973,7 +1014,7 @@ function ProgressBar({ progress }: { progress: Progress }) {
         <div className="progress-fill" style={{ width: `${percent}%` }} />
       </div>
       <p className="why progress-caption">
-        <span className="progress-file">{f(verb, { n: path })}</span>
+        <span className="progress-file">{f(p[verb], { n: path })}</span>
         <span className="progress-count">{counted}</span>
       </p>
     </div>
@@ -987,9 +1028,10 @@ function ProgressBar({ progress }: { progress: Progress }) {
  * the checks report. Tabs and non-breaking spaces count: they are exactly as
  * invisible as a plain space and rather more surprising to find.
  */
-const GAP = /[ \t\u00a0\u202f\u2007]/;
-const EDGES = /^[ \t\u00a0\u202f\u2007]+|[ \t\u00a0\u202f\u2007]+$/g;
-const INSIDE = /[ \t\u00a0\u202f\u2007]{2,}/g;
+// Built from the checker's own class, so whatever it reports is what shows.
+const GAP = new RegExp(SPACE_CLASS, "g");
+const EDGES = new RegExp(`^${SPACE_CLASS}+|${SPACE_CLASS}+$`, "g");
+const INSIDE = new RegExp(`${SPACE_CLASS}{2,}`, "g");
 
 function visibleWhitespace(text: string): string {
   const dots = (run: string) => "\u00b7".repeat(run.length);

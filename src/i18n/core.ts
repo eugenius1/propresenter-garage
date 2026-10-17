@@ -12,7 +12,7 @@ export type Lang = "en" | "fr";
 export const DICTIONARIES: Record<Lang, Dictionary> = { en, fr };
 export const LANGUAGES = Object.keys(DICTIONARIES) as Lang[];
 
-function isLang(value: unknown): value is Lang {
+export function isLang(value: unknown): value is Lang {
   return typeof value === "string" && (LANGUAGES as string[]).includes(value);
 }
 

@@ -59,7 +59,18 @@ export function FileSlot({ role, hint, wrongKindHint, file, onLoad, onClear }: P
         tabIndex={0}
         onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") input.current?.click(); }}
       >
-        <input ref={input} type="file" hidden onChange={(e) => void accept(e.target.files?.[0])} />
+        <input
+          ref={input}
+          type="file"
+          hidden
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            // Cleared, so picking the same file again -- after fixing it --
+            // is a change rather than nothing.
+            e.target.value = "";
+            void accept(file);
+          }}
+        />
         <div className="slot-role">{role}</div>
         <div style={{ marginTop: 4 }}>
           {error ? (

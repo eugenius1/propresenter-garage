@@ -19,6 +19,12 @@ describe("finding where the app is mounted", () => {
     expect(basePath("/media-bin/presentations", SLUGS)).toBe("/media-bin/");
   });
 
+  it("treats the document's own name as part of where it was served, not a folder", () => {
+    // Otherwise switching tool from /app/index.html goes to /app/index.html/media-bin.
+    expect(basePath("/propresenter-garage/index.html", SLUGS)).toBe("/propresenter-garage/");
+    expect(basePath("/index.html", SLUGS)).toBe("/");
+  });
+
   it("tolerates a trailing slash on a tool path", () => {
     expect(basePath("/propresenter-garage/media-bin/", SLUGS)).toBe("/propresenter-garage/");
   });

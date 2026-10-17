@@ -151,7 +151,11 @@ export async function zip(entries: readonly ZipEntry[], now = new Date()): Promi
     const { method, data } = await deflate(entry.bytes);
     const offset = out.length;
 
-    if (offset > MAX_SIZE) throw new ZipError("archive too large");
+    // Every size and offset is a 32-bit field. Past that they would wrap
+    // silently into an archive no extractor accepts.
+    if (offset > MAX_SIZE || data.length > MAX_SIZE || entry.bytes.length > MAX_SIZE) {
+      throw new ZipError("archive too large");
+    }
 
     out.long(LOCAL_HEADER);
     out.short(20); // the version that understands DEFLATE, which is all we use
@@ -171,6 +175,7 @@ export async function zip(entries: readonly ZipEntry[], now = new Date()): Promi
   }
 
   const directoryStart = out.length;
+  if (directoryStart > MAX_SIZE) throw new ZipError("archive too large");
 
   for (const item of directory) {
     out.long(CENTRAL_HEADER);

@@ -22,16 +22,6 @@ const TOOL_BY_SLUG = Object.fromEntries(
 ) as Record<string, ToolId>;
 
 /**
- * The shell: title, appearance and language controls, licence notice, and the
- * active tool.
- *
- * Tool selection is a plain list rather than a registry with extension points.
- * Two tools share nothing but the chrome around them -- one reads a playlist
- * document, the other a folder of presentations -- so there is nothing yet for
- * an abstraction to hold. Routing is still absent because nothing has asked to
- * be linkable.
- */
-/**
  * The copyright span, widening to a range as the project outlives its first
  * year rather than silently claiming only the current one.
  */
@@ -42,6 +32,15 @@ function copyrightYears(now = new Date()): string {
   return current > FIRST_PUBLISHED ? `${FIRST_PUBLISHED}\u2013${current}` : String(FIRST_PUBLISHED);
 }
 
+/**
+ * The shell: title, appearance and language controls, licence notice, and the
+ * active tool.
+ *
+ * Tool selection is a plain list rather than a registry with extension points.
+ * Two tools share nothing but the chrome around them -- one reads a playlist
+ * document, the other a folder of presentations -- so there is nothing yet for
+ * an abstraction to hold.
+ */
 export default function App() {
   const { t, f, lang } = useI18n();
   // Read once: where the app is mounted cannot change while it is running.
@@ -138,7 +137,8 @@ export default function App() {
         <span
           title={f(t.app.schemaHelp, {
             files: PROTO_VERSION.files,
-            date: new Date(PROTO_VERSION.builtAt).toLocaleDateString(undefined),
+            // The interface's language, not the device's.
+            date: new Date(PROTO_VERSION.builtAt).toLocaleDateString(t.meta.localeTag),
           })}
         >
           ({PROTO_VERSION.upstreamCommit?.slice(0, 7) ?? "?"})
