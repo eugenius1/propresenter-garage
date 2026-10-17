@@ -75,6 +75,11 @@ export interface PlaylistChange {
   /** Only set for renames: the previous path and name. */
   from?: string;
   fromName?: string;
+  /**
+   * Only set for a rename that is really a move to another parent, with or
+   * without a new name -- which a merge cannot yet bring across.
+   */
+  reparented?: boolean;
   /** Only set for recreations: how many items each version held. */
   itemsBefore?: number;
   itemsAfter?: number;
@@ -112,8 +117,15 @@ function playbackValues(p: PlaybackSettings): PlaybackValue[] {
   }));
 }
 
+/**
+ * Effects are counted among the playback settings for display, but a change
+ * to them is a restyle: the fingerprint already sees the effect itself, so
+ * counting it here as well reported one edit twice.
+ */
+const RETIMING_KEYS = PLAYBACK_KEYS.filter((k) => k !== "effectCount");
+
 function playbackDeltas(a: PlaybackSettings, b: PlaybackSettings): PlaybackDelta[] {
-  return PLAYBACK_KEYS.filter((k) => normalise(a[k]) !== normalise(b[k])).map((key) => ({
+  return RETIMING_KEYS.filter((k) => normalise(a[k]) !== normalise(b[k])).map((key) => ({
     key,
     from: a[key],
     to: b[key],
@@ -277,14 +289,17 @@ export function diffLibraries(left: MediaLibrary, right: MediaLibrary): DiffResu
 
 function diffPlaylists(left: MediaLibrary, right: MediaLibrary): PlaylistChange[] {
   const flatten = (lib: MediaLibrary) => {
-    const byUuid = new Map<string, { path: string; name: string; items: number }>();
-    const walk = (n: typeof lib.root) => {
+    const byUuid = new Map<
+      string,
+      { path: string; name: string; parent: string; items: number }
+    >();
+    const walk = (n: typeof lib.root, parent: string) => {
       if (n.kind !== "root" && n.uuid) {
-        byUuid.set(n.uuid, { path: n.path, name: n.name, items: n.items.length });
+        byUuid.set(n.uuid, { path: n.path, name: n.name, parent, items: n.items.length });
       }
-      n.children.forEach(walk);
+      for (const child of n.children) walk(child, n.kind === "root" ? "" : n.uuid);
     };
-    walk(lib.root);
+    walk(lib.root, "");
     return byUuid;
   };
 
@@ -299,7 +314,9 @@ function diffPlaylists(left: MediaLibrary, right: MediaLibrary): PlaylistChange[
     const now = after.get(uuid);
     if (now === undefined) {
       removed.push({ type: "removed", uuid, path: node.path, name: node.name });
-    } else if (now.path !== node.path) {
+    } else if (now.name !== node.name || now.parent !== node.parent) {
+      // Its own name or its own place, not its path: renaming a group changes
+      // the path of everything inside it, and those have not changed at all.
       out.push({
         type: "renamed",
         uuid,
@@ -307,6 +324,7 @@ function diffPlaylists(left: MediaLibrary, right: MediaLibrary): PlaylistChange[
         name: now.name,
         from: node.path,
         fromName: node.name,
+        ...(now.parent !== node.parent && { reparented: true }),
       });
     }
   }
@@ -317,22 +335,28 @@ function diffPlaylists(left: MediaLibrary, right: MediaLibrary): PlaylistChange[
   // A playlist deleted and made again in ProPresenter gets a fresh uuid, so by
   // identity it is a removal and an addition. Reporting it as both, on adjacent
   // lines naming the same path, reads as a glitch -- so pair them up.
-  const addedByPath = new Map(added.map((change) => [change.path, change]));
+  // Several per path, since siblings can share a name.
+  const addedByPath = new Map<string, PlaylistChange[]>();
+  for (const change of added) {
+    const bucket = addedByPath.get(change.path);
+    if (bucket) bucket.push(change);
+    else addedByPath.set(change.path, [change]);
+  }
   const pairedAdds = new Set<PlaylistChange>();
 
   for (const change of removed) {
-    const twin = addedByPath.get(change.path);
-    if (twin && !pairedAdds.has(twin)) {
+    const twin = addedByPath.get(change.path)?.find((c) => !pairedAdds.has(c));
+    if (twin) {
       pairedAdds.add(twin);
-      const wasUuid = [...before].find(([, n]) => n.path === change.path)?.[0];
-      const nowUuid = [...after].find(([, n]) => n.path === change.path)?.[0];
+      // The pair's own uuids, not the first playlist found at that path: a
+      // sibling of the same name that was left alone has the same path too.
       out.push({
         type: "recreated",
-        uuid: nowUuid ?? change.uuid,
+        uuid: twin.uuid,
         path: change.path,
         name: change.name,
-        itemsBefore: wasUuid ? before.get(wasUuid)?.items : undefined,
-        itemsAfter: nowUuid ? after.get(nowUuid)?.items : undefined,
+        itemsBefore: before.get(change.uuid)?.items,
+        itemsAfter: after.get(twin.uuid)?.items,
       });
     } else {
       out.push(change);

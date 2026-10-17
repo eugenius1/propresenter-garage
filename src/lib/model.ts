@@ -370,7 +370,10 @@ export function buildLibrary(doc: RawDoc): MediaLibrary {
       const item: MediaItem = {
         uuid: rawItem.uuid?.string ?? "",
         name: rawItem.name ?? "",
-        key: comparisonKey(root, pathForKey),
+        // Nothing to identify a file by -- live video, or an entry with no
+        // path at all -- so no key: an empty one is never grouped or matched,
+        // where "::" would make every such entry a duplicate of the others.
+        key: pathForKey ? comparisonKey(root, pathForKey) : "",
         relativePath,
         root,
         absolutePath,
@@ -384,7 +387,7 @@ export function buildLibrary(doc: RawDoc): MediaLibrary {
         modifications: extractModifications(media, element),
         variantKey: "",
       };
-      item.variantKey = `${item.key}##${item.modifications.fingerprint}`;
+      item.variantKey = item.key && `${item.key}##${item.modifications.fingerprint}`;
 
       node.items.push(item);
       items.push(item);

@@ -4,7 +4,7 @@ import { fold } from "../lib/search";
 import { useI18n, type I18n } from "../i18n";
 
 function Node({ node, depth, i18n }: { node: PlaylistNode; depth: number; i18n: I18n }) {
-  const { t, f, plural } = i18n;
+  const { t, plural } = i18n;
   const hasChildren = node.children.length > 0;
   const count = node.items.length;
 
@@ -16,7 +16,7 @@ function Node({ node, depth, i18n }: { node: PlaylistNode; depth: number; i18n: 
           <span className="node-count">
             {count > 0 && plural(t.browse.itemCount, count)}
             {count > 0 && hasChildren && " · "}
-            {hasChildren && f(t.browse.subCount, { n: node.children.length })}
+            {hasChildren && plural(t.browse.subCount, node.children.length)}
             {count === 0 && !hasChildren && t.browse.empty}
           </span>
         </summary>

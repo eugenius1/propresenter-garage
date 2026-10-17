@@ -228,6 +228,47 @@ describe.each(SOURCES)("merge [$name]", (source) => {
     expect(afterMerge(baselineDoc, compareDoc, chosen, "intoBaseline").changes).toEqual([]);
   });
 
+  it.each(["intoBaseline", "intoCompare"] as const)(
+    "brings an item both moved and renamed across %s",
+    (direction) => {
+      // Two changes for one entry: the replacement names the playlist it sat
+      // in, so it must run before the move takes it elsewhere.
+      const { baselineDoc, compareDoc } = pairWith((doc) => {
+        const [from, to] = rawPlaylists(doc);
+        const item = from.items.items.splice(0, 1)[0];
+        item.name = "Moved And Renamed";
+        to.items.items.push(item);
+      });
+
+      const diff = diffOf(baselineDoc, compareDoc);
+      expect(diff.counts.moved).toBe(1);
+      expect(diff.counts.renamed).toBe(1);
+      expect(afterMerge(baselineDoc, compareDoc, diff.changes, direction).changes).toEqual([]);
+    }
+  );
+
+  it("moves an item into a playlist that has never held one", () => {
+    // An empty leaf has neither branch of its children oneof set.
+    const Playlist = messageType("rv.data.Playlist");
+    const emptyUuid = "00000000-0000-4000-8000-ffffffffff97";
+    const addEmpty = (doc: any) =>
+      doc.root_node.playlists.playlists.push(
+        Playlist.fromObject({ uuid: { string: emptyUuid }, name: "Empty" })
+      );
+    const baselineDoc = decodeMediaDocument(bytes);
+    addEmpty(baselineDoc);
+    const compareDoc = decodeMediaDocument(encodeDocument(baselineDoc));
+    const moving = rawPlaylists(compareDoc)[0].items.items.splice(0, 1)[0];
+    const empty = compareDoc.root_node.playlists.playlists.find(
+      (p: any) => p.uuid?.string === emptyUuid
+    );
+    empty.items = { items: [moving] };
+
+    const diff = diffOf(baselineDoc, compareDoc);
+    expect(diff.counts.moved).toBe(1);
+    expect(afterMerge(baselineDoc, compareDoc, diff.changes, "intoBaseline").changes).toEqual([]);
+  });
+
   it("creates the playlist an incoming item needs, keeping its identity", () => {
     // Recreating it with the source's uuid rather than a fresh one is what
     // keeps the two documents comparable: a new uuid would make the very next

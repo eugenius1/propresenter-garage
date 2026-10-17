@@ -62,6 +62,8 @@ export function AuditView({
     audit.crossPlaylistDuplicates.length === 0 &&
     audit.emptyPlaylists.length === 0 &&
     audit.externalVolumeItems.length === 0 &&
+    audit.hiddenItems.length === 0 &&
+    audit.nameMismatches.length === 0 &&
     audit.absolutePathRoots.length <= 1;
 
   return (

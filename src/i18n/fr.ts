@@ -202,7 +202,7 @@ export const fr: Dictionary = {
     search: "Rechercher un élément, un nom de fichier ou une liste…",
     matches: ["{n} résultat", "{n} résultats"],
     itemCount: ["{n} élément", "{n} éléments"],
-    subCount: "{n} sous-liste(s)",
+    subCount: ["{n} sous-liste", "{n} sous-listes"],
     empty: "vide",
     unnamed: "(sans nom)",
   },
@@ -395,6 +395,8 @@ export const fr: Dictionary = {
         blockedWhy: "Leur entrée est introuvable dans le fichier d'origine.",
         blockedDestructive:
           "Une liste recréée ne peut pas être reportée : cela supprimerait la liste de ce côté et tout son contenu.",
+        blockedMoved:
+          "Une liste déplacée dans un autre groupe ne peut pas encore être reportée : seul son nom pourrait l'être, et elle resterait à sa place.",
         willCreate: ["Crée {n} liste : {names}", "Crée {n} listes : {names}"],
         exportBlocked:
           "Ce côté ne peut pas être exporté : le réencodage perd du contenu que le schéma ne couvre pas.",

@@ -1,9 +1,11 @@
-import { beforeAll, describe, expect, it as baseIt } from "vitest";
-import { encodeDocument } from "../decode";
+import { beforeAll, describe, expect, it, it as baseIt } from "vitest";
+import { encodeDocument, messageType } from "../decode";
 import { buildLibrary, decodeMediaDocument } from "../model";
 import { diffLibraries } from "../diff";
+import { planPlaylistMerge } from "../merge";
 import { auditLibrary } from "../audit";
 import { SOURCES } from "./fixtures";
+import { syntheticMediaFile } from "./synthetic";
 
 /** Deep-clone a decoded document by round-tripping it through the wire format. */
 function clone(bytes: Uint8Array) {
@@ -173,5 +175,98 @@ describe.each(SOURCES)("audit [$name]", (source) => {
     for (const g of audit.withinPlaylistDuplicates) expect(g.repeatedWithin.length).toBeGreaterThan(0);
     for (const g of audit.crossPlaylistDuplicates) expect(g.repeatedWithin).toEqual([]);
     expect(audit.totals.items).toBeGreaterThan(0);
+  });
+});
+
+describe("playlist changes [synthetic]", () => {
+  const Playlist = messageType("rv.data.Playlist");
+  const fresh = () => decodeMediaDocument(syntheticMediaFile());
+  const top = (doc: any) => doc.root_node.playlists.playlists;
+  const named = (doc: any, name: string) => rawNodes(doc.root_node).find((n) => n.name === name);
+
+  it("reports a renamed group once, not once per playlist inside it", () => {
+    // Every descendant's path changes; none of them has.
+    const before = fresh();
+    const after = fresh();
+    named(after, "Backgrounds").name = "Fonds";
+    const result = diffLibraries(buildLibrary(before), buildLibrary(after));
+    expect(result.playlistChanges).toEqual([
+      expect.objectContaining({ type: "renamed", name: "Fonds", fromName: "Backgrounds" }),
+    ]);
+  });
+
+  it("marks a playlist moved to another group, and will not pretend to merge it", () => {
+    const before = fresh();
+    const after = fresh();
+    const logos = top(after).findIndex((n: any) => n.name === "Logos");
+    named(after, "Backgrounds").playlists.playlists.push(top(after).splice(logos, 1)[0]);
+
+    const result = diffLibraries(buildLibrary(before), buildLibrary(after));
+    expect(result.playlistChanges).toEqual([
+      expect.objectContaining({ type: "renamed", name: "Logos", reparented: true }),
+    ]);
+    const plan = planPlaylistMerge(result.playlistChanges[0], "intoBaseline", before, after);
+    expect(plan.blocked).toBe("unsupported");
+    expect(plan.operations).toEqual([]);
+  });
+
+  it("pairs a recreated playlist by its own uuids, not a namesake's", () => {
+    const twin = (id: string, items: unknown[]) =>
+      Playlist.fromObject({ uuid: { string: id }, name: "Twin", items: { items } });
+    const kept = "00000000-0000-4000-8000-00000000aa01";
+    const deleted = "00000000-0000-4000-8000-00000000aa02";
+    const remade = "00000000-0000-4000-8000-00000000aa03";
+    const entry = named(fresh(), "Logos").items.items[0];
+
+    const before = fresh();
+    top(before).push(twin(kept, []), twin(deleted, [entry]));
+    const after = fresh();
+    top(after).push(twin(kept, []), twin(remade, []));
+
+    const result = diffLibraries(buildLibrary(before), buildLibrary(after));
+    const recreated = result.playlistChanges.filter((c) => c.type === "recreated");
+    expect(recreated).toEqual([
+      expect.objectContaining({ uuid: remade, itemsBefore: 1, itemsAfter: 0 }),
+    ]);
+  });
+
+  it("reports an added effect as a restyle only, not a retime too", () => {
+    const before = fresh();
+    const after = fresh();
+    const item = named(after, "Logos").items.items[0];
+    const media = item.cue.actions.find((a: any) => a.media).media;
+    media.effects = [
+      { uuid: { string: "00000000-0000-4000-8000-00000000ee01" }, enabled: true, name: "Color Swap" },
+    ];
+    const result = diffLibraries(buildLibrary(before), buildLibrary(after));
+    expect(result.counts.restyled).toBe(1);
+    expect(result.counts.retimed).toBe(0);
+  });
+});
+
+describe("audit details [synthetic]", () => {
+  const fresh = () => decodeMediaDocument(syntheticMediaFile());
+  const entries = (doc: any) => playlistsWithItems(doc).flatMap((p) => p.items.items);
+  const elementOf = (entry: any) => entry.cue.actions.find((a: any) => a.media).media.element;
+
+  it("folds accents before calling a label and its file different", () => {
+    const doc = fresh();
+    const [entry] = entries(doc);
+    entry.name = "Sainte Cène";
+    elementOf(entry).url.local.path = "Media/Assets/Sainte Cene.jpg";
+    const audit = auditLibrary(buildLibrary(doc));
+    expect(audit.nameMismatches.map((m) => m.item.name)).not.toContain("Sainte Cène");
+  });
+
+  it("does not group entries that name no file as duplicates", () => {
+    const doc = fresh();
+    const pathless = entries(doc).slice(0, 2);
+    for (const entry of pathless) delete elementOf(entry).url;
+    const uuids = new Set(pathless.map((e: any) => e.uuid.string));
+    const audit = auditLibrary(buildLibrary(doc));
+    const grouped = [...audit.withinPlaylistDuplicates, ...audit.crossPlaylistDuplicates]
+      .flatMap((g) => g.items)
+      .filter((i) => uuids.has(i.uuid));
+    expect(grouped).toEqual([]);
   });
 });

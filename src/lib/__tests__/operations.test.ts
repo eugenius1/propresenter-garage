@@ -291,12 +291,13 @@ describe.each(SOURCES)("operations [$name]", (source) => {
 describe("export filename", () => {
   it("never reuses the original name", () => {
     // Writing back over ProPresenter's own file is how a library gets lost.
-    const name = exportFilename("Media", new Date("2026-09-11T14:35:00Z"));
+    const name = exportFilename("Media", new Date(2026, 8, 11, 14, 35));
     expect(name).not.toBe("Media");
+    // Local time, as every other download is stamped.
     expect(name).toBe("Media-edited-20260911-1435");
   });
 
   it("copes with an empty original name", () => {
-    expect(exportFilename("", new Date("2026-01-02T03:04:00Z"))).toBe("Media-edited-20260102-0304");
+    expect(exportFilename("", new Date(2026, 0, 2, 3, 4))).toBe("Media-edited-20260102-0304");
   });
 });
