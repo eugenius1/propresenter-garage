@@ -137,7 +137,39 @@ describe("splicing", () => {
     const source = rtf("\\cb3 Above\\par\\pard\\li0\\qc\\fs200\\par\\pard\\cb3 Below");
     const lines = extractLines(source);
     expect(lines.map((l) => l.text)).toEqual(["Above", "", "Below"]);
-    const fixed = applyEdits(source, [lineEdit(source, lines[1])!]);
+    const fixed = applyEdits(source, lineEdit(source, lines[1])!);
+    expect(extractLines(fixed).map((l) => l.text)).toEqual(["Above", "Below"]);
+  });
+
+  it("keeps the formatting a removed line passes on to the next", () => {
+    // RTF state carries across a break, so the colour and size set on the
+    // blank line are what "Below" is drawn in. Text-only verification would
+    // never notice them going.
+    const source = rtf("\\cb3 Above\\par \\cf2\\fs60 \\par Below");
+    const fixed = applyEdits(source, lineEdit(source, extractLines(source)[1])!);
+    expect(extractLines(fixed).map((l) => l.text)).toEqual(["Above", "Below"]);
+    expect(fixed).toContain("\\cf2\\fs60 Below");
+  });
+
+  it("keeps a removed line's groups balanced", () => {
+    const source = rtf("\\cb3 Above\\par {\\cf2 \\par }Below");
+    const fixed = applyEdits(source, lineEdit(source, extractLines(source)[1])!);
+    expect(extractLines(fixed).map((l) => l.text)).toEqual(["Above", "Below"]);
+    expect(fixed.split("{").length).toBe(fixed.split("}").length);
+  });
+
+  it("takes a blank line's whitespace with it", () => {
+    // Otherwise it would join the next line as a leading space.
+    const source = rtf("\\cb3 Above\\par\\cf2  \\tab \\par Below");
+    const lines = extractLines(source);
+    expect(lines[1].text.trim()).toBe("");
+    const fixed = applyEdits(source, lineEdit(source, lines[1])!);
+    expect(extractLines(fixed).map((l) => l.text)).toEqual(["Above", "Below"]);
+  });
+
+  it("delimits a control word the removed break leaves exposed", () => {
+    const source = rtf("\\cb3 Above\\par\\cf2\\par Below");
+    const fixed = applyEdits(source, lineEdit(source, extractLines(source)[1])!);
     expect(extractLines(fixed).map((l) => l.text)).toEqual(["Above", "Below"]);
   });
 
