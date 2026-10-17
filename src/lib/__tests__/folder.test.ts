@@ -1,5 +1,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { folderAccess, isPresentationFile, pickFolder, readFolderFromInput } from "../folder";
+import {
+  folderAccess,
+  FolderReadError,
+  isPresentationFile,
+  pickFolder,
+  readFolderFromInput,
+} from "../folder";
 
 /**
  * A stand-in for a FileSystemDirectoryHandle.
@@ -118,6 +124,16 @@ describe("walking a folder", () => {
       },
     });
     await expect(pickFolder(isPresentationFile)).rejects.toThrow("something else went wrong");
+  });
+
+  it("tells a folder that would not read apart from a picker that failed", async () => {
+    // A caller falls back from the second; the first was chosen fine.
+    const root = directory("Libraries", []);
+    root.values = () => {
+      throw new Error("folder gone");
+    };
+    stubPicker(root);
+    await expect(pickFolder(isPresentationFile)).rejects.toBeInstanceOf(FolderReadError);
   });
 
   it("returns null where there is no picker at all", async () => {

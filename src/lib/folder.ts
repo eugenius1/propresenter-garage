@@ -117,6 +117,19 @@ async function walkHandle(
 }
 
 /**
+ * A folder that was picked and then could not be read.
+ *
+ * Distinct from a picker that failed, which a caller can fall back from: this
+ * folder was chosen, so offering a different way to choose it misses the point.
+ */
+export class FolderReadError extends Error {
+  constructor(cause: unknown) {
+    super((cause as Error)?.message ?? String(cause), { cause });
+    this.name = "FolderReadError";
+  }
+}
+
+/**
  * Ask for a folder, and confirm we may write to it.
  *
  * Returns null when the reader dismisses the picker, which is not an error.
@@ -145,7 +158,11 @@ export async function pickFolder(
     writable = (await handle.requestPermission({ mode: "readwrite" })) === "granted";
   }
 
-  return readFolderHandle(handle, matches, writable);
+  try {
+    return await readFolderHandle(handle, matches, writable);
+  } catch (e) {
+    throw new FolderReadError(e);
+  }
 }
 
 /**

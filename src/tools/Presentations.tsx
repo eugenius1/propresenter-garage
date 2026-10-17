@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { FolderOpen, X } from "lucide-react";
 import {
   folderAccess,
+  FolderReadError,
   isPresentationFile,
   pickFolder,
   readFolderFromInput,
@@ -394,7 +395,11 @@ export function Presentations() {
     let folder;
     try {
       folder = await pickFolder(isPresentationFile, { write: false });
-    } catch {
+    } catch (e) {
+      if (e instanceof FolderReadError) {
+        setError(e.message);
+        return;
+      }
       // The picker can be unavailable for reasons the reader cannot act on --
       // an embedded frame, a policy, a browser that claims the API and then
       // refuses. Falling back to the directory input gets them a result
