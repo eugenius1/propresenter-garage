@@ -690,6 +690,9 @@ export function Presentations() {
               const picked = e.target.files;
               if (!picked) return;
               setError(null);
+              // A folder chosen by hand supersedes the remembered one, as it
+              // does when chosen through the picker.
+              setPending(null);
               clearRun();
               const folder = readFolderFromInput(picked, isPresentationFile);
               // Cleared, or choosing the same folder again to rescan it after
@@ -731,10 +734,10 @@ export function Presentations() {
           <div className="editor-bar" style={{ paddingTop: 0 }}>
             <span className="editor-count">{f(p.remembered, { folder: pending.name })}</span>
             <span className="spacer" />
-            <button className="btn primary" onClick={() => void reopen()}>
+            <button className="btn primary" onClick={() => void reopen()} disabled={running}>
               {f(p.reconnect, { folder: pending.name })}
             </button>
-            <button className="btn" onClick={forgetFolder}>
+            <button className="btn" onClick={forgetFolder} disabled={running}>
               {p.forgetFolder}
             </button>
           </div>
