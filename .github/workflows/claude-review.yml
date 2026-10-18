@@ -1,0 +1,45 @@
+name: Claude review
+
+# Reviews each PR with Claude on the repo owner's Claude plan, as inline PR
+# comments, using the shared actions in eugenius1/actions. It reports; it does
+# not gate. It needs the CLAUDE_CODE_OAUTH_TOKEN secret, which fork and
+# Dependabot PRs can't read, so it's skipped for them.
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+permissions:
+  contents: read
+  pull-requests: write
+  id-token: write # the action exchanges an OIDC token for a short-lived app token
+
+concurrency:
+  group: claude-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    name: Code review
+    if: >-
+      !github.event.pull_request.draft &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.actor != 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: eugenius1/actions/claude-review/code@main
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+
+  security:
+    name: Security review
+    if: >-
+      !github.event.pull_request.draft &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.actor != 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: eugenius1/actions/claude-review/security@main
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
