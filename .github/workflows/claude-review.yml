@@ -39,7 +39,14 @@ jobs:
           # posted nothing.
           plugin_marketplaces: https://github.com/anthropics/claude-code.git
           plugins: code-review@claude-code-plugins
-          prompt: /code-review:code-review ${{ github.repository }}/pull/${{ github.event.pull_request.number }} --comment
+          # The plugin stops on a PR Claude has commented on, which would leave
+          # every push after the first unreviewed
+          prompt: |
+            /code-review:code-review ${{ github.repository }}/pull/${{ github.event.pull_request.number }} --comment
+
+            This run is for head commit ${{ github.event.pull_request.head.sha }}.
+            Ignore the "Claude has already commented" check, but don't post an
+            issue that an earlier Claude comment on this PR already raised.
           claude_args: >-
             --allowedTools
             "mcp__github_inline_comment__create_inline_comment,Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*)"
@@ -68,8 +75,13 @@ jobs:
       - uses: anthropics/claude-code-action@v1
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          # The action resets CLAUDE.md and .claude/ to the base branch in the
+          # working tree, so a diff against the working tree would miss them
           prompt: |
             /security-review
+
+            Review the committed changes, `git diff origin/HEAD...HEAD`, not
+            the working tree.
 
             Post anything you find as inline comments on PR
             ${{ github.event.pull_request.number }}, with confirmed: true
