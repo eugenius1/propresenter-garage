@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { FINDING_DOM_ID, type AuditResult, type FindingId } from "../lib/audit";
-import type { MediaLibrary } from "../lib/model";
+import { itemLabel, type MediaLibrary } from "../lib/model";
 import { useEffect } from "react";
 import { useI18n, type I18n } from "../i18n";
 import { describeModsInline } from "../i18n/describe";
@@ -26,6 +26,40 @@ function Rows({
         </details>
       )}
     </>
+  );
+}
+
+/** One finding: its heading and count, why it matters, and the rows. Nothing when there are none. */
+function Finding({
+  id,
+  title,
+  why,
+  count,
+  warn = false,
+  limit,
+  children,
+}: {
+  id: FindingId;
+  title: string;
+  why: string;
+  count: number;
+  warn?: boolean;
+  limit?: number;
+  children: ReactNode[];
+}) {
+  const i18n = useI18n();
+  if (count === 0) return null;
+  return (
+    <div className="finding" id={FINDING_DOM_ID(id)}>
+      <h3>
+        {title}
+        <span className={warn ? "count-badge warn" : "count-badge"}>{i18n.num(count)}</span>
+      </h3>
+      <p className="why">{why}</p>
+      <Rows limit={limit} i18n={i18n}>
+        {children}
+      </Rows>
+    </div>
   );
 }
 
@@ -92,189 +126,165 @@ export function AuditView({
         <h2>{t.audit.heading}</h2>
         <p className="sub">{t.audit.method}</p>
 
-        {audit.withinPlaylistDuplicates.length > 0 && (
-          <div className="finding" id={FINDING_DOM_ID("withinPlaylist")}>
-            <h3>
-              {t.audit.withinPlaylist}
-              <span className="count-badge warn">{num(audit.withinPlaylistDuplicates.length)}</span>
-            </h3>
-            <p className="why">{t.audit.withinPlaylistWhy}</p>
-            <Rows i18n={i18n}>
-              {audit.withinPlaylistDuplicates.map((group, i) => (
-                <li key={i}>
-                  <div>
-                    <strong>{num(group.items.length)}×</strong> {group.filename}
-                    {group.labels.length > 1 && (
+        <Finding
+          id="withinPlaylist"
+          title={t.audit.withinPlaylist}
+          why={t.audit.withinPlaylistWhy}
+          count={audit.withinPlaylistDuplicates.length}
+          warn
+        >
+          {audit.withinPlaylistDuplicates.map((group, i) => (
+            <li key={i}>
+              <div>
+                <strong>{num(group.items.length)}×</strong> {group.filename}
+                {group.labels.length > 1 && (
+                  <span className="node-count">
+                    {" — "}
+                    {f(t.audit.labelled, { labels: quoteAll(group.labels) })}
+                  </span>
+                )}
+              </div>
+              <div className="path">{group.items[0].relativePath}</div>
+              <div className="path">{group.repeatedWithin.join("  ·  ")}</div>
+              {group.items[0].modifications.descriptors.length > 0 && (
+                <div className="path">
+                  {f(t.audit.allWith, {
+                    mods: describeModsInline(i18n, group.items[0].modifications.descriptors),
+                  })}
+                </div>
+              )}
+            </li>
+          ))}
+        </Finding>
+
+        <Finding
+          id="crossPlaylist"
+          title={t.audit.crossPlaylist}
+          why={t.audit.crossPlaylistWhy}
+          count={audit.crossPlaylistDuplicates.length}
+          limit={10}
+        >
+          {audit.crossPlaylistDuplicates.map((group, i) => (
+            <li key={i}>
+              <div>
+                {group.filename}
+                {group.labels.length > 1 && (
+                  <span className="warn-inline"> — {group.labels.map(quote).join("  vs  ")}</span>
+                )}
+              </div>
+              <div className="path">{group.items[0].relativePath}</div>
+              {/* A file with variants yields one group per variant, so the
+                  filename alone would not say which one this is. */}
+              {group.items[0].modifications.descriptors.length > 0 && (
+                <div className="path">
+                  {describeModsInline(i18n, group.items[0].modifications.descriptors)}
+                </div>
+              )}
+              <div className="path">{group.playlists.join("  ·  ")}</div>
+            </li>
+          ))}
+        </Finding>
+
+        <Finding
+          id="variants"
+          title={t.audit.variants}
+          why={t.audit.variantsWhy}
+          count={audit.variantGroups.length}
+          limit={8}
+        >
+          {audit.variantGroups.map((group, i) => (
+            <li key={i}>
+              <div className="mono">{group.path}</div>
+              <ul className="rows" style={{ paddingLeft: 14, marginTop: 3 }}>
+                {group.variants.map((variant, j) => (
+                  <li key={j} style={{ borderTop: "none", padding: "3px 0" }}>
+                    <div>
+                      <span>{quoteAll(variant.labels) || t.audit.unnamed}</span>
+                      {variant.count > 1 && <span className="node-count"> ×{num(variant.count)}</span>}
                       <span className="node-count">
                         {" — "}
-                        {f(t.audit.labelled, { labels: quoteAll(group.labels) })}
+                        {describeModsInline(i18n, variant.modifications)}
                       </span>
-                    )}
-                  </div>
-                  <div className="path">{group.items[0].relativePath}</div>
-                  <div className="path">{group.repeatedWithin.join("  ·  ")}</div>
-                  {group.items[0].modifications.descriptors.length > 0 && (
-                    <div className="path">
-                      {f(t.audit.allWith, {
-                        mods: describeModsInline(i18n, group.items[0].modifications.descriptors),
-                      })}
                     </div>
-                  )}
-                </li>
-              ))}
-            </Rows>
-          </div>
-        )}
-
-        {audit.crossPlaylistDuplicates.length > 0 && (
-          <div className="finding" id={FINDING_DOM_ID("crossPlaylist")}>
-            <h3>
-              {t.audit.crossPlaylist}
-              <span className="count-badge">{num(audit.crossPlaylistDuplicates.length)}</span>
-            </h3>
-            <p className="why">{t.audit.crossPlaylistWhy}</p>
-            <Rows limit={10} i18n={i18n}>
-              {audit.crossPlaylistDuplicates.map((group, i) => (
-                <li key={i}>
-                  <div>
-                    {group.filename}
-                    {group.labels.length > 1 && (
-                      <span className="warn-inline"> — {group.labels.map(quote).join("  vs  ")}</span>
-                    )}
-                  </div>
-                  <div className="path">{group.items[0].relativePath}</div>
-                  {/* A file with variants yields one group per variant, so the
-                      filename alone would not say which one this is. */}
-                  {group.items[0].modifications.descriptors.length > 0 && (
-                    <div className="path">
-                      {describeModsInline(i18n, group.items[0].modifications.descriptors)}
-                    </div>
-                  )}
-                  <div className="path">{group.playlists.join("  ·  ")}</div>
-                </li>
-              ))}
-            </Rows>
-          </div>
-        )}
-
-        {audit.variantGroups.length > 0 && (
-          <div className="finding" id={FINDING_DOM_ID("variants")}>
-            <h3>
-              {t.audit.variants}
-              <span className="count-badge">{num(audit.variantGroups.length)}</span>
-            </h3>
-            <p className="why">{t.audit.variantsWhy}</p>
-            <Rows limit={8} i18n={i18n}>
-              {audit.variantGroups.map((group, i) => (
-                <li key={i}>
-                  <div className="mono">{group.path}</div>
-                  <ul className="rows" style={{ paddingLeft: 14, marginTop: 3 }}>
-                    {group.variants.map((variant, j) => (
-                      <li key={j} style={{ borderTop: "none", padding: "3px 0" }}>
-                        <div>
-                          <span>{quoteAll(variant.labels) || t.audit.unnamed}</span>
-                          {variant.count > 1 && <span className="node-count"> ×{num(variant.count)}</span>}
-                          <span className="node-count">
-                            {" — "}
-                            {describeModsInline(i18n, variant.modifications)}
-                          </span>
-                        </div>
-                        <div className="path">{variant.playlists.join("  ·  ")}</div>
-                      </li>
-                    ))}
-                  </ul>
-                </li>
-              ))}
-            </Rows>
-          </div>
-        )}
+                    <div className="path">{variant.playlists.join("  ·  ")}</div>
+                  </li>
+                ))}
+              </ul>
+            </li>
+          ))}
+        </Finding>
 
         {audit.absolutePathRoots.length > 1 && (
-          <div className="finding" id={FINDING_DOM_ID("locations")}>
-            <h3>
-              {t.audit.locations}
-              <span className="count-badge">{num(audit.absolutePathRoots.length)}</span>
-            </h3>
-            <p className="why">{t.audit.locationsWhy}</p>
-            <Rows limit={6} i18n={i18n}>
-              {audit.absolutePathRoots.map((row, i) => (
-                <li key={i}>
-                  <span className="mono">{row.root}</span>
-                  <span className="node-count"> — {plural(t.audit.locationCount, row.count)}</span>
-                </li>
-              ))}
-            </Rows>
-          </div>
+          <Finding
+            id="locations"
+            title={t.audit.locations}
+            why={t.audit.locationsWhy}
+            count={audit.absolutePathRoots.length}
+            limit={6}
+          >
+            {audit.absolutePathRoots.map((row, i) => (
+              <li key={i}>
+                <span className="mono">{row.root}</span>
+                <span className="node-count"> — {plural(t.audit.locationCount, row.count)}</span>
+              </li>
+            ))}
+          </Finding>
         )}
 
-        {audit.externalVolumeItems.length > 0 && (
-          <div className="finding" id={FINDING_DOM_ID("external")}>
-            <h3>
-              {t.audit.external}
-              <span className="count-badge warn">{num(audit.externalVolumeItems.length)}</span>
-            </h3>
-            <p className="why">{t.audit.externalWhy}</p>
-            <Rows i18n={i18n}>
-              {audit.externalVolumeItems.map((item) => (
-                <li key={item.uuid}>
-                  <div>{item.name || item.displayFilename}</div>
-                  <div className="path">{item.root} · {item.relativePath}</div>
-                </li>
-              ))}
-            </Rows>
-          </div>
-        )}
+        <Finding
+          id="external"
+          title={t.audit.external}
+          why={t.audit.externalWhy}
+          count={audit.externalVolumeItems.length}
+          warn
+        >
+          {audit.externalVolumeItems.map((item) => (
+            <li key={item.uuid}>
+              <div>{itemLabel(item)}</div>
+              <div className="path">{item.root} · {item.relativePath}</div>
+            </li>
+          ))}
+        </Finding>
 
-        {audit.emptyPlaylists.length > 0 && (
-          <div className="finding" id={FINDING_DOM_ID("empty")}>
-            <h3>
-              {t.audit.empty}
-              <span className="count-badge">{num(audit.emptyPlaylists.length)}</span>
-            </h3>
-            <p className="why">{t.audit.emptyWhy}</p>
-            <Rows i18n={i18n}>
-              {audit.emptyPlaylists.map((path, i) => (
-                <li key={i}><span className="path">{path}</span></li>
-              ))}
-            </Rows>
-          </div>
-        )}
+        <Finding
+          id="empty"
+          title={t.audit.empty}
+          why={t.audit.emptyWhy}
+          count={audit.emptyPlaylists.length}
+        >
+          {audit.emptyPlaylists.map((path, i) => (
+            <li key={i}><span className="path">{path}</span></li>
+          ))}
+        </Finding>
 
-        {audit.hiddenItems.length > 0 && (
-          <div className="finding" id={FINDING_DOM_ID("hidden")}>
-            <h3>
-              {t.audit.hidden}
-              <span className="count-badge">{num(audit.hiddenItems.length)}</span>
-            </h3>
-            <p className="why">{t.audit.hiddenWhy}</p>
-            <Rows i18n={i18n}>
-              {audit.hiddenItems.map((item) => (
-                <li key={item.uuid}>
-                  <div>{item.name || item.displayFilename}</div>
-                  <div className="path">{item.playlistPath}</div>
-                </li>
-              ))}
-            </Rows>
-          </div>
-        )}
+        <Finding
+          id="hidden"
+          title={t.audit.hidden}
+          why={t.audit.hiddenWhy}
+          count={audit.hiddenItems.length}
+        >
+          {audit.hiddenItems.map((item) => (
+            <li key={item.uuid}>
+              <div>{itemLabel(item)}</div>
+              <div className="path">{item.playlistPath}</div>
+            </li>
+          ))}
+        </Finding>
 
-        {audit.nameMismatches.length > 0 && (
-          <div className="finding" id={FINDING_DOM_ID("nameMismatch")}>
-            <h3>
-              {t.audit.nameMismatch}
-              <span className="count-badge">{num(audit.nameMismatches.length)}</span>
-            </h3>
-            <p className="why">{t.audit.nameMismatchWhy}</p>
-            <Rows limit={8} i18n={i18n}>
-              {audit.nameMismatches.map((row, i) => (
-                <li key={i}>
-                  <div>{quote(row.item.name)}</div>
-                  <div className="path">→ {row.item.relativePath}</div>
-                </li>
-              ))}
-            </Rows>
-          </div>
-        )}
+        <Finding
+          id="nameMismatch"
+          title={t.audit.nameMismatch}
+          why={t.audit.nameMismatchWhy}
+          count={audit.nameMismatches.length}
+          limit={8}
+        >
+          {audit.nameMismatches.map((row, i) => (
+            <li key={i}>
+              <div>{quote(row.item.name)}</div>
+              <div className="path">→ {row.item.relativePath}</div>
+            </li>
+          ))}
+        </Finding>
 
         {nothingFlagged && <p className="sub">{t.audit.nothing}</p>}
       </div>

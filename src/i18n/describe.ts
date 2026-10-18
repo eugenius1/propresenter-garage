@@ -1,4 +1,5 @@
-import type { LayoutDescriptor, ModDescriptor, PlaybackSettings } from "../lib/model";
+import type { PlaybackKey } from "../lib/diff";
+import type { ModDescriptor } from "../lib/model";
 import type { I18n } from "./core";
 
 /**
@@ -9,7 +10,7 @@ import type { I18n } from "./core";
  * ("BEHAVIOR_FILL") and file paths. Translating those would make them harder to
  * match against what ProPresenter itself shows, not easier.
  */
-export function describeMod({ t, f }: I18n, d: ModDescriptor): string {
+function describeMod({ t, f }: I18n, d: ModDescriptor): string {
   switch (d.kind) {
     case "mirroredHorizontally":
       return t.mods.mirroredHorizontally;
@@ -30,22 +31,12 @@ export function describeMod({ t, f }: I18n, d: ModDescriptor): string {
   }
 }
 
-export function describeMods(i18n: I18n, descriptors: ModDescriptor[]): string[] {
-  return descriptors.map((d) => describeMod(i18n, d));
-}
-
 /** Mirroring, crop and effects as one phrase, or "unmodified" when there are none. */
 export function describeModsInline(i18n: I18n, descriptors: ModDescriptor[]): string {
   return descriptors.length
-    ? describeMods(i18n, descriptors).join(", ")
+    ? descriptors.map((d) => describeMod(i18n, d)).join(", ")
     : i18n.t.diff.unmodified;
 }
-
-export function describeLayout({ t, f }: I18n, d: LayoutDescriptor): string {
-  return f(d.kind === "scale" ? t.mods.scale : t.mods.align, { value: d.value });
-}
-
-export type PlaybackKey = keyof PlaybackSettings;
 
 export function playbackLabel({ t }: I18n, key: PlaybackKey): string {
   return t.playback[key];

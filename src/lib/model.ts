@@ -146,6 +146,15 @@ export interface MediaLibrary {
 const IMPORT_PREFIX =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
 
+/** What an item is called on screen: its name, or its file when it has none. */
+export function itemLabel(item: Pick<MediaItem, "name" | "displayFilename">): string {
+  return item.name || item.displayFilename;
+}
+
+export function itemPath(item: Pick<MediaItem, "relativePath" | "absolutePath">): string {
+  return item.relativePath || item.absolutePath;
+}
+
 export function basename(p: string): string {
   return p.split(/[\\/]/).pop() ?? p;
 }
@@ -309,12 +318,30 @@ function classify(raw: any, isRoot: boolean): NodeKind {
   return raw.playlists ? "group" : "playlist";
 }
 
-function rawChildren(raw: any): any[] {
+export function rawChildren(raw: any): any[] {
   return raw.playlists?.playlists ?? raw.children ?? [];
 }
 
-function rawItems(raw: any): any[] {
+export function rawItems(raw: any): any[] {
   return raw.items?.items ?? [];
+}
+
+/** Every playlist node in the raw tree, root first. */
+export function walkNodes(node: any, out: any[] = []): any[] {
+  out.push(node);
+  for (const child of rawChildren(node)) walkNodes(child, out);
+  return out;
+}
+
+export function findNode(doc: RawDoc, uuid: string): any {
+  return walkNodes(doc.root_node).find((n: any) => n.uuid?.string === uuid);
+}
+
+/** The node holding `uuid`, or undefined when it is at the top level. */
+export function findParentOf(doc: RawDoc, uuid: string): any {
+  return walkNodes(doc.root_node).find((n: any) =>
+    rawChildren(n).some((c: any) => c.uuid?.string === uuid)
+  );
 }
 
 /** Label an external volume so media on a different drive never key-matches local media. */

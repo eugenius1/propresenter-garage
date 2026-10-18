@@ -1,16 +1,19 @@
 import { beforeAll, describe, expect, it } from "vitest";
 import {
   checkPresentation,
-  checkPresentationFile,
   decodePresentation,
   encodePresentation,
   readPresentation,
   readProblem,
   type PresentationDoc,
 } from "../presentation";
+import { examine } from "../fixes";
 import { extractLines } from "../rtf";
 import { hasRealLibrary, libraryFiles, readLibraryFile } from "./corpus";
 import { syntheticTextPresentation } from "./synthetic";
+
+const checkPresentationFile = (filename: string, bytes: Uint8Array) =>
+  examine(filename, bytes).report;
 
 const report = () => checkPresentationFile("Checked Song.pro", syntheticTextPresentation());
 

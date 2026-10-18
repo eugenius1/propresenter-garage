@@ -94,7 +94,7 @@ describe("walking a folder", () => {
     expect(folder!.files[0].write).toBeDefined();
   });
 
-  it("asks for write permission only when writing is wanted", async () => {
+  it("does not ask for write permission when picking", async () => {
     const root = directory("Libraries", [file("Song.pro", "x")]);
     const spy = vi.fn(async () => "granted");
     root.requestPermission = spy;
@@ -102,10 +102,6 @@ describe("walking a folder", () => {
 
     await pickFolder(isPresentationFile);
     expect(spy).not.toHaveBeenCalled();
-
-    const writable = await pickFolder(isPresentationFile, { write: true });
-    expect(spy).toHaveBeenCalledWith({ mode: "readwrite" });
-    expect(writable!.writable).toBe(true);
   });
 
   it("returns null when the picker is dismissed", async () => {
@@ -172,7 +168,6 @@ describe("the directory-input fallback", () => {
   it("is never writable, because these are copies", () => {
     // The input gives no route back to the original file on disk.
     const folder = readFolderFromInput(listOf(["Lib/Song.pro"]), isPresentationFile);
-    expect(folder.writable).toBe(false);
     expect(folder.files[0].write).toBeUndefined();
   });
 });

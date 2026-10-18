@@ -1,4 +1,5 @@
 import { basename, type MediaItem, type MediaLibrary, type ModDescriptor } from "./model";
+import { groupBy } from "./collections";
 import { fold } from "./search";
 
 /**
@@ -96,17 +97,6 @@ function absoluteRoot(p: string): string {
  */
 function norm(s: string): string {
   return fold(s).replace(/\.[\p{L}\p{N}]+$/u, "").replace(/[^\p{L}\p{N}]+/gu, "");
-}
-
-function groupBy<T>(rows: T[], pick: (row: T) => string): Map<string, T[]> {
-  const map = new Map<string, T[]>();
-  for (const row of rows) {
-    const k = pick(row);
-    const bucket = map.get(k);
-    if (bucket) bucket.push(row);
-    else map.set(k, [row]);
-  }
-  return map;
 }
 
 function unique(values: string[]): string[] {
