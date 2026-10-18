@@ -1,8 +1,9 @@
 name: Claude review
 
 # Reviews each PR with Claude on the repo owner's Claude plan, as inline PR
-# comments. It reports; it does not gate. It needs the CLAUDE_CODE_OAUTH_TOKEN
-# secret, which fork and Dependabot PRs can't read, so it's skipped for them.
+# comments, using the shared actions in eugenius1/actions. It reports; it does
+# not gate. It needs the CLAUDE_CODE_OAUTH_TOKEN secret, which fork and
+# Dependabot PRs can't read, so it's skipped for them.
 on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
@@ -26,28 +27,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
-
-      - uses: anthropics/claude-code-action@v1
+      - uses: eugenius1/actions/claude-review/code@main
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          # Use the plugin's /code-review, not the built-in one, so that the
-          # findings are posted as inline comments (confirmed: true).
-          plugin_marketplaces: https://github.com/anthropics/claude-code.git
-          plugins: code-review@claude-code-plugins
-          # The plugin stops on a PR Claude has commented on, which would leave
-          # every push after the first unreviewed
-          prompt: |
-            /code-review:code-review ${{ github.repository }}/pull/${{ github.event.pull_request.number }} --comment
-
-            This run is for head commit ${{ github.event.pull_request.head.sha }}.
-            Ignore the "Claude has already commented" check, but don't post an
-            issue that an earlier Claude comment on this PR already raised.
-          claude_args: >-
-            --allowedTools
-            "mcp__github_inline_comment__create_inline_comment,Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*)"
 
   security:
     name: Security review
@@ -58,33 +40,6 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      # /security-review diffs against origin/HEAD, which checkout never sets
-      # and which would be the default branch rather than this PR's base.
-      - uses: actions/checkout@v7
-        with:
-          ref: ${{ github.event.pull_request.head.sha }}
-          fetch-depth: 0
-
-      - name: Point origin/HEAD at the PR's base branch
-        env:
-          BASE: ${{ github.event.pull_request.base.ref }}
-        run: git symbolic-ref refs/remotes/origin/HEAD "refs/remotes/origin/$BASE"
-
-      - uses: anthropics/claude-code-action@v1
+      - uses: eugenius1/actions/claude-review/security@main
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          # The action resets CLAUDE.md and .claude/ to the base branch in the
-          # working tree, so a diff against the working tree would miss them
-          prompt: |
-            /security-review
-
-            Review the committed changes, `git diff origin/HEAD...HEAD`, not
-            the working tree.
-
-            Post anything you find as inline comments on PR
-            ${{ github.event.pull_request.number }}, with confirmed: true
-            (the tool holds back anything else); if there is nothing, post
-            nothing.
-          claude_args: >-
-            --allowedTools
-            "mcp__github_inline_comment__create_inline_comment,Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*)"
