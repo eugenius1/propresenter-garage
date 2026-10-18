@@ -34,9 +34,7 @@ jobs:
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           # Use the plugin's /code-review, not the built-in one, so that the
-          # findings are posted as inline comments (confirmed: true). The
-          # built-in ran as a forked command here, printed them to the log and
-          # posted nothing.
+          # findings are posted as inline comments (confirmed: true).
           plugin_marketplaces: https://github.com/anthropics/claude-code.git
           plugins: code-review@claude-code-plugins
           # The plugin stops on a PR Claude has commented on, which would leave
