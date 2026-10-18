@@ -691,8 +691,11 @@ export function Presentations() {
               if (!picked) return;
               setError(null);
               // A folder chosen by hand supersedes the remembered one, as it
-              // does when chosen through the picker.
+              // does when chosen through the picker. There is no handle to
+              // keep in its place, so forget the old one rather than bring it
+              // back on the next visit.
               setPending(null);
+              void forget(KEYS.presentationsFolder);
               clearRun();
               const folder = readFolderFromInput(picked, isPresentationFile);
               // Cleared, or choosing the same folder again to rescan it after
