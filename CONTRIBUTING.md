@@ -293,6 +293,19 @@ stylesheet actually makes. White on blue step 9 measures 3.26:1 and fails AA;
 that is why the accent is indigo. Add a pairing to that file rather than
 eyeballing a new colour.
 
+## Claude review on PRs
+
+`.github/workflows/claude-review.yml` runs Claude's `/code-review` and
+`/security-review` on every non-draft PR from this repo and posts findings as
+inline comments. It runs on the owner's Claude plan through the
+`CLAUDE_CODE_OAUTH_TOKEN` secret (made with `claude setup-token`; renew it when
+it expires), so fork and Dependabot PRs, which can't read it, are skipped. It
+reports but isn't a required check.
+
+A PR that edits the workflow is never reviewed by it: the action exits green
+in seconds, doing nothing, when the file differs from the one on `main`. Keep
+such PRs free of other code.
+
 ## Conventions
 
 - **`npm run check` must pass.** Codegen, `oxlint`, both TypeScript projects,
