@@ -1,4 +1,5 @@
-import type { MediaItem, MediaLibrary, ModDescriptor, PlaybackSettings } from "./model";
+import { groupBy } from "./collections";
+import { itemPath, type MediaItem, type MediaLibrary, type ModDescriptor, type PlaybackSettings } from "./model";
 
 /**
  * Diff two media-bin snapshots.
@@ -132,16 +133,9 @@ function playbackDeltas(a: PlaybackSettings, b: PlaybackSettings): PlaybackDelta
   }));
 }
 
+// An empty uuid or key identifies nothing, so it must never pair two items.
 function indexBy<T>(rows: T[], pick: (row: T) => string): Map<string, T[]> {
-  const map = new Map<string, T[]>();
-  for (const row of rows) {
-    const k = pick(row);
-    if (!k) continue;
-    const bucket = map.get(k);
-    if (bucket) bucket.push(row);
-    else map.set(k, [row]);
-  }
-  return map;
+  return groupBy(rows.filter((row) => pick(row)), pick);
 }
 
 /**
@@ -160,10 +154,6 @@ function movedPlaylist(before: MediaItem, after: MediaItem): boolean {
   return before.playlistPath !== after.playlistPath;
 }
 
-function pathOf(item: MediaItem): string {
-  return item.relativePath || item.absolutePath;
-}
-
 export function diffLibraries(left: MediaLibrary, right: MediaLibrary): DiffResult {
   const changes: Change[] = [];
   const matchedLeft = new Set<MediaItem>();
@@ -179,7 +169,7 @@ export function diffLibraries(left: MediaLibrary, right: MediaLibrary): DiffResu
         item: after,
         before,
         fuzzy,
-        detail: { kind: "relink", from: pathOf(before), to: pathOf(after) },
+        detail: { kind: "relink", from: itemPath(before), to: itemPath(after) },
       });
     }
     if (movedPlaylist(before, after)) {
@@ -336,12 +326,7 @@ function diffPlaylists(left: MediaLibrary, right: MediaLibrary): PlaylistChange[
   // identity it is a removal and an addition. Reporting it as both, on adjacent
   // lines naming the same path, reads as a glitch -- so pair them up.
   // Several per path, since siblings can share a name.
-  const addedByPath = new Map<string, PlaylistChange[]>();
-  for (const change of added) {
-    const bucket = addedByPath.get(change.path);
-    if (bucket) bucket.push(change);
-    else addedByPath.set(change.path, [change]);
-  }
+  const addedByPath = groupBy(added, (change) => change.path);
   const pairedAdds = new Set<PlaylistChange>();
 
   for (const change of removed) {

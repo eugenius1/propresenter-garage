@@ -24,7 +24,6 @@ let beforeRead: ((path: string) => Promise<void>) | null = null;
 function fakeFolder(): PickedFolder {
   return {
     name: "Libraries",
-    writable,
     handle: writable ? { name: "Libraries" } : undefined,
     files: [...store.keys()].map((path) => ({
       path,

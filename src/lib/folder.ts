@@ -45,8 +45,6 @@ export interface FolderFile {
 export interface PickedFolder {
   name: string;
   files: FolderFile[];
-  /** Whether anything in this folder can be written back. */
-  writable: boolean;
   /**
    * The directory handle, when there was one.
    *
@@ -130,15 +128,14 @@ export class FolderReadError extends Error {
 }
 
 /**
- * Ask for a folder, and confirm we may write to it.
+ * Ask for a folder to read.
  *
  * Returns null when the reader dismisses the picker, which is not an error.
- * `mode: "readwrite"` is requested up front so the reader answers one prompt
- * rather than being asked again the moment a fix is saved.
+ * Only read access is asked for here; writing is asked for when a fix is
+ * saved, where the reader can see why.
  */
 export async function pickFolder(
-  matches: (name: string) => boolean,
-  { write = false }: { write?: boolean } = {}
+  matches: (name: string) => boolean
 ): Promise<PickedFolder | null> {
   const picker = (window as unknown as { showDirectoryPicker?: (o: unknown) => Promise<AnyHandle> })
     .showDirectoryPicker;
@@ -146,20 +143,15 @@ export async function pickFolder(
 
   let handle: AnyHandle;
   try {
-    handle = await picker({ id: "propresenter", mode: write ? "readwrite" : "read" });
+    handle = await picker({ id: "propresenter", mode: "read" });
   } catch (e) {
     // AbortError is the reader closing the dialog; anything else is real.
     if ((e as Error).name === "AbortError") return null;
     throw e;
   }
 
-  let writable = false;
-  if (write && handle.requestPermission) {
-    writable = (await handle.requestPermission({ mode: "readwrite" })) === "granted";
-  }
-
   try {
-    return await readFolderHandle(handle, matches, writable);
+    return await readFolderHandle(handle, matches);
   } catch (e) {
     throw new FolderReadError(e);
   }
@@ -173,13 +165,12 @@ export async function pickFolder(
  */
 export async function readFolderHandle(
   handle: unknown,
-  matches: (name: string) => boolean,
-  writable = false
+  matches: (name: string) => boolean
 ): Promise<PickedFolder> {
   const directory = handle as AnyHandle;
   const files: FolderFile[] = [];
   await walkHandle(directory, "", files, matches);
-  return { name: directory.name, files, writable, handle };
+  return { name: directory.name, files, handle };
 }
 
 /**
@@ -214,7 +205,7 @@ export function readFolderFromInput(
     });
   }
 
-  return { name: root || "", files, writable: false };
+  return { name: root || "", files };
 }
 
 /**

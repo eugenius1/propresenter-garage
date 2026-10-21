@@ -300,7 +300,6 @@ describe.each(SOURCES)("merge [$name]", (source) => {
       uuid: "00000000-0000-4000-8000-ffffffffff01",
       name: "Brand New Playlist",
     });
-    expect(plan.creates).toEqual(["Brand New Playlist"]);
 
     const merged = buildLibrary(applyOperations(baselineDoc, plan.operations));
     const created = merged.playlists.find((p) => p.name === "Brand New Playlist")!;

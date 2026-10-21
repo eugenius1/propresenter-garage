@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import type { MediaLibrary, PlaylistNode } from "../lib/model";
+import { itemLabel, itemPath, type MediaLibrary, type PlaylistNode } from "../lib/model";
 import { fold } from "../lib/search";
 import { useI18n, type I18n } from "../i18n";
 
@@ -23,8 +23,8 @@ function Node({ node, depth, i18n }: { node: PlaylistNode; depth: number; i18n: 
         <ul>
           {node.items.map((item) => (
             <li className="leaf" key={item.uuid || `${item.key}-${item.index}`}>
-              <span className="item-name">{item.name || item.displayFilename}</span>
-              <span className="item-path">{item.relativePath || item.absolutePath}</span>
+              <span className="item-name">{itemLabel(item)}</span>
+              <span className="item-path">{itemPath(item)}</span>
             </li>
           ))}
           {node.children.map((child) => (
@@ -86,7 +86,7 @@ export function TreeView({ lib }: { lib: MediaLibrary }) {
             {matches.slice(0, 200).map((item) => (
               <li key={item.uuid || `${item.key}-${item.index}`}>
                 <div>
-                  {item.name || item.displayFilename}
+                  {itemLabel(item)}
                   <span className="kind">{t.kinds[item.kind]}</span>
                 </div>
                 <div className="path">{item.playlistPath} — {item.relativePath}</div>

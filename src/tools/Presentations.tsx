@@ -21,18 +21,21 @@ import { download, stamp } from "../lib/download";
 import {
   examine,
   fixFiles,
+  fixKey,
   planFixes,
+  unreadable,
   type Examined,
   type FixOutcome,
   type LineFix,
 } from "../lib/fixes";
 import {
   SPACE_CLASS,
-  unreadableReport,
+  TRAILING_PUNCTUATION,
   type TextIssue,
   type TextIssueKind,
   type TrailingPunctuation,
 } from "../lib/presentation";
+import { groupBy, toggled } from "../lib/collections";
 import { zip } from "../lib/zip";
 import { useI18n } from "../i18n";
 
@@ -49,19 +52,13 @@ import { useI18n } from "../i18n";
  * 43 with a semicolon, and a house that strips commas may well keep the full
  * stop that closes a verse.
  */
+const OPTIONAL_KINDS = Object.keys(TRAILING_PUNCTUATION) as readonly TrailingPunctuation[];
 const ALL_KINDS: TextIssueKind[] = [
   "leadingSpace",
   "trailingSpace",
   "blankLine",
   "repeatedSpace",
-  "trailingComma",
-  "trailingSemicolon",
-  "trailingFullStop",
-];
-const OPTIONAL_KINDS: readonly TrailingPunctuation[] = [
-  "trailingComma",
-  "trailingSemicolon",
-  "trailingFullStop",
+  ...OPTIONAL_KINDS,
 ];
 /** The same set, for asking whether a kind is one of them. */
 const OPTIONAL = new Set<TextIssueKind>(OPTIONAL_KINDS);
@@ -120,8 +117,8 @@ interface Row {
 }
 
 /** Address a line uniquely across the whole library. */
-const rowKey = (filename: string, boxIndex: number, lineIndex: number) =>
-  `${filename} ${boxIndex}:${lineIndex}`;
+const rowKey = (filename: string, line: { boxIndex: number; lineIndex: number }) =>
+  `${filename} ${fixKey(line)}`;
 
 /**
  * Gather the findings on one line into a single row.
@@ -131,28 +128,17 @@ const rowKey = (filename: string, boxIndex: number, lineIndex: number) =>
  * before, one after, one decision.
  */
 function rowsOf(filename: string, issues: TextIssue[], fixes: LineFix[]): Row[] {
-  const byLine = new Map<string, Row>();
-  const fixFor = new Map(fixes.map((fix) => [rowKey(filename, fix.boxIndex, fix.lineIndex), fix]));
+  const fixFor = new Map(fixes.map((fix) => [fixKey(fix), fix]));
 
-  for (const issue of issues) {
-    const key = rowKey(filename, issue.boxIndex, issue.lineIndex);
-    const existing = byLine.get(key);
-    if (existing) {
-      existing.kinds.push(issue.kind);
-      continue;
-    }
-    byLine.set(key, {
-      key,
-      slideIndex: issue.slideIndex,
-      lineIndex: issue.lineIndex,
-      groupName: issue.groupName,
-      text: issue.text,
-      kinds: [issue.kind],
-      fix: fixFor.get(key),
-    });
-  }
-
-  return [...byLine.values()];
+  return [...groupBy(issues, fixKey)].map(([line, [first, ...rest]]) => ({
+    key: rowKey(filename, first),
+    slideIndex: first.slideIndex,
+    lineIndex: first.lineIndex,
+    groupName: first.groupName,
+    text: first.text,
+    kinds: [first.kind, ...rest.map((issue) => issue.kind)],
+    fix: fixFor.get(line),
+  }));
 }
 
 /**
@@ -294,10 +280,7 @@ export function Presentations() {
       } catch (e) {
         // A file locked or removed mid-scan is that file's problem, not the
         // folder's: report it like any other file that will not open.
-        out.push({
-          report: unreadableReport(file.path, "unreadable", (e as Error).message),
-          fixable: { name: file.path, slideCount: 0, textBoxes: [] },
-        });
+        out.push(unreadable(file.path, "unreadable", (e as Error).message));
         continue;
       }
       out.push(examine(file.path, bytes));
@@ -305,6 +288,16 @@ export function Presentations() {
     setBusy(null);
     setScanned(out);
     setExcluded(new Set());
+  }
+
+  /** Make a freshly opened folder the one on screen, and read it. */
+  function load(folder: { name: string; files: FolderFile[] }, folderHandle: unknown) {
+    setPending(null);
+    clearRun();
+    setFolderName(folder.name);
+    setFiles(folder.files);
+    setHandle(folderHandle);
+    return scan(folder.files);
   }
 
   /**
@@ -344,11 +337,7 @@ export function Presentations() {
           await forget(KEYS.presentationsFolder);
           return;
         }
-        if (cancelled) return;
-        setFolderName(folder.name);
-        setFiles(folder.files);
-        setHandle(saved);
-        await scan(folder.files);
+        if (!cancelled) await load(folder, saved);
         return;
       }
 
@@ -364,13 +353,7 @@ export function Presentations() {
     if (!pending) return;
     if ((await requestHandlePermission(pending.handle, "read")) !== "granted") return;
     try {
-      const folder = await readFolderHandle(pending.handle, isPresentationFile);
-      setPending(null);
-      clearRun();
-      setFolderName(folder.name);
-      setFiles(folder.files);
-      setHandle(pending.handle);
-      await scan(folder.files);
+      await load(await readFolderHandle(pending.handle, isPresentationFile), pending.handle);
     } catch (e) {
       setPending(null);
       setError((e as Error).message);
@@ -394,7 +377,7 @@ export function Presentations() {
     setFellBack(false);
     let folder;
     try {
-      folder = await pickFolder(isPresentationFile, { write: false });
+      folder = await pickFolder(isPresentationFile);
     } catch (e) {
       if (e instanceof FolderReadError) {
         setError(e.message);
@@ -411,15 +394,10 @@ export function Presentations() {
       return;
     }
     if (!folder) return;
-    setPending(null);
-    clearRun();
-    setFolderName(folder.name);
-    setFiles(folder.files);
-    setHandle(folder.handle ?? null);
     // Only a real handle is worth keeping; the input fallback hands over
     // copies with no path back to the folder.
     if (folder.handle) void keep(KEYS.presentationsFolder, folder.handle);
-    await scan(folder.files);
+    await load(folder, folder.handle ?? null);
   }
 
   /** The picker where this browser has one, the directory input otherwise. */
@@ -485,17 +463,13 @@ export function Presentations() {
 
   const toggle = (kind: TextIssueKind) =>
     setActive((prev) => {
-      const next = new Set(prev);
-      if (next.has(kind)) next.delete(kind);
-      else next.add(kind);
+      const next = toggled(prev, kind);
       // Switching every pill off would show nothing at all, so it means "all".
       return kinds.some((k) => next.has(k)) ? next : new Set(ALL_KINDS);
     });
 
   function toggleOptional(kind: TrailingPunctuation, on: boolean) {
-    const next = new Set(optional);
-    if (on) next.add(kind);
-    else next.delete(kind);
+    const next = toggled(optional, kind, on);
     setOptional(next);
     // Turning one on should show it, even if the pill was switched off before.
     if (on) setActive((prev) => new Set(prev).add(kind));
@@ -507,12 +481,7 @@ export function Presentations() {
 
   function toggleRow(key: string) {
     setOutcomes(null);
-    setExcluded((prev) => {
-      const next = new Set(prev);
-      if (next.has(key)) next.delete(key);
-      else next.add(key);
-      return next;
-    });
+    setExcluded((prev) => toggled(prev, key));
   }
 
   function setFileSelected(filename: string, on: boolean) {
@@ -539,16 +508,37 @@ export function Presentations() {
     setExcluded(every);
   }
 
-  /** The files about to change, exactly as they stand, as one archive. */
-  async function downloadBackup() {
+  /**
+   * Run one of the long jobs below, reporting each file as it starts.
+   *
+   * `step` is shaped to be handed straight to `fixFiles` as `onFile`.
+   */
+  async function run(
+    verb: Progress["verb"],
+    body: (step: (path: string, done: number, total: number) => Promise<void>) => Promise<void>
+  ) {
     setFixError(null);
     setRunning(true);
+    const paint = painter();
     try {
-      const entries: { path: string; bytes: Uint8Array }[] = [];
-      const paint = painter();
-      for (const [index, plan] of chosen.entries()) {
-        setProgress({ verb: "backingUp", path: plan.path, done: index, total: chosen.length });
+      await body(async (path, done, total) => {
+        setProgress({ verb, path, done, total });
         await paint();
+      });
+    } catch (e) {
+      setFixError({ message: (e as Error).message });
+    } finally {
+      setRunning(false);
+      setProgress(null);
+    }
+  }
+
+  /** The files about to change, exactly as they stand, as one archive. */
+  const downloadBackup = () =>
+    run("backingUp", async (step) => {
+      const entries: { path: string; bytes: Uint8Array }[] = [];
+      for (const [index, plan] of chosen.entries()) {
+        await step(plan.path, index, chosen.length);
         const file = fileByPath.get(plan.path);
         if (file) entries.push({ path: plan.path, bytes: await file.read() });
       }
@@ -557,13 +547,7 @@ export function Presentations() {
       const name = `propresenter-backup-${stamp()}.zip`;
       download(name, await zip(entries), "application/zip");
       setBackup({ name, paths: new Set(entries.map((entry) => entry.path)) });
-    } catch (e) {
-      setFixError({ message: (e as Error).message });
-    } finally {
-      setRunning(false);
-      setProgress(null);
-    }
-  }
+    });
 
   const readFile = async (path: string) => {
     const file = fileByPath.get(path);
@@ -580,9 +564,7 @@ export function Presentations() {
       return;
     }
 
-    setRunning(true);
-    try {
-      const paint = painter();
+    await run("applying", async (onFile) => {
       const result = await fixFiles(chosen, {
         read: readFile,
         write: async (path, bytes) => {
@@ -590,37 +572,20 @@ export function Presentations() {
           if (!file?.write) throw new Error(path);
           await file.write(bytes);
         },
-        onFile: async (path, done, total) => {
-          setProgress({ verb: "applying", path, done, total });
-          await paint();
-        },
+        onFile,
       });
       setOutcomes(result);
       // The backup describes files that no longer look like that.
       setBackup(null);
       // Read the folder again, so what is on screen is what is on disk.
       await scan(files);
-    } catch (e) {
-      setFixError({ message: (e as Error).message });
-    } finally {
-      setRunning(false);
-      setProgress(null);
-    }
+    });
   }
 
   /** The fallback where nothing can be written: hand over corrected copies. */
-  async function downloadFixed() {
-    setFixError(null);
-    setRunning(true);
-    try {
-      const paint = painter();
-      const result = await fixFiles(chosen, {
-        read: readFile,
-        onFile: async (path, done, total) => {
-          setProgress({ verb: "fixing", path, done, total });
-          await paint();
-        },
-      });
+  const downloadFixed = () =>
+    run("fixing", async (onFile) => {
+      const result = await fixFiles(chosen, { read: readFile, onFile });
       const entries = result
         .filter((outcome) => outcome.bytes)
         .map((outcome) => ({ path: outcome.path, bytes: outcome.bytes! }));
@@ -628,13 +593,7 @@ export function Presentations() {
       download(name, await zip(entries), "application/zip");
       setOutcomes(result);
       setSavedZip(name);
-    } catch (e) {
-      setFixError({ message: (e as Error).message });
-    } finally {
-      setRunning(false);
-      setProgress(null);
-    }
-  }
+    });
 
   const saved = outcomes?.filter((outcome) => !outcome.reason) ?? [];
   const refused = outcomes?.filter((outcome) => outcome.reason) ?? [];
@@ -694,17 +653,12 @@ export function Presentations() {
               // does when chosen through the picker. There is no handle to
               // keep in its place, so forget the old one rather than bring it
               // back on the next visit.
-              setPending(null);
               void forget(KEYS.presentationsFolder);
-              clearRun();
               const folder = readFolderFromInput(picked, isPresentationFile);
               // Cleared, or choosing the same folder again to rescan it after
               // an edit would fire no change at all.
               e.target.value = "";
-              setFolderName(folder.name);
-              setFiles(folder.files);
-              setHandle(null);
-              void scan(folder.files);
+              void load(folder, null);
             }}
           />
           {busy && <span className="editor-count">{f(p.scanning, { n: busy })}</span>}
@@ -734,18 +688,20 @@ export function Presentations() {
         </p>
 
         {pending && (
-          <div className="editor-bar" style={{ paddingTop: 0 }}>
-            <span className="editor-count">{f(p.remembered, { folder: pending.name })}</span>
-            <span className="spacer" />
-            <button className="btn primary" onClick={() => void reopen()} disabled={running}>
-              {f(p.reconnect, { folder: pending.name })}
-            </button>
-            <button className="btn" onClick={forgetFolder} disabled={running}>
-              {p.forgetFolder}
-            </button>
-          </div>
+          <>
+            <div className="editor-bar" style={{ paddingTop: 0 }}>
+              <span className="editor-count">{f(p.remembered, { folder: pending.name })}</span>
+              <span className="spacer" />
+              <button className="btn primary" onClick={() => void reopen()} disabled={running}>
+                {f(p.reconnect, { folder: pending.name })}
+              </button>
+              <button className="btn" onClick={forgetFolder} disabled={running}>
+                {p.forgetFolder}
+              </button>
+            </div>
+            <p className="why">{p.reconnectWhy}</p>
+          </>
         )}
-        {pending && <p className="why">{p.reconnectWhy}</p>}
         {fellBack && <p className="why warn-inline">{p.pickerFailed}</p>}
         {error && <p className="why warn-inline">{error}</p>}
 

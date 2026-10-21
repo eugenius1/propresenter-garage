@@ -136,8 +136,6 @@ export const fr: Dictionary = {
     cropped: "recadré",
     effect: "effet : {name}",
     effectOff: "effet : {name} (désactivé)",
-    scale: "échelle {value}",
-    align: "alignement {value}",
   },
 
   library: {

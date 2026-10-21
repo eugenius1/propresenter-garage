@@ -1,4 +1,4 @@
-import { decodeMediaDocument } from "./model";
+import { decodeMediaDocument, findNode, findParentOf, rawChildren, walkNodes } from "./model";
 import { encodeDocument, messageType, type RawDoc } from "./decode";
 import { stamp } from "./download";
 
@@ -100,32 +100,14 @@ function clone(doc: RawDoc): RawDoc {
   return decodeMediaDocument(encodeDocument(doc));
 }
 
-function childrenOf(node: any): any[] {
-  return node.playlists?.playlists ?? node.children ?? [];
-}
-
 function itemsOf(node: any): any[] | undefined {
   return node.items?.items;
 }
 
-/** Every playlist node in the tree, root first. */
-function walk(node: any, out: any[] = []): any[] {
-  out.push(node);
-  for (const child of childrenOf(node)) walk(child, out);
-  return out;
-}
-
 function findPlaylist(doc: RawDoc, uuid: string, op: Operation): any {
-  const found = walk(doc.root_node).find((n: any) => n.uuid?.string === uuid);
+  const found = findNode(doc, uuid);
   if (!found) throw new OperationError(`no playlist with uuid ${uuid}`, op);
   return found;
-}
-
-/** The parent holding `uuid`, or undefined when it is the root. */
-function findParentOf(doc: RawDoc, uuid: string): any {
-  return walk(doc.root_node).find((n: any) =>
-    childrenOf(n).some((c: any) => c.uuid?.string === uuid)
-  );
 }
 
 /**
@@ -182,7 +164,7 @@ function applyOne(doc: RawDoc, op: Operation): void {
     }
 
     case "renameItem": {
-      const item = walk(doc.root_node)
+      const item = walkNodes(doc.root_node)
         .flatMap((n: any) => itemsOf(n) ?? [])
         .find((i: any) => i.uuid?.string === op.itemUuid);
       if (!item) throw new OperationError(`no item ${op.itemUuid}`, op);
@@ -238,7 +220,7 @@ function applyOne(doc: RawDoc, op: Operation): void {
       if (op.parentUuid && !parent.playlists) {
         throw new OperationError(`playlist ${parent.name} cannot contain playlists`, op);
       }
-      if (walk((doc as any).root_node).some((n: any) => n.uuid?.string === op.uuid)) {
+      if (walkNodes((doc as any).root_node).some((n: any) => n.uuid?.string === op.uuid)) {
         throw new OperationError(`a playlist with uuid ${op.uuid} already exists`, op);
       }
 
@@ -257,7 +239,7 @@ function applyOne(doc: RawDoc, op: Operation): void {
     case "removePlaylist": {
       const parent = findParentOf(doc, op.playlistUuid);
       if (!parent) throw new OperationError(`no playlist with uuid ${op.playlistUuid}`, op);
-      const siblings = childrenOf(parent);
+      const siblings = rawChildren(parent);
       const index = siblings.findIndex((c: any) => c.uuid?.string === op.playlistUuid);
       siblings.splice(index, 1);
       break;

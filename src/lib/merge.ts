@@ -1,5 +1,6 @@
 import type { RawDoc } from "./decode";
 import type { Change, PlaylistChange } from "./diff";
+import { findNode, findParentOf, itemLabel, rawItems, walkNodes } from "./model";
 import type { Operation } from "./operations";
 
 /**
@@ -23,34 +24,8 @@ export interface MergePlan {
   operations: Operation[];
   /** Set when the change cannot be applied, with the reason left untranslated. */
   blocked?: "unsupported" | "destructive";
-  /** Playlists this plan would create on the way, for the interface to report. */
-  creates?: string[];
 }
 
-function childrenOf(node: any): any[] {
-  return node.playlists?.playlists ?? node.children ?? [];
-}
-
-function walk(node: any, out: any[] = []): any[] {
-  out.push(node);
-  for (const child of childrenOf(node)) walk(child, out);
-  return out;
-}
-
-function playlistExists(doc: RawDoc, uuid: string): boolean {
-  return walk(doc.root_node).some((n: any) => n.uuid?.string === uuid);
-}
-
-/** The node holding `uuid`, or undefined when it is at the top level. */
-function parentOf(doc: RawDoc, uuid: string): any {
-  return walk(doc.root_node).find((n: any) =>
-    childrenOf(n).some((c: any) => c.uuid?.string === uuid)
-  );
-}
-
-function nodeIn(doc: RawDoc, uuid: string): any {
-  return walk(doc.root_node).find((n: any) => n.uuid?.string === uuid);
-}
 
 /**
  * Operations needed before an entry can be placed in `playlistUuid`.
@@ -66,10 +41,10 @@ function ensurePlaylist(
   playlistUuid: string,
   created: Set<string>
 ): Operation[] {
-  if (playlistExists(target, playlistUuid) || created.has(playlistUuid)) return [];
+  if (findNode(target, playlistUuid) || created.has(playlistUuid)) return [];
 
   const operations: Operation[] = [];
-  const parent = parentOf(source, playlistUuid);
+  const parent = findParentOf(source, playlistUuid);
   const parentUuid: string | undefined = parent?.uuid?.string;
 
   // The root has no uuid of its own, so an absent parent means top level.
@@ -77,7 +52,7 @@ function ensurePlaylist(
     operations.push(...ensurePlaylist(target, source, parentUuid, created));
   }
 
-  const node = nodeIn(source, playlistUuid);
+  const node = findNode(source, playlistUuid);
   created.add(playlistUuid);
   operations.push({
     kind: "createPlaylist",
@@ -93,8 +68,8 @@ function ensurePlaylist(
 
 /** The raw entry for an item, wherever it sits in the tree. */
 function findEntry(doc: RawDoc, itemUuid: string): unknown {
-  for (const node of walk(doc.root_node)) {
-    const found = (node.items?.items ?? []).find((i: any) => i.uuid?.string === itemUuid);
+  for (const node of walkNodes(doc.root_node)) {
+    const found = rawItems(node).find((i: any) => i.uuid?.string === itemUuid);
     if (found) return found;
   }
   return undefined;
@@ -124,7 +99,7 @@ export function planMerge(
   const existing = intoBaseline ? (change.before ?? change.item) : change.item;
   const sourceDoc = intoBaseline ? compareDoc : baselineDoc;
 
-  const name = wanted.name || wanted.displayFilename;
+  const name = itemLabel(wanted);
 
   switch (change.type) {
     // Present on one side only. Adding it to the other, or taking it away,
@@ -144,7 +119,7 @@ export function planMerge(
               kind: "removeItem",
               playlistUuid: item.playlistUuid,
               itemUuid: item.uuid,
-              itemName: item.name || item.displayFilename,
+              itemName: itemLabel(item),
             },
           ],
         };
@@ -161,14 +136,12 @@ export function planMerge(
           ...setup,
           { kind: "insertItem", playlistUuid: item.playlistUuid, itemName: name, entry },
         ],
-        creates: setup.filter((o) => o.kind === "createPlaylist").map((o) => o.name),
       };
     }
 
     case "moved": {
       const setup = ensurePlaylist(target, sourceDoc, wanted.playlistUuid, created);
       return {
-        creates: setup.filter((o) => o.kind === "createPlaylist").map((o) => o.name),
         operations: [
           ...setup,
           {
@@ -228,7 +201,7 @@ export function planPlaylistMerge(
       // `name`/`fromName` are the compare and baseline sides respectively.
       const to = intoBaseline ? change.name : (change.fromName ?? change.name);
       const from = intoBaseline ? (change.fromName ?? change.name) : change.name;
-      if (!playlistExists(target, change.uuid)) return { operations: [], blocked: "unsupported" };
+      if (!findNode(target, change.uuid)) return { operations: [], blocked: "unsupported" };
       // Only the name can be brought across. Renaming in place and calling it
       // done would export a file that silently still has the playlist where
       // it was.
@@ -248,7 +221,7 @@ export function planPlaylistMerge(
         change.type === "added" ? "intoCompare" : "intoBaseline";
 
       if (direction === presentIn) {
-        if (!playlistExists(target, change.uuid)) return { operations: [] };
+        if (!findNode(target, change.uuid)) return { operations: [] };
         return {
           operations: [
             { kind: "removePlaylist", playlistUuid: change.uuid, playlistName: change.name },
@@ -256,13 +229,7 @@ export function planPlaylistMerge(
         };
       }
 
-      const setup = ensurePlaylist(target, sourceDoc, change.uuid, created);
-      return {
-        operations: setup,
-        creates: setup
-          .filter((o) => o.kind === "createPlaylist")
-          .map((o) => (o as Extract<Operation, { kind: "createPlaylist" }>).name),
-      };
+      return { operations: ensurePlaylist(target, sourceDoc, change.uuid, created) };
     }
 
     case "recreated":
@@ -330,9 +297,8 @@ export function planMerges(
   for (const { plan } of plans) operations.push(...plan.operations);
   operations.sort((a, b) => rank(a) - rank(b));
 
-  const creates = operations
-    .filter((op) => op.kind === "createPlaylist")
-    .map((op) => (op as Extract<Operation, { kind: "createPlaylist" }>).name);
+  // Playlists the batch would create on the way, for the interface to report.
+  const creates = operations.flatMap((op) => (op.kind === "createPlaylist" ? [op.name] : []));
 
   return { operations, blocked, blockedPlaylists, creates };
 }
