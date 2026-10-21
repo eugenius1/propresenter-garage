@@ -5,8 +5,10 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { syntheticMediaFile, syntheticTextPresentation, SYNTHETIC } from "../../lib/__tests__/synthetic";
+import { messageType } from "../../lib/decode";
 import { openRoots, readFoundFile, resolveInRoots } from "../library";
 import { createServer } from "../server";
+import { auditMediaBin } from "../tools";
 
 /**
  * The server end to end, over an in-memory pipe, against a library built on
@@ -36,6 +38,12 @@ beforeAll(async () => {
   fs.writeFileSync(path.join(songs, "Sainte Cène.pro"), syntheticTextPresentation("Sainte Cène"));
   fs.writeFileSync(path.join(songs, "Chords.pro"), "{title: Amazing Grace}\n[G]Amazing grace\n");
   fs.writeFileSync(path.join(songs, "._Checked Song.pro"), "resource fork noise");
+  // A presentation with nothing to report, so a clean file stays unlisted.
+  const Presentation = messageType("rv.data.Presentation");
+  fs.writeFileSync(path.join(songs, "Clean.pro"), Presentation.encode(Presentation.fromObject({ name: "Clean" })).finish());
+  // One the walk finds but cannot open.
+  fs.writeFileSync(path.join(songs, "Locked.pro"), syntheticTextPresentation("Locked"));
+  fs.chmodSync(path.join(songs, "Locked.pro"), 0o000);
   fs.writeFileSync(path.join(library, "Playlists", "Media"), syntheticMediaFile());
 
   // Outside the library, and a link inside it pointing there.
@@ -50,6 +58,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await client?.close();
+  fs.chmodSync(path.join(library, "Libraries", "Default", "Locked.pro"), 0o644);
   fs.rmSync(tmp, { recursive: true, force: true });
 });
 
@@ -127,7 +136,7 @@ describe("search_text", () => {
     const result = (await call("search_text", { query: "TIDY" })).json();
     expect(result.matches).toHaveLength(2);
     expect(result.matches[0]).toMatchObject({ slideIndex: 0, boxIndex: 0, lineIndex: 0, text: "A tidy line" });
-    expect(result.unreadable.map((p: string) => path.basename(p))).toEqual(["Chords.pro"]);
+    expect(result.unreadable.map((p: string) => path.basename(p))).toEqual(["Chords.pro", "Locked.pro"]);
   });
 
   it("stops at the limit and says so", async () => {
@@ -135,8 +144,9 @@ describe("search_text", () => {
     expect(result.matches).toHaveLength(1);
     expect(result.truncated).toBe(true);
     // Counts the files it got through, up to the one holding the match it
-    // stopped at -- here the third of three, after the chord chart.
-    expect(result.filesSearched).toBe(3);
+    // stopped at -- here the last, after the chord chart, the clean file and
+    // the locked one.
+    expect(result.filesSearched).toBe(5);
   });
 
   it("refuses a file passed as the folder rather than finding nothing", async () => {
@@ -170,6 +180,14 @@ describe("check_presentations", () => {
     );
     expect(byName["Checked Song.pro"].issues.length).toBeGreaterThan(0);
     expect(byName["Chords.pro"].error).toMatch(/ChordPro/);
+    expect(byName["Locked.pro"].error).toMatch(/Could not read/);
+    expect(byName["Clean.pro"]).toBeUndefined();
+  });
+
+  it("says when it listed fewer files than had findings", async () => {
+    const result = (await call("check_presentations", { limit: 1 })).json();
+    expect(result.files).toHaveLength(1);
+    expect(result.truncated).toBe(true);
   });
 });
 
@@ -187,10 +205,24 @@ describe("the media bin", () => {
     for (const item of audit.hiddenItems) expect(item).not.toHaveProperty("variantKey");
   });
 
+  it("says where to look when there is none", async () => {
+    await expect(auditMediaBin([path.join(library, "Libraries")])).rejects.toThrow(/No media bin found/);
+  });
+
   it("refuses a presentation passed as a media bin", async () => {
     const result = await call("read_media_bin", { path: "Libraries/Default/Checked Song.pro" });
     expect(result.isError).toBe(true);
     expect(result.text).toMatch(/not a ProPresenter media bin/);
+  });
+});
+
+describe("openRoots", () => {
+  it("refuses a folder that does not exist", async () => {
+    await expect(openRoots([path.join(tmp, "missing")])).rejects.toThrow(/not found/);
+  });
+
+  it("refuses a file given as a folder", async () => {
+    await expect(openRoots([path.join(tmp, "secret.txt")])).rejects.toThrow(/Not a folder/);
   });
 });
 

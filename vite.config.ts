@@ -49,7 +49,9 @@ export default defineConfig({
     coverage: {
       enabled: !!process.env.CI,
       include: ["src/**"],
-      exclude: ["src/**/__tests__/**", "src/**/*.test.{ts,tsx}", "src/generated/**"],
+      // main.ts only starts the MCP server on stdio; the suite drives the
+      // server itself in-process, and a child process would not be measured.
+      exclude: ["src/**/__tests__/**", "src/**/*.test.{ts,tsx}", "src/generated/**", "src/mcp/main.ts"],
       reporter: ["lcov", "text-summary"],
     },
   },

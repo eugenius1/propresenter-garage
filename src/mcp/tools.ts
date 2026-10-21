@@ -241,9 +241,13 @@ export async function checkPresentations(
   if (single && !isPresentationFile(path.basename(resolved))) {
     throw new LibraryError(`Not a presentation (.pro) file: ${target}`);
   }
-  const files = single ? [resolved] : (await findPresentations(resolved ? [resolved] : roots)).files;
+  const { files, truncated } = single
+    ? { files: [resolved], truncated: false }
+    : await findPresentations(resolved ? [resolved] : roots);
 
-  const result: CheckResult = { filesChecked: files.length, totals: {}, truncated: false, files: [] };
+  // Truncated either way: a walk that hit its cap left files unchecked, and a
+  // list that hit `limit` left findings unlisted. Both mean "not everything".
+  const result: CheckResult = { filesChecked: files.length, totals: {}, truncated, files: [] };
   const list = (entry: CheckResult["files"][number]) => {
     if (result.files.length === limit) result.truncated = true;
     else result.files.push(entry);
