@@ -50,6 +50,26 @@ that folder is the media *assets*; the playlist document is the one under
 between them, bring changes from one side into the other, and export the
 result as a new file.
 
+### For AI assistants (MCP)
+
+A [Model Context Protocol](https://modelcontextprotocol.io) server that lets an
+assistant such as Claude read your library from disk: list and search
+presentations, read their slides line by line, run the Presentations checks,
+and read or audit the media bin. It is **read-only** — it cannot change a file.
+
+ProPresenter's own network API can show and trigger slides, and there are MCP
+servers for that, but it cannot read a presentation's file or edit its text.
+This works on the files instead, through the same code as the app.
+
+```bash
+npm ci && npm run mcp:build
+claude mcp add propresenter -- node "$PWD/dist-mcp/propresenter-mcp.mjs" ~/Documents/ProPresenter
+```
+
+Pass one or more folders; it reads nothing outside them. With none, it reads
+`~/Documents/ProPresenter`. The built file is self-contained, so it can be
+copied anywhere Node 20 or later runs.
+
 ## Why
 
 ProPresenter gives you no way to answer "what changed in the media bin since
@@ -85,7 +105,8 @@ cannot express: a French operator on an English-configured booth machine.
 Working: the **Presentations** checker and its fixes, and the **Media Bin**
 tool — diff, audit, browse, reorganise and export — with the fidelity gate
 behind everything written, English and French, and light, dark or system
-appearance.
+appearance. Also the read-only **MCP server**; editing through it would have to
+keep all four write guards in [AGENTS.md](AGENTS.md), so it is not offered yet.
 
 ## Contributing
 

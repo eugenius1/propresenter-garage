@@ -151,6 +151,28 @@ export function decodePresentation(bytes: Uint8Array): RawDoc {
   return Presentation.decode(bytes) as RawDoc;
 }
 
+/** A presentation read from bytes, or why it could not be. */
+export type Opened =
+  | { doc: PresentationDoc; problem?: undefined }
+  | { problem: ReadProblem; detail?: string; doc?: undefined };
+
+/**
+ * Read a presentation's text, or classify why not.
+ *
+ * Emptiness is checked before decoding, because nothing goes wrong decoding
+ * no bytes: protobuf reads them as a presentation with nothing in it, and the
+ * reader would be told about a song with no slides rather than about a file
+ * with no content.
+ */
+export function openPresentation(bytes: Uint8Array): Opened {
+  if (bytes.length === 0) return { problem: "empty" };
+  try {
+    return { doc: readPresentation(decodePresentation(bytes)) };
+  } catch (e) {
+    return { problem: readProblem(bytes), detail: (e as Error).message };
+  }
+}
+
 export function encodePresentation(doc: RawDoc): Uint8Array {
   return Presentation.encode(doc).finish();
 }
@@ -251,6 +273,16 @@ export function writeTextBoxes(doc: RawDoc, replacements: ReadonlyMap<number, st
 }
 
 /**
+ * Whether a box shows anything at all.
+ *
+ * A box that does not is a theme placeholder: counted, never reported, and
+ * the same answer wherever it is asked.
+ */
+export function hasText(box: Pick<TextBox, "lines">): boolean {
+  return box.lines.some((line) => line.text.trim() !== "");
+}
+
+/**
  * Whitespace that shows as a gap: ordinary spaces, tabs, non-breaking spaces.
  *
  * Exported as a pattern rather than only as the regular expressions built from
@@ -326,8 +358,7 @@ export function checkPresentation(
   let emptyTextBoxes = 0;
 
   for (const box of doc.textBoxes) {
-    const hasText = box.lines.some((line) => line.text.trim() !== "");
-    if (!hasText) {
+    if (!hasText(box)) {
       emptyTextBoxes++;
       continue;
     }

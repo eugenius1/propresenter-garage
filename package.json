@@ -19,14 +19,18 @@
     "lint:fix": "oxlint --fix",
     "typecheck": "tsc --noEmit -p tsconfig.app.json && tsc --noEmit -p tsconfig.test.json",
     "report": "tsx src/report.mts",
-    "check": "npm run protos && npm run lint && npm run typecheck && npm test"
+    "mcp:build": "npm run protos && npm run mcp:bundle",
+    "mcp:bundle": "vite build -c vite.mcp.config.ts --logLevel warn",
+    "check": "npm run protos && npm run lint && npm run typecheck && npm test && npm run mcp:bundle"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.32.1",
     "@radix-ui/colors": "^3.0.0",
     "lucide-react": "^1.45.0",
     "protobufjs": "^8.8.0",
     "react": "^19.2.8",
-    "react-dom": "^19.2.8"
+    "react-dom": "^19.2.8",
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@testing-library/jest-dom": "^7.0.1",

@@ -3,8 +3,8 @@ import {
   checkPresentationFidelity,
   decodePresentation,
   encodePresentation,
+  openPresentation,
   readPresentation,
-  readProblem,
   RUN_CLASS,
   SPACE_CLASS,
   TRAILING_PUNCTUATION,
@@ -404,21 +404,17 @@ export function unreadable(filename: string, problem: ReadProblem, detail?: stri
 
 /** Read a file, report on it, and keep what a fix would need. */
 export function examine(filename: string, bytes: Uint8Array): Examined {
-  let doc: PresentationDoc;
+  const opened = openPresentation(bytes);
+  if (opened.problem) return unreadable(filename, opened.problem, opened.detail);
+
+  const { doc } = opened;
   let report: PresentationReport;
-
-  // Before decoding, because nothing goes wrong decoding no bytes: protobuf
-  // reads them as a presentation with nothing in it, and the reader is told
-  // about a song with no slides rather than about a file with no content.
-  if (bytes.length === 0) return unreadable(filename, "empty");
-
   try {
-    doc = readPresentation(decodePresentation(bytes));
     report = checkPresentation(filename, doc);
   } catch (e) {
-    return unreadable(filename, readProblem(bytes), (e as Error).message);
+    // A check tripping over one file's text marks that file, not the scan.
+    return unreadable(filename, "unreadable", (e as Error).message);
   }
-
   const wanted = new Set(report.issues.map((issue) => issue.boxIndex));
   return {
     report,

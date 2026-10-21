@@ -348,6 +348,14 @@ owns everything specific to it, including its own file state, and its strings
 live under its own key in the dictionaries. Shared analysis lives in
 `src/lib/`, shared interface pieces in `src/components/`.
 
+`src/mcp/` is the MCP server: Node, not the browser, so it is typechecked with
+the tests rather than the app, and bundled on its own by `vite.mcp.config.ts`
+(`npm run check` builds it, so a bundling break fails the gate). It calls
+`src/lib/` and nothing in `src/lib/` knows it exists. `library.ts` is the only
+place it touches the disk: every path a tool is given is resolved with
+`realpath` before it is compared with the configured folders, and nothing
+opens a file for writing.
+
 Routing is a flat list of slugs in `App.tsx`: the first tool owns the root path
 and each other tool gets one segment. There is no registry and no extension
 point, because two tools share nothing but the chrome around them — one reads
