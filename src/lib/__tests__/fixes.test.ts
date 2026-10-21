@@ -196,6 +196,17 @@ describe("applying", () => {
     );
   });
 
+  it("refuses a fix when another line of its box has changed since", () => {
+    // The line's own text still matches, but the box's source does not, so
+    // its offsets would point somewhere else.
+    const before = synthetic();
+    const [planned] = plan(before, ["leadingSpace"]);
+    const moved: LineFix = { ...planned, source: planned.source + " " };
+    expect(() => applyFixes(before, [moved])).toThrow(
+      expect.objectContaining({ reason: "stale" })
+    );
+  });
+
   it("refuses a fix whose promise it cannot keep", () => {
     // A fix claiming an outcome the edits do not produce must not reach disk,
     // whatever produced it.

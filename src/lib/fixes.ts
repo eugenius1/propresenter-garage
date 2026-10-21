@@ -76,6 +76,11 @@ export interface LineFix {
   after: string | null;
   /** The splice that achieves it. */
   edits: SourceEdit[];
+  /**
+   * The whole box's RTF as it was scanned, which the offsets in `edits` are
+   * offsets into.
+   */
+  source: string;
 }
 
 /** An address that names one line, for grouping findings and ticking boxes. */
@@ -148,13 +153,14 @@ function planLine(
     cueName: first.cueName,
     groupName: first.groupName,
     kinds,
+    source: rtf,
   };
 
   if (kinds.includes("blankLine")) {
     // A blank line is removed outright: there is nothing on it to trim, and
     // leaving the paragraph behind is the problem being reported.
-    const edit = lineEdit(rtf, line);
-    return edit && { ...site, before: line.text, after: null, edits: [edit] };
+    const edits = lineEdit(rtf, line);
+    return edits && { ...site, before: line.text, after: null, edits };
   }
 
   const cuts = kinds.flatMap((kind) => cutsFor(kind, line.text));
@@ -219,9 +225,9 @@ export class FixError extends Error {
  * - the file survives a decode and re-encode with nothing lost, because
  *   protobuf.js drops fields the reverse-engineered schema does not declare;
  * - the edits actually change something;
- * - each line still reads what it read when the fix was planned, since the
- *   offsets a fix is built from describe the file as it was scanned and mean
- *   nothing against a file somebody has edited since;
+ * - each box still holds the source it held when the fix was planned, since
+ *   the offsets a fix is built from describe the file as it was scanned and
+ *   mean nothing against a file somebody has edited since;
  * - re-reading the result gives exactly the lines that were promised, every
  *   other line included.
  *
@@ -247,10 +253,14 @@ export function applyFixes(bytes: Uint8Array, fixes: readonly LineFix[]): Uint8A
   const byBox = new Map<number, SourceEdit[]>();
   for (const fix of fixes) {
     // ProPresenter may have been open all along. A fix carries offsets into
-    // the file as it was read, so a line that no longer says what it said is
-    // a fix that no longer describes anything.
-    const line = before.textBoxes.find((b) => b.boxIndex === fix.boxIndex)?.lines[fix.lineIndex];
-    if (line?.text !== fix.before) throw new FixError("stale");
+    // the box as it was read, so a box that no longer holds that source is a
+    // fix that no longer describes anything. The whole box, not just the line:
+    // recolouring the line above shifts every offset below it while this
+    // line's text reads exactly as it did.
+    const box = before.textBoxes.find((b) => b.boxIndex === fix.boxIndex);
+    if (box?.rtf !== fix.source || box.lines[fix.lineIndex]?.text !== fix.before) {
+      throw new FixError("stale");
+    }
 
     const edits = byBox.get(fix.boxIndex);
     if (edits) edits.push(...fix.edits);

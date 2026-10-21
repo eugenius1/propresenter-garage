@@ -35,7 +35,9 @@ export function MediaBin() {
     [left, right]
   );
 
-  const inspected = auditSide === "right" && right ? right : left;
+  // Either side will do when only one is loaded: an empty baseline slot is no
+  // reason to show nothing at all.
+  const inspected = auditSide === "right" ? (right ?? left) : (left ?? right);
   const audit = useMemo(() => (inspected ? auditLibrary(inspected.library) : null), [inspected]);
 
   /**

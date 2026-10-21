@@ -1,4 +1,5 @@
 import { basename, type MediaItem, type MediaLibrary, type ModDescriptor } from "./model";
+import { fold } from "./search";
 
 /**
  * Findings derivable from a single media-bin snapshot.
@@ -86,8 +87,15 @@ function absoluteRoot(p: string): string {
   return parts.slice(0, Math.max(1, parts.length - 2)).join("/");
 }
 
+/**
+ * A name reduced to the letters and digits that make it, accents folded.
+ *
+ * Folded rather than stripped to ASCII, which would drop the "e" from "Cène"
+ * and report "Sainte Cène" against "Sainte Cene.mp4" as a mismatch -- and
+ * reduce a name in any non-Latin script to nothing at all.
+ */
 function norm(s: string): string {
-  return s.toLowerCase().replace(/\.[a-z0-9]+$/, "").replace(/[^a-z0-9]+/g, "");
+  return fold(s).replace(/\.[\p{L}\p{N}]+$/u, "").replace(/[^\p{L}\p{N}]+/gu, "");
 }
 
 function groupBy<T>(rows: T[], pick: (row: T) => string): Map<string, T[]> {
@@ -110,7 +118,10 @@ export function auditLibrary(lib: MediaLibrary): AuditResult {
   const crossPlaylistDuplicates: DuplicateGroup[] = [];
 
   // Redundancy: identical file *and* identical visual modifications.
-  for (const [variantKey, items] of groupBy(lib.items, (i) => i.variantKey)) {
+  // Only entries that name a file can be the same file twice.
+  const withFile = lib.items.filter((i) => i.key);
+
+  for (const [variantKey, items] of groupBy(withFile, (i) => i.variantKey)) {
     if (items.length < 2) continue;
 
     const perPlaylist = groupBy(items, (i) => i.playlistPath);
@@ -139,7 +150,7 @@ export function auditLibrary(lib: MediaLibrary): AuditResult {
 
   // Deliberate variants: one file, several distinct modification sets.
   const variantGroups: VariantGroup[] = [];
-  for (const [, items] of groupBy(lib.items, (i) => i.key)) {
+  for (const [, items] of groupBy(withFile, (i) => i.key)) {
     const byVariant = groupBy(items, (i) => i.modifications.fingerprint);
     if (byVariant.size < 2) continue;
 

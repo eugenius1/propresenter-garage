@@ -50,8 +50,12 @@ function transact<T>(mode: IDBTransactionMode, run: (store: IDBObjectStore) => I
       new Promise<T>((resolve, reject) => {
         const tx = db.transaction(STORE, mode);
         const request = run(tx.objectStore(STORE));
-        request.onsuccess = () => resolve(request.result as T);
-        request.onerror = () => reject(request.error ?? new Error("the request failed"));
+        // Settled by the transaction, not the request: a put can succeed and
+        // its transaction still abort -- over quota, typically -- leaving
+        // nothing stored behind a request that reported success.
+        tx.oncomplete = () => resolve(request.result as T);
+        tx.onabort = () => reject(tx.error ?? request.error ?? new Error("the transaction was aborted"));
+        tx.onerror = () => reject(request.error ?? tx.error ?? new Error("the request failed"));
       })
   );
 }

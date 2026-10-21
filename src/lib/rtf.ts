@@ -54,6 +54,24 @@ const LITERAL: Record<string, string> = {
   nbsp: " ",
 };
 
+/**
+ * Windows-1252 at 0x80-0x9F, where it parts company with Latin-1.
+ *
+ * `\ansicpg1252` is what ProPresenter declares, and the code page nearly
+ * everything else writes. Holes in the table are bytes 1252 leaves undefined,
+ * which fall through to their Latin-1 reading.
+ */
+const CP1252: Record<number, string> = {
+  0x80: "€", 0x82: "‚", 0x83: "ƒ", 0x84: "„", 0x85: "…", 0x86: "†", 0x87: "‡",
+  0x88: "ˆ", 0x89: "‰", 0x8a: "Š", 0x8b: "‹", 0x8c: "Œ", 0x8e: "Ž",
+  0x91: "‘", 0x92: "’", 0x93: "“", 0x94: "”", 0x95: "•", 0x96: "–", 0x97: "—",
+  0x98: "˜", 0x99: "™", 0x9a: "š", 0x9b: "›", 0x9c: "œ", 0x9e: "ž", 0x9f: "Ÿ",
+};
+
+function fromCodePage(byte: number): string {
+  return CP1252[byte] ?? String.fromCharCode(byte);
+}
+
 /** Control words that end the current line. */
 const BREAKS = new Set(["par", "line", "sect", "page", "column"]);
 
@@ -223,7 +241,18 @@ export function extractLines(rtf: string): RtfLine[] {
       if (next !== undefined && !/[a-zA-Z]/.test(next)) {
         const start = i;
         i += 2;
-        if (next === "\\" || next === "{" || next === "}") emit(next, start, i, false);
+        if (next === "'") {
+          // `\'hh` is a byte in the document's code page. ProPresenter's own
+          // writer uses `\u` instead, but this is how other RTF writers spell
+          // an "é" -- and how a `\u` escape's fallback is often written, which
+          // is the case it matters most in: read as a bare control symbol, its
+          // two hex digits would land on the slide as text.
+          const hex = rtf.slice(i, i + 2);
+          if (/^[0-9a-fA-F]{2}$/.test(hex)) {
+            i += 2;
+            emit(fromCodePage(parseInt(hex, 16)), start, i, false);
+          }
+        } else if (next === "\\" || next === "{" || next === "}") emit(next, start, i, false);
         else if (next === "~") emit(" ", start, i, false);
         else if (next === "_") emit("‑", start, i, false);
         else if (next === "-") {
@@ -453,18 +482,29 @@ export function applyEdits(rtf: string, edits: readonly SourceEdit[]): string {
 }
 
 /**
- * Remove a whole line, formatting and terminating break included.
+ * Remove a whole line: its visible characters and the break that ends it.
+ *
+ * The line's formatting stays. RTF character and paragraph state carries
+ * forward across a break, so a `\cf2\fs60` sitting on a blank line is what
+ * colours and sizes every line after it; cutting it along with the line would
+ * restyle the rest of the box while the text -- the only thing verification
+ * compares -- read exactly as promised. Leaving the instructions also keeps any
+ * group the line opens or closes balanced. With the break gone they simply
+ * join the start of the next paragraph, which they were going to govern anyway.
  *
  * Returns null for a line nothing terminated -- the last of a document, which
  * has no break to take with it, and which is never a gap between two others
- * anyway.
+ * anyway -- and for one whose characters cannot be cut whole.
  */
-export function lineEdit(rtf: string, line: RtfLine): SourceEdit | null {
-  if (line.breakEnd === undefined) return null;
-  const start = line.sourceStart;
-  return endsWithControlWord(rtf, start)
+export function lineEdit(rtf: string, line: RtfLine): SourceEdit[] | null {
+  if (line.breakStart === undefined || line.breakEnd === undefined) return null;
+  const text = cutsToEdits(rtf, line, [{ start: 0, end: line.text.length }]);
+  if (text === null) return null;
+  const start = line.breakStart;
+  const brk = endsWithControlWord(rtf, start)
     ? { start, end: line.breakEnd, insert: " " }
     : { start, end: line.breakEnd };
+  return [...text, brk];
 }
 
 /**

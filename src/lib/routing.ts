@@ -27,7 +27,9 @@ export function basePath(pathname: string, slugs: readonly string[]): string {
   const trimmed = pathname.replace(/\/+$/, "");
   const lastSlash = trimmed.lastIndexOf("/");
   const last = trimmed.slice(lastSlash + 1);
-  if (slugs.includes(last)) return trimmed.slice(0, lastSlash + 1) || "/";
+  // A tool's segment, or the document itself -- /app/index.html is mounted at
+  // /app/, and treating it as a folder would put every tool under it.
+  if (slugs.includes(last) || /\.html?$/i.test(last)) return trimmed.slice(0, lastSlash + 1) || "/";
   return trimmed ? `${trimmed}/` : "/";
 }
 

@@ -65,7 +65,11 @@ type AnyHandle = {
   name: string;
   values?: () => AsyncIterable<AnyHandle>;
   getFile?: () => Promise<File>;
-  createWritable?: () => Promise<{ write: (d: Uint8Array) => Promise<void>; close: () => Promise<void> }>;
+  createWritable?: () => Promise<{
+    write: (d: Uint8Array) => Promise<void>;
+    close: () => Promise<void>;
+    abort?: () => Promise<void>;
+  }>;
   queryPermission?: (d: { mode: string }) => Promise<PermissionState>;
   requestPermission?: (d: { mode: string }) => Promise<PermissionState>;
 };
@@ -95,11 +99,33 @@ async function walkHandle(
       write: entry.createWritable
         ? async (bytes) => {
             const writable = await entry.createWritable!();
-            await writable.write(bytes);
+            try {
+              await writable.write(bytes);
+            } catch (e) {
+              // Abandon the swap file rather than leave it holding the file's
+              // lock until it is collected: the original is untouched until
+              // close(), so aborting is what keeps it that way, and a retry
+              // in the same session would otherwise find the file busy.
+              await writable.abort?.().catch(() => {});
+              throw e;
+            }
             await writable.close();
           }
         : undefined,
     });
+  }
+}
+
+/**
+ * A folder that was picked and then could not be read.
+ *
+ * Distinct from a picker that failed, which a caller can fall back from: this
+ * folder was chosen, so offering a different way to choose it misses the point.
+ */
+export class FolderReadError extends Error {
+  constructor(cause: unknown) {
+    super((cause as Error)?.message ?? String(cause), { cause });
+    this.name = "FolderReadError";
   }
 }
 
@@ -132,7 +158,11 @@ export async function pickFolder(
     writable = (await handle.requestPermission({ mode: "readwrite" })) === "granted";
   }
 
-  return readFolderHandle(handle, matches, writable);
+  try {
+    return await readFolderHandle(handle, matches, writable);
+  } catch (e) {
+    throw new FolderReadError(e);
+  }
 }
 
 /**

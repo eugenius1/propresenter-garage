@@ -274,8 +274,11 @@ export function DiffView({
               })}
             </p>
           )}
-          {plan && plan.blockedPlaylists.length > 0 && (
+          {plan && plan.blockedPlaylists.some((c) => c.type === "recreated") && (
             <p className="why warn-inline">{t.tools.mediaBin.merge.blockedDestructive}</p>
+          )}
+          {plan && plan.blockedPlaylists.some((c) => c.reparented) && (
+            <p className="why warn-inline">{t.tools.mediaBin.merge.blockedMoved}</p>
           )}
           {plan && plan.blocked.length > 0 && (
             <p className="why warn-inline">

@@ -1,5 +1,6 @@
 import { decodeMediaDocument } from "./model";
 import { encodeDocument, messageType, type RawDoc } from "./decode";
+import { stamp } from "./download";
 
 /**
  * Edits to a media-bin document.
@@ -127,6 +128,23 @@ function findParentOf(doc: RawDoc, uuid: string): any {
   );
 }
 
+/**
+ * The items of a playlist that is about to receive one.
+ *
+ * A playlist that has never held anything has neither branch of its children
+ * oneof set, so there is no list to push onto -- but nothing about it says it
+ * is a group either, and the item is going there because it sits in that very
+ * playlist on the other side. A group, which has its branch set, still refuses.
+ */
+function receivingItems(playlist: any, op: Operation): any[] {
+  if (!playlist.items && !playlist.playlists) {
+    playlist.items = messageType("rv.data.Playlist.PlaylistItems").fromObject({ items: [] });
+  }
+  const items = itemsOf(playlist);
+  if (!items) throw new OperationError(`playlist ${playlist.name} cannot hold items`, op);
+  return items;
+}
+
 function takeItem(playlist: any, itemUuid: string, op: Operation): any {
   const items = itemsOf(playlist);
   if (!items) throw new OperationError(`playlist ${playlist.name} holds no items`, op);
@@ -146,12 +164,7 @@ function applyOne(doc: RawDoc, op: Operation): void {
 
     case "moveItem": {
       const from = findPlaylist(doc, op.fromPlaylistUuid, op);
-      const to = findPlaylist(doc, op.toPlaylistUuid, op);
-      const target = itemsOf(to);
-      if (!target) {
-        // A playlist that has never held items has no `items` oneof branch set.
-        throw new OperationError(`playlist ${to.name} cannot hold items`, op);
-      }
+      const target = receivingItems(findPlaylist(doc, op.toPlaylistUuid, op), op);
       target.push(takeItem(from, op.itemUuid, op));
       break;
     }
@@ -186,10 +199,7 @@ function applyOne(doc: RawDoc, op: Operation): void {
     }
 
     case "insertItem": {
-      const playlist = findPlaylist(doc, op.playlistUuid, op);
-      const items = itemsOf(playlist);
-      if (!items) throw new OperationError(`playlist ${playlist.name} cannot hold items`, op);
-      items.push(copyEntry(op.entry, op));
+      receivingItems(findPlaylist(doc, op.playlistUuid, op), op).push(copyEntry(op.entry, op));
       break;
     }
 
@@ -280,6 +290,7 @@ export function exportOperations(doc: RawDoc, operations: Operation[]): Uint8Arr
  * the reader moves into place themselves once they are satisfied.
  */
 export function exportFilename(original: string, now = new Date()): string {
-  const stamp = now.toISOString().slice(0, 16).replace(/[-:]/g, "").replace("T", "-");
-  return `${original || "Media"}-edited-${stamp}`;
+  // Local time, through the same stamp as every other download, so an export
+  // and the backup taken beside it name the same minute.
+  return `${original || "Media"}-edited-${stamp(now)}`;
 }

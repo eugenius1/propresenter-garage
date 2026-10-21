@@ -117,6 +117,18 @@ describe("escapes and unicode", () => {
     const [line] = extractLines(rtf("\\cb3 a\\tab b"));
     expect(line.text).toBe("a\tb");
   });
+
+  it("decodes a \\'hh escape as one character in the code page", () => {
+    // Read as a bare control symbol, the two hex digits would land on the
+    // slide: "Caf\'e9" as "Cafe9".
+    const [line] = extractLines(rtf("\\cb3 Caf\\'e9 ok, \\'85"));
+    expect(line.text).toBe("Café ok, …");
+  });
+
+  it("swallows a \\'hh escape written as a \\u fallback", () => {
+    const [line] = extractLines(rtf("\\cb3 Caf\\u233\\'e9 ok"));
+    expect(line.text).toBe("Café ok");
+  });
 });
 
 describe("robustness", () => {

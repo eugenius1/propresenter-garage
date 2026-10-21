@@ -194,7 +194,7 @@ export const en = {
     search: "Search items, filenames or playlists…",
     matches: ["{n} match", "{n} matches"],
     itemCount: ["{n} item", "{n} items"],
-    subCount: "{n} sub",
+    subCount: ["{n} sub-playlist", "{n} sub-playlists"],
     empty: "empty",
     unnamed: "(unnamed)",
   },
@@ -378,6 +378,8 @@ export const en = {
         blockedWhy: "Their entry could not be found in the file it came from.",
         blockedDestructive:
           "A recreated playlist cannot be brought across: it would mean deleting this side's playlist and everything in it.",
+        blockedMoved:
+          "A playlist moved into another group cannot be brought across yet: only its name could be, and it would stay where it is.",
         willCreate: ["Creates {n} playlist: {names}", "Creates {n} playlists: {names}"],
         exportBlocked:
           "That side cannot be exported: re-encoding it loses content the schema does not cover.",

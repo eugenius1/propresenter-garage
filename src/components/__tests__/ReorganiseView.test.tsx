@@ -73,7 +73,7 @@ describe("ReorganiseView", () => {
     await userEvent.click(screen.getByRole("button", { name: /Remove 1 duplicate entry/ }));
 
     expect(await screen.findByText("1 pending change")).toBeInTheDocument();
-    const summary = screen.getByText("Removed").closest(".stat")!;
+    const summary = screen.getByText("Removed").closest<HTMLElement>(".stat")!;
     expect(within(summary).getByText("1")).toBeInTheDocument();
   });
 
@@ -168,7 +168,7 @@ describe("ReorganiseView", () => {
     await userEvent.click(renameButtons[renameButtons.length - 1]);
 
     expect(await screen.findByText("1 pending change")).toBeInTheDocument();
-    const summary = screen.getByText("Renamed").closest(".stat")!;
+    const summary = screen.getByText("Renamed").closest<HTMLElement>(".stat")!;
     expect(within(summary).getByText("1")).toBeInTheDocument();
   });
 });

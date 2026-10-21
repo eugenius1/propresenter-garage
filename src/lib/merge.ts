@@ -229,6 +229,10 @@ export function planPlaylistMerge(
       const to = intoBaseline ? change.name : (change.fromName ?? change.name);
       const from = intoBaseline ? (change.fromName ?? change.name) : change.name;
       if (!playlistExists(target, change.uuid)) return { operations: [], blocked: "unsupported" };
+      // Only the name can be brought across. Renaming in place and calling it
+      // done would export a file that silently still has the playlist where
+      // it was.
+      if (change.reparented) return { operations: [], blocked: "unsupported" };
       return {
         operations: [
           { kind: "renamePlaylist", playlistUuid: change.uuid, from, to },
@@ -309,11 +313,15 @@ export function planMerges(
   }
 
   // Creations first so an insert always finds its playlist. Then renames, then
-  // item edits. Removals last -- of items, then of whole playlists -- so an
-  // earlier operation still finds the entry or playlist it names.
+  // replacements, then the other item edits. Removals last -- of items, then
+  // of whole playlists -- so an earlier operation still finds the entry or
+  // playlist it names. A replacement names the playlist the entry sits in
+  // before the merge, so it has to run before a move of the same entry takes
+  // it somewhere else: an item both renamed and moved is one of each.
   const rank = (op: Operation) =>
-    op.kind === "createPlaylist" ? -2
-      : op.kind === "renamePlaylist" ? -1
+    op.kind === "createPlaylist" ? -3
+      : op.kind === "renamePlaylist" ? -2
+      : op.kind === "replaceItem" ? -1
       : op.kind === "removeItem" ? 1
       : op.kind === "removePlaylist" ? 2
       : 0;
