@@ -1,0 +1,50 @@
+{
+  "$schema": "../node_modules/@anthropic-ai/mcpb/dist/mcpb-manifest-v0.3.schema.json",
+  "manifest_version": "0.3",
+  "name": "propresenter-garage",
+  "display_name": "ProPresenter Garage",
+  "description": "Read a ProPresenter 7 library: search slide text, read presentations, run text checks and audit the media bin. Read-only.",
+  "long_description": "Reads ProPresenter 7 files from disk, through the same decoding and checks as the ProPresenter Garage browser app. List and search presentations, read their slides line by line, run the Presentations text checks, and read or audit the media bin. It never writes a file, and it reads nothing outside the folders you choose.",
+  "author": {
+    "name": "Eusebius Ngemera",
+    "url": "https://github.com/eugenius1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/eugenius1/propresenter-garage"
+  },
+  "homepage": "https://github.com/eugenius1/propresenter-garage",
+  "license": "GPL-3.0-or-later",
+  "icon": "icon.png",
+  "keywords": ["propresenter", "church", "lyrics", "slides", "media"],
+  "server": {
+    "type": "node",
+    "entry_point": "server/propresenter-mcp.mjs",
+    "mcp_config": {
+      "command": "node",
+      "args": ["${__dirname}/server/propresenter-mcp.mjs", "${user_config.library_folders}"]
+    }
+  },
+  "user_config": {
+    "library_folders": {
+      "type": "directory",
+      "title": "ProPresenter folders",
+      "description": "The folder holding your Libraries and Playlists, usually Documents/ProPresenter. Nothing outside the folders chosen here is read.",
+      "multiple": true,
+      "required": true,
+      "default": ["${HOME}/Documents/ProPresenter"]
+    }
+  },
+  "tools": [
+    { "name": "list_presentations", "description": "List presentation files, optionally filtered by name." },
+    { "name": "read_presentation", "description": "Read a presentation's slides, line by line." },
+    { "name": "search_text", "description": "Find a phrase in the slide text of every presentation." },
+    { "name": "check_presentations", "description": "Run the Presentations text checks on a file, a folder or every library." },
+    { "name": "read_media_bin", "description": "Read every playlist in the media bin and the items in it." },
+    { "name": "audit_media_bin", "description": "Find duplicates, empty playlists, hidden items and other media bin problems." }
+  ],
+  "compatibility": {
+    "platforms": ["darwin", "win32", "linux"],
+    "runtimes": { "node": ">=20.0.0" }
+  }
+}

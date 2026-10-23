@@ -356,6 +356,16 @@ place it touches the disk: every path a tool is given is resolved with
 `realpath` before it is compared with the configured folders, and nothing
 opens a file for writing.
 
+`mcpb/manifest.json` wraps that bundle as a Claude Desktop extension;
+`scripts/pack-mcpb.mjs` stamps in the version from `package.json` and packs it
+with the official `mcpb` CLI, which validates the manifest, and `npm run check`
+runs it too. The manifest's tool list is what Claude Desktop shows before the
+server starts, so a test holds it to the tools the server registers: add a tool
+to both or the suite fails. The folders arrive as arguments from a required
+`directory` setting; the `${HOME}` default only prefills the form, because
+Claude Desktop does not expand variables inside a default when it builds the
+command line.
+
 Routing is a flat list of slugs in `App.tsx`: the first tool owns the root path
 and each other tool gets one segment. There is no registry and no extension
 point, because two tools share nothing but the chrome around them — one reads

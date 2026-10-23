@@ -61,14 +61,46 @@ ProPresenter's own network API can show and trigger slides, and there are MCP
 servers for that, but it cannot read a presentation's file or edit its text.
 This works on the files instead, through the same code as the app.
 
+It reads nothing outside the folders you give it. The usual one is
+`Documents/ProPresenter`, which holds `Libraries` and `Playlists` on both macOS
+and Windows.
+
+#### Claude Desktop
+
+The server is packaged as a desktop extension, so Claude Desktop installs it in
+one click and brings its own Node; there is nothing else to install.
+
+```bash
+npm ci && npm run mcp:pack
+```
+
+1. Open `dist-mcp/propresenter-garage.mcpb` with Claude Desktop: double-click
+   it, drag it onto the window, or install it from **Settings → Extensions**.
+2. Click **Install**, then choose your ProPresenter folder when asked. It
+   suggests `Documents/ProPresenter`; add more than one folder if you keep
+   libraries elsewhere.
+3. Start a new chat and ask, for example, *"Which songs in my library have
+   lines ending in a full stop?"* or *"Find the presentation with the lyric
+   'how great thou art'."*
+
+To change the folders later, find ProPresenter Garage under **Settings →
+Extensions**. The extension is unsigned, so Claude Desktop says so when
+installing it.
+
+#### Claude Code and other MCP clients
+
+Any client that starts a local server over stdio — Claude Code, VS Code,
+Cursor, Cline, LM Studio — can run the bundled file directly with Node 20 or
+later:
+
 ```bash
 npm ci && npm run mcp:build
 claude mcp add propresenter -- node "$PWD/dist-mcp/propresenter-mcp.mjs" ~/Documents/ProPresenter
 ```
 
-Pass one or more folders; it reads nothing outside them. With none, it reads
-`~/Documents/ProPresenter`. The built file is self-contained, so it can be
-copied anywhere Node 20 or later runs.
+Pass one or more folders; with none, it reads `~/Documents/ProPresenter`. The
+built file is self-contained, so it can be copied anywhere. Other clients take
+the same command and arguments in their MCP settings.
 
 ## Why
 

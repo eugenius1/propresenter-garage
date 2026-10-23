@@ -75,6 +75,13 @@ describe("the tools offered", () => {
     ]);
     for (const tool of tools) expect(tool.annotations?.readOnlyHint).toBe(true);
   });
+
+  it("are the ones the Claude Desktop extension says it has", async () => {
+    // Claude Desktop shows the manifest's list before the server ever runs.
+    const manifest = JSON.parse(fs.readFileSync(new URL("../../../mcpb/manifest.json", import.meta.url), "utf8"));
+    const { tools } = await client.listTools();
+    expect(manifest.tools.map((t: { name: string }) => t.name).sort()).toEqual(tools.map((t) => t.name).sort());
+  });
 });
 
 describe("list_presentations", () => {
