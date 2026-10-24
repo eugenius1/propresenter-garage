@@ -195,7 +195,7 @@ function eachTextBox(doc: RawDoc, visit: (site: TextBoxSite) => void): number {
           boxIndex: boxIndex++,
           slideIndex,
           cueName,
-          groupName: groupName || undefined,
+          groupName,
           text: text as { rtf_data: Uint8Array },
         });
       }
@@ -360,9 +360,7 @@ export function checkPresentation(
       continue;
     }
 
-    const firstReal = box.lines.findIndex((line) => line.text.trim() !== "");
-    const lastReal =
-      box.lines.length - 1 - [...box.lines].reverse().findIndex((l) => l.text.trim() !== "");
+    const [firstReal, lastReal] = shownBounds(box.lines.map((l) => l.text));
 
     const at = (kind: TextIssueKind, line: RtfLine): TextIssue => ({
       kind,
@@ -397,6 +395,18 @@ export function checkPresentation(
     issues,
     emptyTextBoxes,
   };
+}
+
+/**
+ * The first and last lines that show anything, or `[-1, -1]` when none does.
+ *
+ * Everything outside them is padding: a blank line above or below the words
+ * is layout, and only a blank between two of them is a gap. The checker and
+ * the restyler both draw that line here, so they cannot disagree about it.
+ */
+export function shownBounds(lines: readonly string[]): [number, number] {
+  const shows = (line: string) => line.trim() !== "";
+  return [lines.findIndex(shows), lines.findLastIndex(shows)];
 }
 
 /** A report for a file that could not be read at all. */

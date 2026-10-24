@@ -16,6 +16,10 @@ const PlaylistItem = messageType("rv.data.PlaylistItem");
 const asObject = (entry: unknown) =>
   PlaylistItem.toObject(entry as never, { enums: String }) as any;
 
+/** The first entry of the synthetic media bin. */
+const firstMediaItem = () =>
+  walkNodes((decodeMediaDocument(syntheticMediaFile()) as any).root_node).flatMap(rawItems)[0];
+
 const MAC: ShowLocation = { root: "/Users/me/Documents/ProPresenter", platform: "PLATFORM_MACOS" };
 
 describe("a presentation entry", () => {
@@ -93,8 +97,7 @@ describe("where the ProPresenter folder is", () => {
 
 describe("a media entry", () => {
   it("is the media bin's cue under identities of its own", () => {
-    const bin = decodeMediaDocument(syntheticMediaFile()) as any;
-    const original = walkNodes(bin.root_node).flatMap(rawItems)[0];
+    const original = firstMediaItem();
     const copy = mediaEntry(original) as any;
 
     expect(copy.uuid.string).not.toBe(original.uuid.string);
@@ -120,14 +123,13 @@ describe("a media entry", () => {
 describe("building and updating a presentation playlist", () => {
   it("creates one, fills it in order, and leaves the others alone", () => {
     const doc = decodePlaylistsDocument(syntheticPresentationFile()) as any;
-    const bin = decodeMediaDocument(syntheticMediaFile()) as any;
     const uuid = "00000000-0000-4000-8000-0000000c0ffe";
     const song = presentationEntry({ path: "Libraries/Chants/Majeste.pro", location: MAC }) as any;
 
     const edited = applyOperations(doc, [
       { kind: "createPlaylist", uuid, name: "Mariage" },
       { kind: "insertItem", playlistUuid: uuid, itemName: "Chants", entry: headerEntry("Chants") },
-      { kind: "insertItem", playlistUuid: uuid, itemName: "Fond", entry: mediaEntry(walkNodes(bin.root_node).flatMap(rawItems)[0]) },
+      { kind: "insertItem", playlistUuid: uuid, itemName: "Fond", entry: mediaEntry(firstMediaItem()) },
       // At a position, not just the end.
       { kind: "insertItem", playlistUuid: uuid, itemName: "Majeste", entry: song, index: 1 },
       { kind: "renamePlaylist", playlistUuid: uuid, from: "Mariage", to: "Mariage (samedi)" },

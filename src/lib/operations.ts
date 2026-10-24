@@ -1,5 +1,5 @@
 import { findNode, findParentOf, rawChildren, walkNodes } from "./model";
-import { encodeDocument, messageType, type RawDoc } from "./decode";
+import { decodeAnyDocument, encodeDocument, messageType, wireCopy, type RawDoc } from "./decode";
 import { stamp } from "./download";
 
 /**
@@ -99,8 +99,7 @@ export class OperationError extends Error {
  */
 function copyEntry(entry: unknown, op: Operation): any {
   try {
-    const PlaylistItem = messageType("rv.data.PlaylistItem");
-    return PlaylistItem.decode(PlaylistItem.encode(entry as never).finish());
+    return wireCopy(messageType("rv.data.PlaylistItem"), entry);
   } catch (e) {
     throw new OperationError(`entry could not be copied: ${(e as Error).message}`, op);
   }
@@ -113,7 +112,7 @@ function copyEntry(entry: unknown, op: Operation): any {
  * media bin is.
  */
 function clone(doc: RawDoc): RawDoc {
-  return messageType("rv.data.PlaylistDocument").decode(encodeDocument(doc)) as RawDoc;
+  return decodeAnyDocument(encodeDocument(doc));
 }
 
 function itemsOf(node: any): any[] | undefined {

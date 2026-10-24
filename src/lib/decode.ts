@@ -103,6 +103,31 @@ export function encodeDocument(doc: RawDoc): Uint8Array {
 }
 
 /**
+ * Decode a playlist document of whatever kind.
+ *
+ * For code that edits one it has already checked, such as a clone made for
+ * editing: the media bin and the presentation playlists share one tree.
+ */
+export function decodeAnyDocument(bytes: Uint8Array): RawDoc {
+  return PlaylistDocument.decode(bytes) as RawDoc;
+}
+
+/**
+ * Deep-copy a message through the wire format.
+ *
+ * Anything copied out of one document into another must not be shared by
+ * reference, or a later edit to either would reach into both.
+ */
+export function wireCopy<T = any>(type: protobuf.Type, message: unknown): T {
+  return type.decode(type.encode(message as never).finish()) as T;
+}
+
+/** A fresh identity, upper-case as ProPresenter writes them. */
+export function newUuid(): { string: string } {
+  return { string: crypto.randomUUID().toUpperCase() };
+}
+
+/**
  * How faithfully a file survives being written back out.
  *
  * - `identical`  bytes match exactly. Safest possible result.
@@ -133,7 +158,23 @@ const TO_OBJECT: protobuf.IConversionOptions = {
 };
 
 function canonical(type: protobuf.Type, bytes: Uint8Array): string {
-  return JSON.stringify(type.toObject(type.decode(bytes), TO_OBJECT));
+  return canonicalObject(type, type.decode(bytes));
+}
+
+/**
+ * A decoded message as comparable text, the way the fidelity gate compares.
+ *
+ * `strip` edits the plain object first, for a comparison that is meant to
+ * ignore one part of the message.
+ */
+export function canonicalObject(
+  type: protobuf.Type,
+  message: unknown,
+  strip?: (plain: any) => void
+): string {
+  const plain = type.toObject(message as never, TO_OBJECT);
+  strip?.(plain);
+  return JSON.stringify(plain);
 }
 
 /**

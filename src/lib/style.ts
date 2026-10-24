@@ -1,8 +1,16 @@
-import { checkTypeFidelity, messageType, type RawDoc } from "./decode";
+import {
+  canonicalObject,
+  checkTypeFidelity,
+  messageType,
+  newUuid,
+  wireCopy,
+  type RawDoc,
+} from "./decode";
 import {
   checkPresentationFidelity,
   decodePresentation,
   encodePresentation,
+  shownBounds,
   slidesInOrder,
 } from "./presentation";
 import { decodeRtf, encodeRtf, endsWithControlWord, extractLines } from "./rtf";
@@ -34,8 +42,6 @@ const Slide = messageType("rv.data.Slide");
 const Cue = messageType("rv.data.Cue");
 const CustomAttribute = messageType("rv.data.Graphics.Text.Attributes.CustomAttribute");
 const IntRange = messageType("rv.data.IntRange");
-
-const AS_OBJECT = { enums: Number, longs: String, bytes: String } as const;
 
 /** `Slide.Element.Info.INFO_IS_TEXT_ELEMENT`: the boxes that take words. */
 const TEXT_ELEMENT = 2;
@@ -171,10 +177,8 @@ function isTextElement(wrapper: any): boolean {
  */
 function wordsOf(wrapper: any): string[] {
   const lines = extractLines(decodeRtf(wrapper.element.text.rtf_data)).map((l) => l.text);
-  const shows = (line: string) => line.trim() !== "";
-  const first = lines.findIndex(shows);
-  if (first < 0) return [];
-  return lines.slice(first, lines.length - [...lines].reverse().findIndex(shows));
+  const [first, last] = shownBounds(lines);
+  return lines.slice(first, last + 1);
 }
 
 function textsOf(slide: any): string[][] {
@@ -275,63 +279,55 @@ export function restyleRtf(styleRtf: string, lines: readonly string[]): string {
   let body = "";
   lines.forEach((line, i) => {
     if (i > 0) body += separator;
-    const at = before + body;
     const text = escapeRtf(line, fallback);
     // A control word with nothing after it would swallow the first letter.
-    body += text && endsWithControlWord(at, at.length) ? ` ${text}` : text;
+    // Only the tail matters, and it lies in `body` once there is one.
+    const tail = body || before;
+    body += text && endsWithControlWord(tail, tail.length) ? ` ${text}` : text;
   });
 
   return before + body + styleRtf.slice(end);
 }
 
 /**
- * Per-range attributes that still mean something once the words change.
+ * What a style box's per-range attributes become once the words change.
  *
  * A style's `custom_attributes` are ranges over its own sample text. One that
  * covered all of it -- "Your Title Here" in capitals -- is clearly meant for
  * the whole box, and is stretched to the new words line by line, the way
  * ProPresenter itself records them. One that covered part of the sample can
  * only be guessed at, so it goes.
+ *
+ * Returns the attribute to stretch, `"drop"`, or undefined when there are
+ * none -- decided once per style box, not once per slide.
  */
-function retargetAttributes(attributes: any, oldLines: string[], newLines: readonly string[]): void {
+function attributeVerdict(attributes: any, sample: readonly string[]): any {
   const custom: any[] = attributes?.custom_attributes ?? [];
-  if (custom.length === 0) return;
+  if (custom.length === 0) return undefined;
 
-  const length = (lines: readonly string[]) => lines.join("\n").length;
-  const covered = new Array(length(oldLines)).fill(false);
+  const joined = sample.join("\n");
+  const covered = new Array(joined.length).fill(false);
   for (const a of custom) {
     for (let i = a.range?.start ?? 0; i < Math.min(a.range?.end ?? 0, covered.length); i++) {
       covered[i] = true;
     }
   }
-  const newlines = new Set(
-    oldLines.slice(0, -1).map((_, i) => length(oldLines.slice(0, i + 1)))
-  );
-  const wholeBox = covered.every((c, i) => c || newlines.has(i));
+  const wholeBox = covered.every((c, i) => c || joined[i] === "\n");
 
-  const apartFromRange = (a: any) => {
-    const o = CustomAttribute.toObject(a, AS_OBJECT);
-    delete o.range;
-    return JSON.stringify(o);
-  };
-  const sameOtherwise = custom.every((a) => apartFromRange(a) === apartFromRange(custom[0]));
-  if (!wholeBox || !sameOtherwise) {
-    attributes.custom_attributes = [];
-    return;
-  }
+  const apartFromRange = (a: any) => canonicalObject(CustomAttribute, a, (o) => delete o.range);
+  const first = apartFromRange(custom[0]);
+  return wholeBox && custom.every((a) => apartFromRange(a) === first) ? custom[0] : "drop";
+}
 
-  const proto = custom[0];
+function stretchAttribute(verdict: any, lines: readonly string[]): any[] {
+  if (verdict === "drop") return [];
   let offset = 0;
-  attributes.custom_attributes = newLines.map((line) => {
-    const copy = CustomAttribute.decode(CustomAttribute.encode(proto).finish()) as any;
+  return lines.map((line) => {
+    const copy = wireCopy(CustomAttribute, verdict);
     copy.range = IntRange.fromObject({ start: offset, end: offset + line.length });
     offset += line.length + 1;
     return copy;
   });
-}
-
-function newUuid(): string {
-  return crypto.randomUUID().toUpperCase();
 }
 
 /**
@@ -348,28 +344,53 @@ function remapUuids(node: any, renamed: ReadonlyMap<string, string>): void {
   for (const value of Object.values(node)) remapUuids(value, renamed);
 }
 
+/**
+ * A style read once for a whole presentation.
+ *
+ * Everything that depends only on the style -- its bytes, each box's RTF and
+ * what its attributes become -- is worked out here rather than again for
+ * every slide it is applied to.
+ */
+interface PreparedStyle {
+  bytes: Uint8Array;
+  /** Per element position, for the boxes that take words. */
+  boxes: Map<number, { rtf: string; attributes: any }>;
+}
+
+function prepareStyle(style: SlideStyle): PreparedStyle {
+  const boxes = new Map<number, { rtf: string; attributes: any }>();
+  (style.baseSlide.elements ?? []).forEach((wrapper: any, i: number) => {
+    if (!isTextElement(wrapper)) return;
+    const rtf = decodeRtf(wrapper.element.text.rtf_data);
+    const sample = extractLines(rtf).map((l) => l.text);
+    boxes.set(i, { rtf, attributes: attributeVerdict(wrapper.element.text.attributes, sample) });
+  });
+  return { bytes: Slide.encode(style.baseSlide).finish(), boxes };
+}
+
 /** The style's slide, rebuilt around one target slide's words. */
-function restyledSlide(target: any, style: SlideStyle, texts: string[][]): any {
-  const copy = Slide.decode(Slide.encode(style.baseSlide).finish()) as any;
+function restyledSlide(target: any, style: PreparedStyle, texts: string[][]): any {
+  const copy = Slide.decode(style.bytes) as any;
   copy.uuid = target.base_slide?.uuid;
 
   const renamed = new Map<string, string>();
   let next = 0;
-  for (const wrapper of copy.elements ?? []) {
+  (copy.elements ?? []).forEach((wrapper: any, i: number) => {
     const element = wrapper.element;
     if (element?.uuid?.string) {
-      const fresh = newUuid();
+      const fresh = newUuid().string;
       renamed.set(element.uuid.string, fresh);
       element.uuid.string = fresh;
     }
-    if (!isTextElement(wrapper)) continue;
+    const box = style.boxes.get(i);
+    if (!box) return;
 
     const words = texts[next++] ?? [];
-    const styleRtf = decodeRtf(element.text.rtf_data);
-    const sample = extractLines(styleRtf).map((l) => l.text);
-    element.text.rtf_data = encodeRtf(restyleRtf(styleRtf, words));
-    retargetAttributes(element.text.attributes, sample, words);
-  }
+    element.text.rtf_data = encodeRtf(restyleRtf(box.rtf, words));
+    if (box.attributes) {
+      element.text.attributes.custom_attributes = stretchAttribute(box.attributes, words);
+    }
+  });
   remapUuids(copy.elements, renamed);
   return copy;
 }
@@ -395,54 +416,49 @@ export function applyStyle(
 ): StyleResult {
   if (!checkPresentationFidelity(bytes).exportSafe) throw new StyleError("lossy");
 
+  // Two decodes: one to edit, one kept as it was to check the edit against.
+  const original = decodePresentation(bytes);
   const doc = decodePresentation(bytes);
   const plan = planStyle(doc, style, options);
+  const prepared = prepareStyle(style);
   slidesInOrder(doc).forEach(({ cue }, i) => {
     if (plan[i].skip) return;
     const slide = slideOf(cue);
-    slide.base_slide = restyledSlide(slide, style, plan[i].texts);
+    slide.base_slide = restyledSlide(slide, prepared, plan[i].texts);
   });
 
   const out = encodePresentation(doc);
-  verify(bytes, out, plan);
+  verify(original, out, plan);
   return { bytes: out, plan };
 }
 
-function verify(before: Uint8Array, after: Uint8Array, plan: SlidePlan[]): void {
-  const original = decodePresentation(before);
+/** The whole cue, for a slide that was meant to be left alone. */
+const wholeCue = (cue: any) => canonicalObject(Cue, cue);
+
+/** The cue with its slide's elements taken out: what restyling must not touch. */
+const cueOutsideElements = (cue: any) =>
+  canonicalObject(Cue, cue, (o) => {
+    for (const a of o.actions ?? []) {
+      const presentation = a.slide?.presentation;
+      if (presentation?.base_slide) presentation.base_slide = { uuid: presentation.base_slide.uuid };
+    }
+  });
+
+function verify(original: RawDoc, after: Uint8Array, plan: SlidePlan[]): void {
   const result = decodePresentation(after);
   const fail = (what: string, slide?: number) =>
     new StyleError("verifyFailed", slide === undefined ? { what } : { what, slide: String(slide + 1) });
 
-  const withoutCues = (doc: RawDoc) => {
-    const o = Presentation.toObject(doc, AS_OBJECT);
-    delete o.cues;
-    return JSON.stringify(o);
-  };
+  const withoutCues = (doc: RawDoc) => canonicalObject(Presentation, { ...doc, cues: [] });
   if (withoutCues(original) !== withoutCues(result)) throw fail("document");
 
+  // Restyling replaces slides' elements and never adds or removes a cue, so
+  // the two walks pair up slide for slide.
   const was = slidesInOrder(original);
-  const now = slidesInOrder(result);
-  if (was.length !== now.length) throw fail("slideCount");
-
-  // A cue with its slide's elements taken out: what restyling must not touch.
-  const outsideElements = (cue: any, keepElements: boolean) => {
-    const o = Cue.toObject(cue, AS_OBJECT);
-    if (!keepElements) {
-      for (const a of o.actions ?? []) {
-        if (a.slide?.presentation?.base_slide) {
-          a.slide.presentation.base_slide = { uuid: a.slide.presentation.base_slide.uuid };
-        }
-      }
-    }
-    return JSON.stringify(o);
-  };
-
-  now.forEach(({ cue }, i) => {
+  slidesInOrder(result).forEach(({ cue }, i) => {
     const restyled = !plan[i].skip;
-    if (outsideElements(cue, !restyled) !== outsideElements(was[i].cue, !restyled)) {
-      throw fail(restyled ? "slideActions" : "untouchedSlide", i);
-    }
+    const key = restyled ? cueOutsideElements : wholeCue;
+    if (key(cue) !== key(was[i].cue)) throw fail(restyled ? "slideActions" : "untouchedSlide", i);
     if (restyled && JSON.stringify(textsOf(slideOf(cue))) !== JSON.stringify(plan[i].texts)) {
       throw fail("words", i);
     }
