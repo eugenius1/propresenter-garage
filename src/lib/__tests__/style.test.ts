@@ -130,6 +130,26 @@ describe("restyling one box", () => {
     expect(linesOf(restyleRtf(empty, ["Libre", "par la grâce"]))).toEqual(["Libre", "par la grâce"]);
   });
 
+  it("keeps the document's groups closed when the sample straddles one", () => {
+    // Cutting "Gloire} \i nom" out of `{\b Gloire} \i nom` takes the brace
+    // that closes the bold group with it.
+    const grouped = "{\\rtf1\\ansi {\\b Gloire} \\i nom}";
+    const out = restyleRtf(grouped, ["Majeste"]);
+    expect(linesOf(out)).toEqual(["Majeste"]);
+    const depth = [...out.replace(/\\./g, "")].reduce(
+      (d, ch) => d + (ch === "{" ? 1 : ch === "}" ? -1 : 0),
+      0
+    );
+    expect(depth).toBe(0);
+  });
+
+  it("writes as many fallback characters as the style says escapes have", () => {
+    const uc2 = "{\\rtf1\\ansi\\uc2\\pard\\f0 Sample}";
+    const out = restyleRtf(uc2, ["été"]);
+    expect(out).toContain("\\u233 ??");
+    expect(linesOf(out)).toEqual(["été"]);
+  });
+
   it("empties a box when there is nothing to say", () => {
     expect(linesOf(restyleRtf(COCOA, [])).join("")).toBe("");
   });
@@ -180,6 +200,36 @@ describe("applying a style to a presentation", () => {
     const cue = (b: Uint8Array) =>
       JSON.stringify(messageType("rv.data.Cue").toObject(slidesInOrder(decodePresentation(b))[0].cue));
     expect(cue(bytes)).toBe(cue(song));
+  });
+
+  it("still restyles a lyric slide that fires another macro as well", () => {
+    const doc = decodePresentation(
+      songWithMacros(["Bienvenue", "Louange", "Louange", "Louange"])
+    ) as any;
+    // A lighting cue on top of the usual macro on slide 3.
+    slidesInOrder(doc)[2].cue.actions.push(
+      messageType("rv.data.Action").fromObject({
+        uuid: { string: "LIGHTS" },
+        type: "ACTION_TYPE_MACRO",
+        macro: { identification: { parameter_name: "Lumières" } },
+      })
+    );
+    const plan = planStyle(doc, styleSlide());
+    expect(plan[0].skip).toBe("distinctMacro");
+    expect(plan[2].skip).toBeUndefined();
+  });
+
+  it("leaves a slide alone that holds more than its words, unless told otherwise", () => {
+    const doc = decodePresentation(syntheticTextPresentation()) as any;
+    // An image of its own beside the text box.
+    doc.cues[0].actions[0].slide.presentation.base_slide.elements.push(
+      messageType("rv.data.Slide.Element").fromObject({
+        info: 1,
+        element: { uuid: { string: "PHOTO" }, name: "Photo" },
+      })
+    );
+    expect(planStyle(doc, styleSlide())[0].skip).toBe("otherElements");
+    expect(planStyle(doc, styleSlide(), { replaceOtherElements: true })[0].skip).toBeUndefined();
   });
 
   it("restyles the title slide too when asked to", () => {
