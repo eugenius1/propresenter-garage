@@ -1,0 +1,15 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "tsBuildInfoFile": "../../node_modules/.tmp/core-test.tsbuildinfo",
+    "types": [
+      "node"
+    ]
+  },
+  "include": [
+    "src/**/__tests__/**/*.ts",
+    "src/**/*.test.ts",
+    "src/report.mts"
+  ],
+  "exclude": []
+}

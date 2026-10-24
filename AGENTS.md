@@ -34,9 +34,9 @@ explaining the reasoning and what went wrong — not a changelog line.
 ## Never commit somebody's ProPresenter library
 
 Real `.pro` files, media-bin playlists and media folders are personal data and
-stay out of the repository. `public/__dev-*` is gitignored for exactly this;
-put development copies there and nowhere else. If you add fixtures for a manual
-check, delete them before committing.
+stay out of the repository. `packages/web/public/__dev-*` is gitignored for
+exactly this; put development copies there and nowhere else. If you add
+fixtures for a manual check, delete them before committing.
 
 Tests that need real files read them from `PP_MEDIA_FILE` and `PP_LIBRARY_DIR`
 and skip cleanly when absent, so CI stays green without them.
@@ -46,7 +46,7 @@ and skip cleanly when absent, so CI stays green without them.
 Writing back over the file ProPresenter owns is how a library gets destroyed.
 The Media Bin tool never does it at all: its exports are a differently named
 copy the user moves into place themselves — see `exportFilename()` in
-`src/lib/operations.ts`.
+`packages/core/src/lib/operations.ts`.
 
 The presentation fixer is the one path that does write in place, and it is
 allowed to only because all four of these hold. Do not add a fifth write path
@@ -66,5 +66,5 @@ that keeps fewer of them, and do not quietly drop one from this one:
    line of every box including the ones no fix touched. A file that comes back
    saying anything else is not written.
 
-`applyFixes()` in `src/lib/fixes.ts` enforces 1 and 4 and cannot be bypassed;
-2 and 3 live in `src/tools/Presentations.tsx`.
+`applyFixes()` in `packages/core/src/lib/fixes.ts` enforces 1 and 4 and cannot
+be bypassed; 2 and 3 live in `packages/web/src/tools/Presentations.tsx`.
