@@ -175,23 +175,11 @@ interface TextBoxSite {
  * rather than merely unlikely.
  */
 function eachTextBox(doc: RawDoc, visit: (site: TextBoxSite) => void): number {
-  const raw = doc as any;
-
-  // Cues carry the slides; groups name the sections and reference cues by uuid.
-  const groupByCue = new Map<string, string>();
-  for (const entry of raw.cue_groups ?? []) {
-    const name: string = entry.group?.name ?? "";
-    for (const id of entry.cue_identifiers ?? []) {
-      if (id?.string) groupByCue.set(id.string, name);
-    }
-  }
-
-  const cues: any[] = raw.cues ?? [];
+  const slides = slidesInOrder(doc);
   let boxIndex = 0;
 
-  cues.forEach((cue, slideIndex) => {
+  slides.forEach(({ cue, groupName }, slideIndex) => {
     const cueName: string = cue.name ?? "";
-    const groupName = groupByCue.get(cue.uuid?.string ?? "");
 
     for (const action of cue.actions ?? []) {
       const elements = action.slide?.presentation?.base_slide?.elements ?? [];
@@ -214,7 +202,47 @@ function eachTextBox(doc: RawDoc, visit: (site: TextBoxSite) => void): number {
     }
   });
 
-  return cues.length;
+  return slides.length;
+}
+
+/** One slide as ProPresenter numbers it. */
+export interface OrderedSlide {
+  /** The raw cue, so a caller can edit it in place. */
+  cue: any;
+  groupName?: string;
+}
+
+/**
+ * The cues in the order ProPresenter shows and numbers them.
+ *
+ * That is group order, then each group's own order -- not the order of the
+ * `cues` array, which is storage and nothing more. The two agree in most files
+ * and disagree badly in some: in a real "Gloire à ton nom" the slide stored
+ * first is the one ProPresenter shows second, and its "1 Intro" is stored
+ * seventh. Numbering by storage told the reader to look for a line on a slide
+ * that held something else entirely.
+ *
+ * A cue no group names is still shown, after the grouped ones, so it is kept
+ * rather than silently dropped from every check.
+ */
+export function slidesInOrder(doc: RawDoc): OrderedSlide[] {
+  const raw = doc as any;
+  const cues: any[] = raw.cues ?? [];
+  const byUuid = new Map(cues.map((cue) => [cue.uuid?.string, cue]));
+
+  const ordered: OrderedSlide[] = [];
+  const placed = new Set<any>();
+  for (const entry of raw.cue_groups ?? []) {
+    const groupName: string | undefined = entry.group?.name || undefined;
+    for (const id of entry.cue_identifiers ?? []) {
+      const cue = byUuid.get(id?.string);
+      if (!cue || placed.has(cue)) continue;
+      placed.add(cue);
+      ordered.push({ cue, groupName });
+    }
+  }
+  for (const cue of cues) if (!placed.has(cue)) ordered.push({ cue });
+  return ordered;
 }
 
 /** Walk the presentation into the text boxes it actually renders. */
