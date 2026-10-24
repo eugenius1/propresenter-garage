@@ -382,6 +382,7 @@ describe("what a presentation records about itself", () => {
     const { tools } = await datedClient.listTools();
     const about = (name: string) => tools.find((t) => t.name === name)!.description!;
     expect(about("list_presentations")).toMatch(/decoded/);
+    expect(about("read_presentation")).toMatch(/Prefer `lastModified`/);
     for (const name of ["list_presentations", "read_presentation"]) {
       expect(about(name)).toMatch(/No creation date/);
     }

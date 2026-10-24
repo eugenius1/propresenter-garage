@@ -109,8 +109,9 @@ export function createServer(roots: readonly string[]): McpServer {
         "by line. Also reports `fidelity` (whether the file would survive being written back) and what " +
         "the file records about itself: ProPresenter's `lastModified` and `lastUsed` (when it was last " +
         "shown; absent if never), category, notes, CCLI details, music key, arrangements, and the " +
-        "ProPresenter version that saved it. `fileModified` is the file system's time, which copying or " +
-        "syncing also changes; `lastModified` is ProPresenter's own record, kept inside the file. " +
+        "ProPresenter version that saved it. Prefer `lastModified` for when it was last edited: it is " +
+        "ProPresenter's own record, kept inside the file, so copies, syncs and backups keep it. " +
+        "`fileModified` is the file system's time, which a copy or download resets. " +
         CREATION_DATE_NOTE,
       inputSchema: { path: z.string().describe("Path of the .pro file.") },
       annotations: READ_ONLY,

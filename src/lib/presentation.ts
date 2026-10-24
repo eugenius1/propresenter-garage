@@ -272,7 +272,13 @@ export function readPresentation(doc: RawDoc): PresentationDoc {
  * to a new computer would report every song as created that day.
  */
 export interface PresentationDetails {
-  /** When ProPresenter last saved an edit to it, as ISO 8601. */
+  /**
+   * When ProPresenter last saved an edit to it, as ISO 8601.
+   *
+   * Checked against Windows on real 21.4 files: it matched the file system's
+   * modification time to the minute, and unlike that time it survived a
+   * round trip through a Google Drive backup.
+   */
   lastModified?: string;
   /** When it was last shown on screen, as ISO 8601. Absent if never. */
   lastUsed?: string;
