@@ -302,3 +302,14 @@ describe.skipIf(!hasRealLibrary)("against real presentations", () => {
     expect(leading / lines).toBeLessThan(0.25);
   });
 });
+
+describe("reading what a presentation records about itself", () => {
+  it("leaves out a timestamp Date cannot hold rather than failing the read", () => {
+    const details = readDetails({
+      last_date_used: { seconds: 1e15, nanos: 0 },
+      last_modified_date: { seconds: 1_761_300_000, nanos: 0 },
+    } as any);
+    expect(details.lastUsed).toBeUndefined();
+    expect(details.lastModified).toBe("2025-10-24T10:00:00.000Z");
+  });
+});

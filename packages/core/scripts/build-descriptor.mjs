@@ -4,10 +4,14 @@
 import fs from "node:fs";
 import path from "node:path";
 import { gzipSync } from "node:zlib";
+import { fileURLToPath } from "node:url";
 import { loadProtoRoot, PROTO_DIR } from "./proto-root.mjs";
 
 const ROOT_TYPE = "rv.data.PlaylistDocument";
-const OUT = "src/generated/pp.descriptor.json";
+// Resolved from this file, like PROTO_DIR, so running it from the repository
+// root writes where the app reads rather than into a stray src/ there.
+const GENERATED = fileURLToPath(new URL("../src/generated", import.meta.url));
+const OUT = path.join(GENERATED, "pp.descriptor.json");
 
 const root = await loadProtoRoot();
 
@@ -28,7 +32,7 @@ const provenance = fs.existsSync(provenancePath)
   : {};
 
 fs.writeFileSync(
-  "src/generated/proto-version.json",
+  path.join(GENERATED, "proto-version.json"),
   JSON.stringify(
     {
       version,

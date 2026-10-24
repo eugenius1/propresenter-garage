@@ -7,7 +7,7 @@ import { createServer } from "./server";
 /**
  * Start the server on stdio.
  *
- *   node dist-mcp/propresenter-mcp.mjs [library folder...]
+ *   node packages/mcp/dist/propresenter-mcp.mjs [library folder...]
  *
  * With no folder named it reads `~/Documents/ProPresenter`, where ProPresenter
  * keeps its libraries and playlists on both macOS and Windows.

@@ -312,7 +312,10 @@ function isoTimestamp(ts: any): string | undefined {
   // int64 arrives as a protobuf.js Long; Number() covers both forms.
   const seconds = Number(ts?.seconds ?? 0);
   if (!seconds) return undefined;
-  return new Date(seconds * 1000 + Math.floor((ts.nanos ?? 0) / 1e6)).toISOString();
+  const date = new Date(seconds * 1000 + Math.floor((ts.nanos ?? 0) / 1e6));
+  // A corrupt or absurd value is no date at all, not a reason to fail the read:
+  // toISOString() throws on anything outside the range Date can hold.
+  return Number.isNaN(date.getTime()) ? undefined : date.toISOString();
 }
 
 /** Keep only the fields that hold something, so an empty CCLI reads as absent. */

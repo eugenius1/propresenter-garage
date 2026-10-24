@@ -39,7 +39,8 @@ jobs:
 
       # Generates the proto descriptor, then lints, typechecks and tests.
       # Tests needing a real ProPresenter file skip here by design -- see
-      # src/lib/__tests__/fixtures.ts. CI=true also turns on coverage.
+      # packages/core/src/lib/__tests__/fixtures.ts. CI=true also turns on
+      # coverage.
       - run: npm run check
 
       - run: npm run build
