@@ -21,9 +21,5 @@ export default defineConfig({
     },
   },
   ssr: { noExternal: true, target: "node" },
-  test: {
-    name: "mcp",
-    environment: "node",
-    include: ["src/**/*.test.ts"],
-  },
+  test: { name: "mcp" },
 });

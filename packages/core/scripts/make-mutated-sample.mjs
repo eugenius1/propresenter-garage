@@ -2,13 +2,7 @@
 // view can be exercised without waiting for two genuine weekly snapshots.
 //   node scripts/make-mutated-sample.mjs <source> <destination>
 import fs from "node:fs";
-import protobuf from "protobufjs";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
-
-// Where npm put protobuf.js, for its bundled google/protobuf/*.proto: hoisted to
-// the workspace root, not beside this package.
-const PROTOBUFJS_DIR = path.dirname(fileURLToPath(import.meta.resolve("protobufjs")));
+import { loadProtoRoot } from "./proto-root.mjs";
 
 const [source, destination] = process.argv.slice(2);
 if (!source || !destination) {
@@ -16,12 +10,7 @@ if (!source || !destination) {
   process.exit(1);
 }
 
-const root = new protobuf.Root();
-root.resolvePath = (_o, t) =>
-  t.startsWith("google/protobuf/")
-    ? path.join(PROTOBUFJS_DIR, t)
-    : path.join("proto", t);
-await root.load("propresenter.proto", { keepCase: true });
+const root = await loadProtoRoot();
 const T = root.lookupType("rv.data.PlaylistDocument");
 
 const doc = T.decode(new Uint8Array(fs.readFileSync(source)));

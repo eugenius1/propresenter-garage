@@ -22,36 +22,6 @@
       "rules": {
         "react/only-export-components": "off"
       }
-    },
-    {
-      "files": [
-        "packages/core/**",
-        "packages/mcp/**"
-      ],
-      "rules": {
-        "no-restricted-imports": [
-          "error",
-          {
-            "patterns": [
-              {
-                "group": [
-                  "react",
-                  "react-dom",
-                  "react/*",
-                  "react-dom/*",
-                  "lucide-react",
-                  "@radix-ui/*",
-                  "vite-plugin-pwa",
-                  "virtual:pwa-register*",
-                  "@propresenter-garage/web",
-                  "@propresenter-garage/web/*"
-                ],
-                "message": "core and mcp hold no UI: npm hoists every package, so this would resolve, and the server bundle would carry the app. Put it in packages/web."
-              }
-            ]
-          }
-        ]
-      }
     }
   ]
 }

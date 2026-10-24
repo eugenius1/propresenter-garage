@@ -430,16 +430,19 @@ export function buildLibrary(doc: RawDoc): MediaLibrary {
   }
 
   const root = visit(doc.root_node, [], true);
-  const info = doc.application_info ?? {};
-  const v = info.application_version ?? {};
+  return { root, items, playlists, ...applicationInfo(doc.application_info) };
+}
 
+/**
+ * Which ProPresenter last saved a document: playlist or presentation, the
+ * `application_info` message is the same, and so is how it is reported.
+ */
+export function applicationInfo(info: any): { appVersion: string; platform: string } {
+  const v = info?.application_version ?? {};
   return {
-    root,
-    items,
-    playlists,
     appVersion: [v.major_version, v.minor_version, v.patch_version]
       .filter((n: unknown) => n !== undefined)
       .join("."),
-    platform: enumLabel("rv.data.ApplicationInfo.Platform", info.platform),
+    platform: enumLabel("rv.data.ApplicationInfo.Platform", info?.platform),
   };
 }

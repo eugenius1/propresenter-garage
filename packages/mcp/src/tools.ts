@@ -107,6 +107,60 @@ function parseDate(value: string | undefined, name: string): number | undefined 
   return ms;
 }
 
+/** How many files the date filters read at once: overlaps the wait on a slow folder. */
+const READ_CONCURRENCY = 8;
+
+/** `fn` over `items`, at most `limit` at a time, results in the order of `items`. */
+async function mapLimit<T, R>(items: readonly T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
+  const results = new Array<R>(items.length);
+  let next = 0;
+  const worker = async () => {
+    while (next < items.length) {
+      const i = next++;
+      results[i] = await fn(items[i]);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+  return results;
+}
+
+type Dated = ListedPresentation & { lastUsed: string | null; usedAt: number };
+
+/** A listing entry, from the bytes' own handle when they were read anyway. */
+function listed(file: string, size: number, modified: Date): ListedPresentation {
+  return {
+    path: file,
+    name: presentationName(file),
+    // ProPresenter keeps one folder per library, so the parent is its name.
+    library: path.basename(path.dirname(file)),
+    sizeBytes: size,
+    fileModified: modified.toISOString(),
+  };
+}
+
+/** Read when each file was last shown and edited; a file that will not decode is named, not guessed at. */
+async function readDates(files: readonly string[]): Promise<{ dated: Dated[]; unreadable: string[] }> {
+  const read = await mapLimit(files, READ_CONCURRENCY, async (file): Promise<Dated | string> => {
+    try {
+      const { bytes, size, modified } = await readFoundFile(file);
+      const { lastUsed, lastModified } = readDetails(decodePresentation(bytes));
+      return {
+        ...listed(file, size, modified),
+        lastUsed: lastUsed ?? null,
+        lastModified,
+        // Parsed once here, for both the filter and the sort.
+        usedAt: lastUsed ? Date.parse(lastUsed) : -Infinity,
+      };
+    } catch {
+      return file;
+    }
+  });
+  return {
+    dated: read.filter((r): r is Dated => typeof r !== "string"),
+    unreadable: read.filter((r): r is string => typeof r === "string"),
+  };
+}
+
 /**
  * List presentations, by name alone or by when they were last shown.
  *
@@ -122,58 +176,39 @@ export async function listPresentations(
 ): Promise<PresentationListing> {
   const before = parseDate(notUsedSince, "notUsedSince");
   const since = parseDate(usedSince, "usedSince");
-  const needDates = before !== undefined || since !== undefined || sort === "lastUsed";
 
   const { files, truncated } = await findPresentations(roots);
   const wanted = query ? fold(query) : undefined;
   const named = files.filter((file) => !wanted || fold(presentationName(file)).includes(wanted));
 
-  let matching: { file: string; details?: PresentationDetails }[] = named.map((file) => ({ file }));
-  const unreadable: string[] = [];
-  if (needDates) {
-    matching = [];
-    for (const file of named) {
-      let details: PresentationDetails;
-      try {
-        details = readDetails(decodePresentation(await readFoundFile(file)));
-      } catch {
-        unreadable.push(file);
-        continue;
-      }
-      const used = details.lastUsed ? Date.parse(details.lastUsed) : undefined;
-      if (before !== undefined && used !== undefined && used >= before) continue;
-      if (since !== undefined && (used === undefined || used < since)) continue;
-      matching.push({ file, details });
-    }
-    if (sort === "lastUsed") {
-      // Most recent first; never shown last.
-      const usedAt = (m: (typeof matching)[number]) => (m.details?.lastUsed ? Date.parse(m.details.lastUsed) : -Infinity);
-      matching.sort((a, b) => usedAt(b) - usedAt(a));
-    }
+  if (before === undefined && since === undefined && sort !== "lastUsed") {
+    const presentations = await Promise.all(
+      named.slice(0, limit).map(async (file) => {
+        // ProPresenter saves by replacing the file; one caught mid-save is
+        // left out rather than failing the whole listing.
+        const stat = await fs.stat(file).catch(() => undefined);
+        return stat && listed(file, stat.size, stat.mtime);
+      })
+    );
+    return {
+      total: named.length,
+      truncated: truncated || named.length > limit,
+      presentations: presentations.filter((entry) => entry !== undefined),
+    };
   }
+
+  const { dated, unreadable } = await readDates(named);
+  const matching = dated.filter(
+    ({ usedAt }) => (before === undefined || usedAt < before) && (since === undefined || usedAt >= since)
+  );
+  // Most recent first; never shown last.
+  if (sort === "lastUsed") matching.sort((a, b) => b.usedAt - a.usedAt);
 
   return {
     total: matching.length,
     truncated: truncated || matching.length > limit,
-    unreadable: needDates ? unreadable : undefined,
-    presentations: (
-      await Promise.all(
-        matching.slice(0, limit).map(async ({ file, details }) => {
-          // ProPresenter saves by replacing the file; one caught mid-save is
-          // left out rather than failing the whole listing.
-          const stat = await fs.stat(file).catch(() => undefined);
-          return stat && {
-            path: file,
-            name: presentationName(file),
-            // ProPresenter keeps one folder per library, so the parent is its name.
-            library: path.basename(path.dirname(file)),
-            sizeBytes: stat.size,
-            fileModified: stat.mtime.toISOString(),
-            ...(details && { lastUsed: details.lastUsed ?? null, lastModified: details.lastModified }),
-          };
-        })
-      )
-    ).filter((entry) => entry !== undefined),
+    unreadable,
+    presentations: matching.slice(0, limit).map(({ usedAt: _sortKey, ...entry }) => entry),
   };
 }
 
@@ -181,7 +216,7 @@ export interface PresentationContent extends PresentationDetails {
   path: string;
   name: string;
   /** The file system's modification time. `lastModified` is ProPresenter's own. */
-  fileModified?: string;
+  fileModified: string;
   slideCount: number;
   /** Whether writing this file back would keep everything in it. See CONTRIBUTING.md. */
   fidelity: Fidelity;
@@ -196,10 +231,8 @@ export interface PresentationContent extends PresentationDetails {
 }
 
 export async function readPresentationFile(roots: readonly string[], file: string): Promise<PresentationContent> {
-  const { path: real, bytes } = await readLibraryFile(roots, file);
+  const { path: real, bytes, modified } = await readLibraryFile(roots, file);
   const { doc, raw } = open(file, bytes);
-  // Replaced mid-save between the read and this: report the rest regardless.
-  const stat = await fs.stat(real).catch(() => undefined);
 
   const slides = new Map<number, PresentationContent["slides"][number]>();
   let emptyTextBoxes = 0;
@@ -219,7 +252,7 @@ export async function readPresentationFile(roots: readonly string[], file: strin
   return {
     path: real,
     name: doc.name || presentationName(real),
-    fileModified: stat?.mtime.toISOString(),
+    fileModified: modified.toISOString(),
     ...readDetails(raw),
     slideCount: doc.slideCount,
     fidelity: checkPresentationFidelity(bytes).fidelity,
@@ -269,7 +302,7 @@ export async function searchText(
     searched++;
     let doc: PresentationDoc;
     try {
-      doc = open(file, await readFoundFile(file)).doc;
+      doc = open(file, (await readFoundFile(file)).bytes).doc;
     } catch {
       unreadable.push(file);
       continue;
@@ -340,7 +373,7 @@ export async function checkPresentations(
   for (const file of files) {
     let bytes: Uint8Array;
     try {
-      bytes = await readFoundFile(file);
+      ({ bytes } = await readFoundFile(file));
     } catch (e) {
       // One file that will not open is a finding about that file, not a
       // reason to abandon the other eight hundred.

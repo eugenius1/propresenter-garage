@@ -360,13 +360,14 @@ Three packages under `packages/`, one version between them:
   pieces of `lib/`, persistence and routing.
 - **`mcp`** (`propresenter-garage-mcp`, published to npm): the MCP server.
 
-`core` and `mcp` may not import anything of the UI's: `.oxlintrc.json` bans
-React, the icon and colour packages and the PWA plugin there. npm hoists every
-dependency to the root, so without the ban such an import would resolve
-quietly and drag the app into the server's bundle.
+`core` and `mcp` may import only what their own `package.json` declares, and
+`packages/mcp/src/__tests__/workspace.test.ts` fails if either reaches for
+anything else. npm hoists every dependency to the root, so an undeclared
+import would otherwise resolve quietly, and for `mcp` it would drag the app
+into the server's bundle.
 
-All three carry the root's version, and a test fails if one drifts. Bump them
-together with `npm version <v> --workspaces --include-workspace-root`.
+All three carry the root's version, and the same test fails if one drifts.
+Bump them together with `npm version <v> --workspaces --include-workspace-root`.
 
 `packages/web/src/App.tsx` is the shell — title, appearance and language
 controls, the tool switcher, licence — and renders the active tool. Each tool
@@ -379,7 +380,9 @@ Shared analysis lives in `packages/core/src/lib/`, shared interface pieces in
 it exists. Its `vite.config.ts` bundles it into one self-contained file,
 `dist/propresenter-mcp.mjs`, and that file is the whole npm package: `bin`
 points at it and there are no runtime dependencies, so `npx` starts it with
-nothing to install. `library.ts` is the only place it touches the disk: every
+nothing to install. npm packs only what is inside the package, so
+`packages/mcp/LICENSE` is a committed copy of the root licence, which the same
+test holds equal. `library.ts` is the only place it touches the disk: every
 path a tool is given is resolved with `realpath` before it is compared with
 the configured folders, and nothing opens a file for writing.
 

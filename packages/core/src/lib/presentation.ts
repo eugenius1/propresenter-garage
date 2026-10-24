@@ -1,5 +1,5 @@
-import { checkTypeFidelity, enumLabel, messageType, type FidelityReport, type RawDoc } from "./decode";
-import { basename } from "./model";
+import { checkTypeFidelity, messageType, type FidelityReport, type RawDoc } from "./decode";
+import { applicationInfo, basename } from "./model";
 import { decodeRtf, encodeRtf, extractLines, type RtfLine } from "./rtf";
 
 /**
@@ -295,15 +295,16 @@ export interface PresentationDetails {
   };
   musicKey?: { original?: string; user?: string };
   /**
-   * Each named order of the song's groups, by group name.
+   * Each named order of the song's groups, by group name; `null` for an id
+   * that names no group in the file.
    *
    * Which one is selected is not reported: in real 21.4 files the
    * `selected_arrangement` id matched none of the file's arrangements, so
    * what it points at is not understood well enough to pass on.
    */
-  arrangements: { name: string; groups: string[] }[];
-  /** The ProPresenter that last saved the file, e.g. "21.4.2 on Windows". */
-  savedBy?: string;
+  arrangements: { name: string; groups: (string | null)[] }[];
+  /** The ProPresenter that last saved the file, reported as the media bin's is. */
+  savedBy?: { appVersion: string; platform: string };
 }
 
 /** `rv.data.Timestamp` as ISO 8601, or nothing for an unset one. */
@@ -327,12 +328,6 @@ export function readDetails(doc: RawDoc): PresentationDetails {
   for (const entry of raw.cue_groups ?? []) {
     if (entry.group?.uuid?.string) groupNames.set(entry.group.uuid.string, entry.group.name ?? "");
   }
-  const info = raw.application_info;
-  const v = info?.application_version;
-  const version = v && [v.major_version ?? 0, v.minor_version ?? 0, v.patch_version ?? 0].join(".");
-  const label = info?.platform ? enumLabel("rv.data.ApplicationInfo.Platform", info.platform) : "";
-  const platform = ({ MACOS: "macOS", WINDOWS: "Windows" } as Record<string, string>)[label] ?? label;
-
   const music = raw.music ?? {};
   return {
     lastModified: isoTimestamp(raw.last_modified_date),
@@ -356,9 +351,9 @@ export function readDetails(doc: RawDoc): PresentationDetails {
     }),
     arrangements: (raw.arrangements ?? []).map((a: any) => ({
       name: a.name ?? "",
-      groups: (a.group_identifiers ?? []).map((id: any) => groupNames.get(id?.string) ?? "(missing group)"),
+      groups: (a.group_identifiers ?? []).map((id: any) => groupNames.get(id?.string) ?? null),
     })),
-    savedBy: version ? (platform ? `${version} on ${platform}` : version) : undefined,
+    savedBy: raw.application_info ? applicationInfo(raw.application_info) : undefined,
   };
 }
 

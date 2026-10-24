@@ -14,6 +14,3 @@ packages/web/public/__dev-*
 
 # Written by `npm run coverage` and by the suite in CI.
 coverage/
-
-# Copied in by the MCP package's prepack, so the npm tarball carries the licence.
-packages/mcp/LICENSE

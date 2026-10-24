@@ -1,5 +1,5 @@
 {
-  "extends": "../../tsconfig.base.json",
+  "extends": "./tsconfig.json",
   "compilerOptions": {
     "tsBuildInfoFile": "../../node_modules/.tmp/core-test.tsbuildinfo",
     "types": [
@@ -10,5 +10,6 @@
     "src/**/__tests__/**/*.ts",
     "src/**/*.test.ts",
     "src/report.mts"
-  ]
+  ],
+  "exclude": []
 }

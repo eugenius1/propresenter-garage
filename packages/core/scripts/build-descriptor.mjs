@@ -1,27 +1,15 @@
 // Build-time step: collapse the vendored .proto tree into one JSON descriptor.
 // Shipping the descriptor instead of the .proto files means the app never parses
 // schema text at runtime -- protobuf.js loads it via Root.fromJSON() instantly.
-import protobuf from "protobufjs";
 import fs from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 import { gzipSync } from "node:zlib";
-
-// Where npm put protobuf.js, for its bundled google/protobuf/*.proto: hoisted to
-// the workspace root, not beside this package.
-const PROTOBUFJS_DIR = path.dirname(fileURLToPath(import.meta.resolve("protobufjs")));
+import { loadProtoRoot, PROTO_DIR } from "./proto-root.mjs";
 
 const ROOT_TYPE = "rv.data.PlaylistDocument";
-const PROTO_DIR = "proto";
 const OUT = "src/generated/pp.descriptor.json";
 
-const root = new protobuf.Root();
-root.resolvePath = (_origin, target) =>
-  target.startsWith("google/protobuf/")
-    ? path.join(PROTOBUFJS_DIR, target)
-    : path.join(PROTO_DIR, target);
-
-await root.load("propresenter.proto", { keepCase: true });
+const root = await loadProtoRoot();
 
 // Fail the build rather than ship a descriptor the app can't use.
 root.lookupType(ROOT_TYPE);

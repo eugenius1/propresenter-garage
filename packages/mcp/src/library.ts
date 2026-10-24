@@ -92,14 +92,21 @@ export async function resolveInRoots(roots: readonly string[], p: string): Promi
  * Every failure comes back as a `LibraryError`, because to a caller scanning
  * a library one unreadable file is a finding about that file, not a crash.
  */
-export async function readFoundFile(file: string): Promise<Uint8Array> {
+export interface FoundFile {
+  bytes: Uint8Array;
+  /** From the handle the bytes were read through, so they describe the same file. */
+  size: number;
+  modified: Date;
+}
+
+export async function readFoundFile(file: string): Promise<FoundFile> {
   let handle;
   try {
     handle = await fs.open(file, fsConstants.O_RDONLY | (fsConstants.O_NOFOLLOW ?? 0));
     const stat = await handle.stat();
     if (!stat.isFile()) throw new LibraryError(`Not a file: ${file}`);
     if (stat.size > MAX_FILE_BYTES) throw new LibraryError(`Too large to be a ProPresenter file: ${file}`);
-    return await handle.readFile();
+    return { bytes: await handle.readFile(), size: stat.size, modified: stat.mtime };
   } catch (e) {
     if (e instanceof LibraryError) throw e;
     throw new LibraryError(`Could not read ${file}: ${(e as NodeJS.ErrnoException).code ?? (e as Error).message}`);
@@ -109,9 +116,9 @@ export async function readFoundFile(file: string): Promise<Uint8Array> {
 }
 
 /** Read one file from inside the roots, refusing anything absurdly large. */
-export async function readLibraryFile(roots: readonly string[], p: string): Promise<{ path: string; bytes: Uint8Array }> {
+export async function readLibraryFile(roots: readonly string[], p: string): Promise<FoundFile & { path: string }> {
   const real = await resolveInRoots(roots, p);
-  return { path: real, bytes: await readFoundFile(real) };
+  return { path: real, ...(await readFoundFile(real)) };
 }
 
 /** A folder inside the roots, for tools that take one. */

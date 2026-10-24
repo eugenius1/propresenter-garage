@@ -17,15 +17,24 @@ import { auditMediaBin } from "../tools";
  * just the functions behind them.
  */
 
+/** A server over the given folders, and a client talking to it over an in-memory pipe. */
+async function connect(roots: string[]) {
+  const server = createServer(await openRoots(roots));
+  const [clientSide, serverSide] = InMemoryTransport.createLinkedPair();
+  const client = new Client({ name: "test", version: "0" });
+  await Promise.all([server.connect(serverSide), client.connect(clientSide)]);
+  const call = async (name: string, args: Record<string, unknown> = {}) => {
+    const result = await client.callTool({ name, arguments: args });
+    const text = (result.content as { type: string; text: string }[])[0].text;
+    return { isError: !!result.isError, text, json: () => JSON.parse(text) };
+  };
+  return { client, call };
+}
+
 let tmp: string;
 let library: string;
 let client: Client;
-
-async function call(name: string, args: Record<string, unknown> = {}) {
-  const result = await client.callTool({ name, arguments: args });
-  const text = (result.content as { type: string; text: string }[])[0].text;
-  return { isError: !!result.isError, text, json: () => JSON.parse(text) };
-}
+let call: Awaited<ReturnType<typeof connect>>["call"];
 
 beforeAll(async () => {
   tmp = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "pp-mcp-")));
@@ -50,10 +59,7 @@ beforeAll(async () => {
   fs.writeFileSync(path.join(tmp, "secret.txt"), "not yours");
   fs.symlinkSync(path.join(tmp, "secret.txt"), path.join(songs, "escape.pro"));
 
-  const server = createServer(await openRoots([library]));
-  const [clientSide, serverSide] = InMemoryTransport.createLinkedPair();
-  client = new Client({ name: "test", version: "0" });
-  await Promise.all([server.connect(serverSide), client.connect(clientSide)]);
+  ({ client, call } = await connect([library]));
 });
 
 afterAll(async () => {
@@ -267,14 +273,11 @@ describe("readFoundFile", () => {
 describe("what a presentation records about itself", () => {
   // A library of its own, so the counts the tests above assert stay put.
   let dated: string;
-  let datedClient: Client;
+  let server: Awaited<ReturnType<typeof connect>>;
   const at = (iso: string) => ({ seconds: Date.parse(iso) / 1000 });
-
-  async function list(args: Record<string, unknown> = {}) {
-    const result = await datedClient.callTool({ name: "list_presentations", arguments: args });
-    const text = (result.content as { text: string }[])[0].text;
-    return result.isError ? { error: text } : JSON.parse(text);
-  }
+  const list = async (args: Record<string, unknown> = {}) =>
+    (await server.call("list_presentations", args)).json();
+  const read = async (file: string) => (await server.call("read_presentation", { path: file })).json();
 
   beforeAll(async () => {
     dated = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "pp-mcp-dated-")));
@@ -312,20 +315,16 @@ describe("what a presentation records about itself", () => {
     write("Never", {});
     fs.writeFileSync(path.join(dated, "Chords.pro"), "{title: Amazing Grace}\n[G]Amazing grace\n");
 
-    const server = createServer(await openRoots([dated]));
-    const [clientSide, serverSide] = InMemoryTransport.createLinkedPair();
-    datedClient = new Client({ name: "test", version: "0" });
-    await Promise.all([server.connect(serverSide), datedClient.connect(clientSide)]);
+    server = await connect([dated]);
   });
 
   afterAll(async () => {
-    await datedClient?.close();
+    await server?.client.close();
     fs.rmSync(dated, { recursive: true, force: true });
   });
 
   it("reads ProPresenter's dates, notes, CCLI, key and arrangements", async () => {
-    const result = await datedClient.callTool({ name: "read_presentation", arguments: { path: "Recent.pro" } });
-    const doc = JSON.parse((result.content as { text: string }[])[0].text);
+    const doc = await read("Recent.pro");
     expect(doc).toMatchObject({
       lastUsed: "2026-10-13T18:37:48.000Z",
       lastModified: "2026-10-23T18:47:31.000Z",
@@ -333,16 +332,15 @@ describe("what a presentation records about itself", () => {
       notes: "Capo 2 pour la chorale",
       ccli: { songTitle: "Recent", author: "Someone", songNumber: 1234567, copyrightYear: 2019 },
       musicKey: { original: "G", user: "A" },
-      arrangements: [{ name: "Dimanche", groups: ["Couplet", "Refrain", "(missing group)"] }],
-      savedBy: "21.4.2 on Windows",
+      arrangements: [{ name: "Dimanche", groups: ["Couplet", "Refrain", null] }],
+      savedBy: { appVersion: "21.4.2", platform: "WINDOWS" },
     });
     expect(doc.fileModified).toEqual(expect.any(String));
     expect(doc).not.toHaveProperty("created");
   });
 
   it("leaves out what a file does not record", async () => {
-    const result = await datedClient.callTool({ name: "read_presentation", arguments: { path: "Never.pro" } });
-    const doc = JSON.parse((result.content as { text: string }[])[0].text);
+    const doc = await read("Never.pro");
     for (const key of ["lastUsed", "lastModified", "category", "notes", "ccli", "musicKey", "savedBy"]) {
       expect(doc[key]).toBeUndefined();
     }
@@ -375,11 +373,13 @@ describe("what a presentation records about itself", () => {
   });
 
   it("refuses a date it cannot read", async () => {
-    expect((await list({ usedSince: "last spring" })).error).toMatch(/not a date/);
+    const result = await server.call("list_presentations", { usedSince: "last spring" });
+    expect(result.isError).toBe(true);
+    expect(result.text).toMatch(/not a date/);
   });
 
   it("tells the calling model about the cost and the missing creation date", async () => {
-    const { tools } = await datedClient.listTools();
+    const { tools } = await server.client.listTools();
     const about = (name: string) => tools.find((t) => t.name === name)!.description!;
     expect(about("list_presentations")).toMatch(/decoded/);
     expect(about("read_presentation")).toMatch(/Prefer `lastModified`/);
