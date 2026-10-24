@@ -16,7 +16,9 @@ root.resolvePath = (_origin, target) =>
     ? protobuf.util.path.resolve("", `node_modules/protobufjs/${target}`, true)
     : path.join(PROTO_DIR, target);
 
-await root.load("propresenter.proto", { keepCase: true });
+// `template.proto` is not reachable from the root: themes are a document of
+// their own, which nothing in a playlist or a presentation imports.
+await root.load(["propresenter.proto", "template.proto"], { keepCase: true });
 
 // Fail the build rather than ship a descriptor the app can't use.
 root.lookupType(ROOT_TYPE);
