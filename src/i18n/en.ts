@@ -128,8 +128,6 @@ export const en = {
     cropped: "cropped",
     effect: "effect: {name}",
     effectOff: "effect: {name} (off)",
-    scale: "scale {value}",
-    align: "align {value}",
   },
 
   library: {

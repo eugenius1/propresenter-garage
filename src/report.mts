@@ -1,8 +1,7 @@
 // Print the audit for a Media file as plain text.
 //   npm run report -- /path/to/ProPresenter/Media [--lang=fr]
 import fs from "node:fs";
-import { checkFidelity } from "./lib/decode";
-import { buildLibrary, decodeMediaDocument } from "./lib/model";
+import { loadMediaBytes } from "./lib/loadFile";
 import { auditLibrary } from "./lib/audit";
 import { createI18n, detectLanguage, LANGUAGES, type Lang } from "./i18n/core";
 import { describeModsInline } from "./i18n/describe";
@@ -23,10 +22,8 @@ const lang: Lang = LANGUAGES.includes(langArg as Lang)
 const i18n = createI18n(lang);
 const { t, f, num, quote, plural } = i18n;
 
-const bytes = new Uint8Array(fs.readFileSync(path));
-const lib = buildLibrary(decodeMediaDocument(bytes));
+const { library: lib, fidelity } = loadMediaBytes(path, new Uint8Array(fs.readFileSync(path)));
 const audit = auditLibrary(lib);
-const { fidelity } = checkFidelity(bytes);
 
 const mods = (descriptors: Parameters<typeof describeModsInline>[1]) =>
   describeModsInline(i18n, descriptors);

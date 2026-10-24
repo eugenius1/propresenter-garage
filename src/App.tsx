@@ -41,25 +41,24 @@ function copyrightYears(now = new Date()): string {
  * document, the other a folder of presentations -- so there is nothing yet for
  * an abstraction to hold.
  */
+function toolFromPath(): ToolId {
+  const slug = slugFromPath(window.location.pathname, SLUG_LIST);
+  return slug ? TOOL_BY_SLUG[slug] : "presentations";
+}
+
 export default function App() {
   const { t, f, lang } = useI18n();
   // Read once: where the app is mounted cannot change while it is running.
   const base = useMemo(() => basePath(window.location.pathname, SLUG_LIST), []);
 
-  const [tool, setTool] = useState<ToolId>(() => {
-    const slug = slugFromPath(window.location.pathname, SLUG_LIST);
-    return slug ? TOOL_BY_SLUG[slug] : "presentations";
-  });
+  const [tool, setTool] = useState<ToolId>(toolFromPath);
 
   useEffect(() => applyDocumentLanguage(lang), [lang]);
 
   // Back and forward should move between tools, so the browser's own history
   // works rather than trapping the reader on whichever one they opened.
   useEffect(() => {
-    const onPop = () => {
-      const slug = slugFromPath(window.location.pathname, SLUG_LIST);
-      setTool(slug ? TOOL_BY_SLUG[slug] : "presentations");
-    };
+    const onPop = () => setTool(toolFromPath());
     window.addEventListener("popstate", onPop);
     return () => window.removeEventListener("popstate", onPop);
   }, []);

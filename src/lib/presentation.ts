@@ -1,4 +1,5 @@
 import { checkTypeFidelity, messageType, type FidelityReport, type RawDoc } from "./decode";
+import { basename } from "./model";
 import { decodeRtf, encodeRtf, extractLines, type RtfLine } from "./rtf";
 
 /**
@@ -268,7 +269,6 @@ export const SPACE_CLASS = "[ \\t\\u00a0\\u202f\\u2007]";
  */
 export const RUN_CLASS = "[ \\t]";
 
-const EDGE_SPACE = new RegExp(`^${SPACE_CLASS}|${SPACE_CLASS}$`);
 const LEADING_SPACE = new RegExp(`^${SPACE_CLASS}`);
 const TRAILING_SPACE = new RegExp(`${SPACE_CLASS}$`);
 const REPEATED_SPACE = new RegExp(`\\S${RUN_CLASS}{2,}\\S`);
@@ -379,34 +379,13 @@ export function unreadableReport(
 ): PresentationReport {
   return {
     filename,
-    name: filename.split("/").pop() ?? filename,
+    name: basename(filename),
     slideCount: 0,
     issues: [],
     emptyTextBoxes: 0,
     error: problem,
     errorDetail: detail,
   };
-}
-
-/** Decode, read and check a file in one step. */
-export function checkPresentationFile(
-  filename: string,
-  bytes: Uint8Array
-): PresentationReport {
-  // Before decoding, because nothing goes wrong decoding no bytes: protobuf
-  // reads them as a presentation with nothing in it, and the reader is told
-  // about a song with no slides rather than about a file with no content.
-  if (bytes.length === 0) return unreadableReport(filename, "empty");
-
-  try {
-    return checkPresentation(filename, readPresentation(decodePresentation(bytes)));
-  } catch (e) {
-    return unreadableReport(filename, readProblem(bytes), (e as Error).message);
-  }
-}
-
-export function hasEdgeSpace(line: string): boolean {
-  return EDGE_SPACE.test(line);
 }
 
 /**

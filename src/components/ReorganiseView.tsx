@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { auditLibrary, type FindingId } from "../lib/audit";
 import { diffLibraries } from "../lib/diff";
 import { download } from "../lib/download";
-import { buildLibrary, type MediaItem, type MediaLibrary, type PlaylistNode } from "../lib/model";
+import { buildLibrary, itemLabel, itemPath, type MediaItem, type MediaLibrary, type PlaylistNode } from "../lib/model";
 import {
   applyOperations,
   exportFilename,
@@ -95,10 +95,10 @@ export function ReorganiseView({
     const describeItem = (item: MediaItem) => ({
       key: item.uuid,
       primary: f(r.affectedItem, {
-        name: item.name || item.displayFilename,
+        name: itemLabel(item),
         playlist: item.playlistPath || rootLabel,
       }),
-      secondary: item.relativePath || item.absolutePath,
+      secondary: itemPath(item),
     });
 
     const operations: Operation[] = [];
@@ -113,14 +113,14 @@ export function ReorganiseView({
             kind: "removeItem",
             playlistUuid: item.playlistUuid,
             itemUuid: item.uuid,
-            itemName: item.name || item.displayFilename,
+            itemName: itemLabel(item),
           });
           const row = describeItem(item);
-          const keptName = kept.name || kept.displayFilename;
+          const keptName = itemLabel(kept);
           affected.push({
             ...row,
             secondary: `${row.secondary} · ${f(r.keeping, { name: keptName })}`,
-            warn: (item.name || item.displayFilename) !== keptName,
+            warn: itemLabel(item) !== keptName,
           });
         }
       }
@@ -389,7 +389,7 @@ function EditableItem({
 }) {
   const { t } = useI18n();
   const r = t.tools.mediaBin.reorganise;
-  const label = item.name || item.displayFilename;
+  const label = itemLabel(item);
 
   function rename() {
     const next = window.prompt(r.renameItemPrompt, item.name);
@@ -401,7 +401,7 @@ function EditableItem({
   return (
     <li className="leaf editable">
       <span className="item-name">{label}</span>
-      <span className="item-path">{item.relativePath || item.absolutePath}</span>
+      <span className="item-path">{itemPath(item)}</span>
       <span className="spacer" />
       <span className="row-actions">
         <button

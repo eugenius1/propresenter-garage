@@ -25,6 +25,7 @@ import {
   type SourceEdit,
   type TextCut,
 } from "./rtf";
+import { groupBy } from "./collections";
 
 /**
  * Turning findings into edits.
@@ -181,17 +182,8 @@ function planLine(
  */
 export function planFixes(doc: PresentationDoc, issues: readonly TextIssue[]): LineFix[] {
   const boxes = new Map(doc.textBoxes.map((box) => [box.boxIndex, box]));
-  const byLine = new Map<string, TextIssue[]>();
-
-  for (const issue of issues) {
-    const key = fixKey(issue);
-    const existing = byLine.get(key);
-    if (existing) existing.push(issue);
-    else byLine.set(key, [issue]);
-  }
-
   const fixes: LineFix[] = [];
-  for (const group of byLine.values()) {
+  for (const group of groupBy(issues, fixKey).values()) {
     const box = boxes.get(group[0].boxIndex);
     const line = box?.lines[group[0].lineIndex];
     if (!box || !line) continue;
@@ -402,26 +394,29 @@ export interface Examined {
   fixable: PresentationDoc;
 }
 
+/** A file that will not open: reported, with nothing to fix. */
+export function unreadable(filename: string, problem: ReadProblem, detail?: string): Examined {
+  return {
+    report: unreadableReport(filename, problem, detail),
+    fixable: { name: filename, slideCount: 0, textBoxes: [] },
+  };
+}
+
 /** Read a file, report on it, and keep what a fix would need. */
 export function examine(filename: string, bytes: Uint8Array): Examined {
   let doc: PresentationDoc;
   let report: PresentationReport;
 
-  // Nothing to fix in a file that will not open, and nothing goes wrong
-  // decoding no bytes -- so emptiness is caught before the decoder makes a
-  // presentation out of it.
-  const nothing = (problem: ReadProblem, detail?: string): Examined => ({
-    report: unreadableReport(filename, problem, detail),
-    fixable: { name: filename, slideCount: 0, textBoxes: [] },
-  });
-
-  if (bytes.length === 0) return nothing("empty");
+  // Before decoding, because nothing goes wrong decoding no bytes: protobuf
+  // reads them as a presentation with nothing in it, and the reader is told
+  // about a song with no slides rather than about a file with no content.
+  if (bytes.length === 0) return unreadable(filename, "empty");
 
   try {
     doc = readPresentation(decodePresentation(bytes));
     report = checkPresentation(filename, doc);
   } catch (e) {
-    return nothing(readProblem(bytes), (e as Error).message);
+    return unreadable(filename, readProblem(bytes), (e as Error).message);
   }
 
   const wanted = new Set(report.issues.map((issue) => issue.boxIndex));

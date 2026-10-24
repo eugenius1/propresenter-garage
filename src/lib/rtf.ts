@@ -76,6 +76,13 @@ function fromCodePage(byte: number): string {
 const BREAKS = new Set(["par", "line", "sect", "page", "column"]);
 
 /**
+ * A control word with an optional signed numeric parameter, matched in place.
+ * Sticky rather than run on a slice, because the scan meets one per few
+ * characters of every box in a library.
+ */
+const CONTROL_WORD = /\\([a-zA-Z]+)(-?\d+)?[ ]?/y;
+
+/**
  * Where one run of visible characters came from in the source.
  *
  * `plain` runs are the source characters themselves, so a cut anywhere inside
@@ -266,8 +273,8 @@ export function extractLines(rtf: string): RtfLine[] {
         continue;
       }
 
-      // Control word, with an optional signed numeric parameter.
-      const match = /^\\([a-zA-Z]+)(-?\d+)?[ ]?/.exec(rtf.slice(i));
+      CONTROL_WORD.lastIndex = i;
+      const match = CONTROL_WORD.exec(rtf);
       if (!match) {
         i++;
         continue;

@@ -1,8 +1,10 @@
 import { useMemo, useState } from "react";
 import { planMerges, type MergeDirection } from "../lib/merge";
-import { exportFilename, exportOperations, OperationError } from "../lib/operations";
+import { exportFilename, exportOperations } from "../lib/operations";
+import { toggled } from "../lib/collections";
 import { download } from "../lib/download";
 import type { LoadedFile } from "../lib/loadFile";
+import { itemLabel } from "../lib/model";
 import type { Change, ChangeDetail, ChangeType, DiffResult, PlaylistChange } from "../lib/diff";
 import { useI18n, type I18n } from "../i18n";
 import { describeModsInline, playbackLabel, playbackValue } from "../i18n/describe";
@@ -92,16 +94,8 @@ export function DiffView({
   const target = direction === "intoBaseline" ? baseline : compare;
 
   // Indices into diff.changes, so a selection survives filtering the list.
-  const makeToggle = (setter: typeof setSelected) => (index: number) =>
-    setter((prev) => {
-      const next = new Set(prev);
-      if (next.has(index)) next.delete(index);
-      else next.add(index);
-      return next;
-    });
-
-  const toggleSelected = makeToggle(setSelected);
-  const togglePlaylist = makeToggle(setSelectedPlaylists);
+  const toggleSelected = (index: number) => setSelected((prev) => toggled(prev, index));
+  const togglePlaylist = (index: number) => setSelectedPlaylists((prev) => toggled(prev, index));
 
   /** A recreation cannot be merged, so it is not offered for selection. */
   const selectablePlaylist = (change: PlaylistChange) => change.type !== "recreated";
@@ -137,17 +131,19 @@ export function DiffView({
     } catch (e) {
       // Two chosen changes can contradict each other -- adopting an entry and
       // removing it, say. Report it rather than writing half a file.
-      setFailure(e instanceof OperationError ? e.message : (e as Error).message);
+      setFailure((e as Error).message);
     }
   }
 
-  const visible = useMemo(() => diff.changes.filter((c) => active.has(c.type)), [diff, active]);
+  // Each change keeps its index into diff.changes, which is what a selection holds.
+  const visible = useMemo(
+    () => diff.changes.flatMap((change, index) => (active.has(change.type) ? [{ change, index }] : [])),
+    [diff, active]
+  );
 
   const toggle = (type: ChangeType) =>
     setActive((prev) => {
-      const next = new Set(prev);
-      if (next.has(type)) next.delete(type);
-      else next.add(type);
+      const next = toggled(prev, type);
       return next.size === 0 ? new Set(ORDER) : next;
     });
 
@@ -321,8 +317,7 @@ export function DiffView({
           </div>
 
           <ul className="changes">
-            {visible.map((change) => {
-              const index = diff.changes.indexOf(change);
+            {visible.map(({ change, index }) => {
               return (
               <li className={`change${canMerge ? " selectable" : ""}`} key={index}>
                 {canMerge && (
@@ -331,13 +326,13 @@ export function DiffView({
                     className="change-select"
                     checked={selected.has(index)}
                     onChange={() => toggleSelected(index)}
-                    aria-label={`${t.diff.types[change.type]}: ${change.item.name || change.item.displayFilename}`}
+                    aria-label={`${t.diff.types[change.type]}: ${itemLabel(change.item)}`}
                   />
                 )}
                 <span className={`tag ${change.type}`}>{t.diff.types[change.type]}</span>
                 <div className="change-body">
                   <div className="change-title">
-                    {change.item.name || change.item.displayFilename}
+                    {itemLabel(change.item)}
                     <span className="kind">{t.kinds[change.item.kind]}</span>
                     {change.fuzzy && (
                       <span className="fuzzy" title={t.diff.pathMatchHelp}>{t.diff.pathMatch}</span>
