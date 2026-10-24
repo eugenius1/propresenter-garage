@@ -4,6 +4,7 @@ import {
   decodePresentation,
   encodePresentation,
   readPresentation,
+  shownBounds,
   slidesInOrder,
 } from "../presentation";
 import { decodeRtf, extractLines } from "../rtf";
@@ -16,11 +17,11 @@ import {
   themeStyles,
   type SlideStyle,
 } from "../style";
+import { examine } from "../fixes";
 import { hasRealLibrary, libraryFiles, readLibraryFile } from "./corpus";
 import { syntheticTextPresentation } from "./synthetic";
 
 const Slide = messageType("rv.data.Slide");
-const Presentation = messageType("rv.data.Presentation");
 const ThemeDocument = messageType("rv.data.Template.Document");
 
 /** A Cocoa-flavoured box, as a Mac writes them: lines broken by `\` newline. */
@@ -87,10 +88,16 @@ const textsAfter = (bytes: Uint8Array) =>
   readPresentation(decodePresentation(bytes))
     .textBoxes.map((b) => {
       const lines = b.lines.map((l) => l.text);
-      const shown = lines.map((t) => t.trim() !== "");
-      return lines.slice(shown.indexOf(true), shown.lastIndexOf(true) + 1);
+      const [first, last] = shownBounds(lines);
+      return lines.slice(first, last + 1);
     })
     .filter((t) => t.length);
+
+/** Each slide's `rv.data.Slide`, as ProPresenter numbers them. */
+const baseSlides = (bytes: Uint8Array): any[] =>
+  slidesInOrder(decodePresentation(bytes)).map(
+    ({ cue }) => cue.actions[0].slide.presentation.base_slide
+  );
 
 describe("restyling one box", () => {
   it("keeps the style's formatting and replaces only its words", () => {
@@ -137,21 +144,16 @@ describe("applying a style to a presentation", () => {
     expect(textsAfter(bytes)).toEqual(
       plan.flatMap((p) => p.texts)
     );
-    const doc = decodePresentation(bytes) as any;
-    const slide = slidesInOrder(doc)[0].cue.actions[0].slide.presentation.base_slide;
+    const slide = baseSlides(bytes)[0];
     // The target slide keeps its own identity; its elements are the style's.
-    expect(slide.uuid.string).toBe(
-      (decodePresentation(before) as any).cues[0].actions[0].slide.presentation.base_slide.uuid.string
-    );
+    expect(slide.uuid.string).toBe(baseSlides(before)[0].uuid.string);
     expect(slide.elements.map((e: any) => e.element.name)).toEqual(["Lyrics", "Shape"]);
     expect(decodeRtf(slide.elements[0].element.text.rtf_data)).toContain("Helvetica-Bold");
   });
 
   it("gives copied elements fresh identities, and keeps builds pointing at them", () => {
     const { bytes } = applyStyle(syntheticTextPresentation(), styleSlide());
-    const slides = slidesInOrder(decodePresentation(bytes)).map(
-      ({ cue }) => cue.actions[0].slide.presentation.base_slide
-    );
+    const slides = baseSlides(bytes);
     const lyricIds = slides.map((s: any) => s.elements[0].element.uuid.string);
     expect(new Set(lyricIds).size).toBe(slides.length);
     expect(lyricIds).not.toContain("STYLE-LYRICS");
@@ -224,32 +226,23 @@ describe("applying a style to a presentation", () => {
     expect(() => planStyle(decodePresentation(syntheticTextPresentation()), style)).toThrow(StyleError);
   });
 
-  it("stretches an attribute that covered the whole sample, line by line", () => {
-    const caps = { range: { start: 0, end: 17 }, capitalization: "CAPITALIZATION_ALL_CAPS" };
+  it.each([
+    // "Your Title Here!!" in capitals throughout: meant for the whole box, so
+    // stretched over "A tidy line" / "And another" a line at a time.
+    ["covered the whole sample", { start: 0, end: 17 }, [[0, 11], [12, 23]]],
+    // Part of it only, which cannot be carried over to other words.
+    ["covered only part of the sample", { start: 0, end: 4 }, []],
+  ])("handles an attribute that %s", (_, range, expected) => {
+    const caps = { range, capitalization: "CAPITALIZATION_ALL_CAPS" };
     const sample = "{\\rtf1\\ansi\\uc1\\pard Your Title Here!!}";
     const { bytes } = applyStyle(
       syntheticTextPresentation(),
       styleSlide(sample, { custom_attributes: [caps] })
     );
-    const box = slidesInOrder(decodePresentation(bytes))[0].cue.actions[0].slide.presentation
-      .base_slide.elements[0].element.text;
-    // "A tidy line" / "And another"
-    expect(box.attributes.custom_attributes.map((a: any) => [a.range.start, a.range.end])).toEqual([
-      [0, 11],
-      [12, 23],
-    ]);
-  });
-
-  it("drops an attribute that covered only part of the sample", () => {
-    const part = { range: { start: 0, end: 4 }, capitalization: "CAPITALIZATION_ALL_CAPS" };
-    const sample = "{\\rtf1\\ansi\\uc1\\pard Your Title Here}";
-    const { bytes } = applyStyle(
-      syntheticTextPresentation(),
-      styleSlide(sample, { custom_attributes: [part] })
-    );
-    const box = slidesInOrder(decodePresentation(bytes))[0].cue.actions[0].slide.presentation
-      .base_slide.elements[0].element.text;
-    expect(box.attributes.custom_attributes ?? []).toEqual([]);
+    const box = baseSlides(bytes)[0].elements[0].element.text;
+    expect(
+      (box.attributes.custom_attributes ?? []).map((a: any) => [a.range.start, a.range.end])
+    ).toEqual(expected);
   });
 });
 
@@ -288,13 +281,8 @@ describe.skipIf(!hasRealLibrary)("applying a style across a real library", () =>
     let restyled = 0;
     for (const file of files) {
       const bytes = readLibraryFile(file);
-      let ok = false;
-      try {
-        ok = Presentation.decode(bytes) !== undefined;
-      } catch {
-        // Not a presentation at all -- the checker reports those.
-      }
-      if (!ok) continue;
+      // Not a presentation at all: the checker reports those.
+      if (examine(file, bytes).report.error) continue;
       try {
         restyled += applyStyle(bytes, style).plan.filter((p) => !p.skip).length;
       } catch (e) {

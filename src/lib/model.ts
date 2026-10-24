@@ -219,7 +219,7 @@ function playbackSettings(media: any): PlaybackSettings {
   };
 }
 
-const LOCAL_ROOT = "rv.data.URL.LocalRelativePath.Root";
+export const LOCAL_ROOT = "rv.data.URL.LocalRelativePath.Root";
 const SCALE_BEHAVIOR = "rv.data.Media.ScaleBehavior";
 const SCALE_ALIGNMENT = "rv.data.Media.ScaleAlignment";
 

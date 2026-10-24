@@ -1,5 +1,5 @@
-import { decodeDocument, messageType, type RawDoc } from "./decode";
-import { rawItems, walkNodes } from "./model";
+import { decodeDocument, enumLabel, messageType, newUuid, wireCopy, type RawDoc } from "./decode";
+import { basename, LOCAL_ROOT, rawItems, walkNodes } from "./model";
 
 /**
  * Building the entries of a presentation playlist: the `Playlists/Library`
@@ -41,18 +41,18 @@ export function showLocationOf(doc: RawDoc): ShowLocation | undefined {
   for (const item of walkNodes((doc as any).root_node).flatMap(rawItems)) {
     const url = item.presentation?.document_path;
     const relative: string | undefined = url?.local?.path;
-    if (!url?.absolute_string || !relative || url.local.root !== rootShow()) continue;
+    if (!url?.absolute_string || !relative) continue;
+    if (enumLabel(LOCAL_ROOT, url.local.root) !== "SHOW") continue;
 
-    const absolute = url.platform === platformValue("PLATFORM_WIN32")
+    const windows = enumLabel("rv.data.URL.Platform", url.platform) === "WIN32";
+    const absolute = windows
       ? url.absolute_string
       : safeDecode(url.absolute_string.replace(/^file:\/\//, ""));
-    const tail = url.platform === platformValue("PLATFORM_WIN32")
-      ? relative.replace(/\//g, "\\")
-      : relative;
+    const tail = windows ? toWindows(relative) : relative;
     if (absolute?.endsWith(tail)) {
       return {
         root: absolute.slice(0, absolute.length - tail.length).replace(/[\\/]$/, ""),
-        platform: url.platform === platformValue("PLATFORM_WIN32") ? "PLATFORM_WIN32" : "PLATFORM_MACOS",
+        platform: windows ? "PLATFORM_WIN32" : "PLATFORM_MACOS",
       };
     }
   }
@@ -67,17 +67,7 @@ function safeDecode(uri: string): string | undefined {
   }
 }
 
-function rootShow(): number {
-  return messageType("rv.data.URL").lookupEnum("LocalRelativePath.Root").values.ROOT_SHOW;
-}
-
-function platformValue(name: ShowLocation["platform"]): number {
-  return messageType("rv.data.URL").lookupEnum("Platform").values[name];
-}
-
-function newUuid(): { string: string } {
-  return { string: crypto.randomUUID().toUpperCase() };
-}
+const toWindows = (path: string) => path.replace(/\//g, "\\");
 
 /**
  * A file URL the way ProPresenter writes one on a Mac.
@@ -111,14 +101,12 @@ export function presentationEntry(options: PresentationEntryOptions): RawDoc {
   const location = options.location;
   const mac = location?.platform !== "PLATFORM_WIN32";
   const relative = mac ? path.normalize("NFD") : path;
-  const name = options.name ?? (relative.split("/").pop() ?? relative).replace(/\.pro$/i, "");
-
-  let absolute: string | undefined;
-  if (location) {
-    absolute = mac
+  const name = options.name ?? basename(relative).replace(/\.pro$/i, "");
+  const absolute = !location
+    ? undefined
+    : mac
       ? macFileUrl(`${location.root}/${path}`)
-      : `${location.root}\\${path.replace(/\//g, "\\")}`;
-  }
+      : `${location.root}\\${toWindows(path)}`;
 
   return PlaylistItem.fromObject({
     uuid: newUuid(),
@@ -150,7 +138,7 @@ export function headerEntry(
  * comparison is concerned.
  */
 export function mediaEntry(fromMediaBin: unknown): RawDoc {
-  const copy = PlaylistItem.decode(PlaylistItem.encode(fromMediaBin as never).finish()) as any;
+  const copy = wireCopy(PlaylistItem, fromMediaBin);
   if (!copy.cue) throw new Error("not a media entry: it holds no cue");
   copy.uuid = newUuid();
   copy.cue.uuid = newUuid();
