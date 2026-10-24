@@ -82,7 +82,7 @@ one click and brings its own Node; there is nothing else to install.
 npm ci && npm run mcp:pack
 ```
 
-1. Open `dist-mcp/propresenter-garage.mcpb` with Claude Desktop: double-click
+1. Open `packages/mcp/dist/propresenter-garage.mcpb` with Claude Desktop: double-click
    it, drag it onto the window, or install it from **Settings → Extensions**.
 2. Click **Install**, then choose your ProPresenter folder when asked. It
    suggests `Documents/ProPresenter`; add more than one folder if you keep
@@ -98,17 +98,24 @@ installing it.
 #### Claude Code and other MCP clients
 
 Any client that starts a local server over stdio — Claude Code, VS Code,
-Cursor, Cline, LM Studio — can run the bundled file directly with Node 20 or
-later:
+Cursor, Cline, LM Studio — can run it with `npx` and Node 20 or later. The
+package is a single file with no dependencies, so there is nothing else to
+install:
+
+```bash
+claude mcp add propresenter -- npx -y propresenter-garage-mcp ~/Documents/ProPresenter
+```
+
+Other clients take the same command and arguments in their MCP settings:
+command `npx`, arguments `-y propresenter-garage-mcp` followed by your folders.
+Pass one or more folders; with none, it reads `~/Documents/ProPresenter`.
+
+To run it from a checkout instead:
 
 ```bash
 npm ci && npm run mcp:build
-claude mcp add propresenter -- node "$PWD/dist-mcp/propresenter-mcp.mjs" ~/Documents/ProPresenter
+claude mcp add propresenter -- node "$PWD/packages/mcp/dist/propresenter-mcp.mjs" ~/Documents/ProPresenter
 ```
-
-Pass one or more folders; with none, it reads `~/Documents/ProPresenter`. The
-built file is self-contained, so it can be copied anywhere. Other clients take
-the same command and arguments in their MCP settings.
 
 ## Why
 

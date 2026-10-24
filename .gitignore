@@ -1,17 +1,19 @@
 node_modules
 dist
-dist-mcp
 dev-dist
 *.local
 .DS_Store
 
 # Generated at build time from proto/ -- never hand-edited.
-src/generated/
+packages/core/src/generated/
 
 # Real ProPresenter files are somebody's actual media library. Never commit one.
 # The pattern is deliberately broad: it used to name one filename, which left
 # every other scratch copy dropped in here unprotected.
-public/__dev-*
+packages/web/public/__dev-*
 
 # Written by `npm run coverage` and by the suite in CI.
 coverage/
+
+# Copied in by the MCP package's prepack, so the npm tarball carries the licence.
+packages/mcp/LICENSE

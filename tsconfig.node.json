@@ -19,5 +19,5 @@
     "erasableSyntaxOnly": true,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["vite.config.ts", "vite.mcp.config.ts"]
+  "include": ["vitest.config.ts", "packages/*/vite.config.ts"]
 }
