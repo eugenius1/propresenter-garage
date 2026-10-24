@@ -15,6 +15,8 @@ export async function loadProtoRoot() {
   const root = new protobuf.Root();
   root.resolvePath = (_origin, target) =>
     target.startsWith("google/protobuf/") ? path.join(PROTOBUFJS_DIR, target) : path.join(PROTO_DIR, target);
-  await root.load("propresenter.proto", { keepCase: true });
+  // `template.proto` is not reachable from the root: themes are a document of
+  // their own, which nothing in a playlist or a presentation imports.
+  await root.load(["propresenter.proto", "template.proto"], { keepCase: true });
   return root;
 }

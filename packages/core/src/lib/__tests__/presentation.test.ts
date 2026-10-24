@@ -55,6 +55,26 @@ describe("reading a presentation", () => {
     expect(doc.textBoxes[3].groupName).toBe("Chorus");
   });
 
+  it("numbers slides as ProPresenter shows them, not as they are stored", () => {
+    // A real file stored its "Intro" seventh while ProPresenter showed it as
+    // slide 1. Reverse the storage order and nothing a reader sees may move.
+    const doc = decodePresentation(syntheticTextPresentation()) as any;
+    const inOrder = readPresentation(doc).textBoxes.map((b) => [b.slideIndex, b.cueName]);
+    doc.cues.reverse();
+    expect(readPresentation(doc).textBoxes.map((b) => [b.slideIndex, b.cueName])).toEqual(
+      inOrder
+    );
+    expect(inOrder[0]).toEqual([0, "Clean"]);
+  });
+
+  it("still reads a cue no group names, after the grouped ones", () => {
+    const doc = decodePresentation(syntheticTextPresentation()) as any;
+    doc.cue_groups[0].cue_identifiers.shift();
+    const names = readPresentation(doc).textBoxes.map((b) => b.cueName);
+    expect(names).toHaveLength(8);
+    expect(names.at(-1)).toBe("Clean");
+  });
+
   it("re-encodes to byte-identical output", () => {
     // The same gate the playlist tools use: if the schema did not cover these
     // files completely, writing a fix back would drop whatever it misses.

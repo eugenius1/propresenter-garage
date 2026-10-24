@@ -177,11 +177,23 @@ function comparisonKey(root: string, relativePath: string): string {
   return `${root}::${relativePath.replace(/\\/g, "/").toLowerCase()}`;
 }
 
+const MEDIA_KINDS = ["image", "video", "audio", "live_video"] as const;
+
+/**
+ * What kind of file an entry plays.
+ *
+ * The media element is asked first, because it describes the file itself; the
+ * action's own type is only a fallback. They can disagree: a real media bin
+ * written by ProPresenter 20 marked all 338 of its entries with an empty
+ * action-level `audio`, while the elements said 207 videos and 131 images --
+ * which is what ProPresenter showed. Trusting the action called the whole bin
+ * audio.
+ */
 function mediaKind(media: any): MediaItem["kind"] {
-  if (media?.image) return "image";
-  if (media?.video) return "video";
-  if (media?.audio) return "audio";
-  if (media?.live_video) return "live_video";
+  for (const source of [media?.element, media]) {
+    const kind = MEDIA_KINDS.find((k) => source?.[k]);
+    if (kind) return kind;
+  }
   return "other";
 }
 
@@ -207,7 +219,7 @@ function playbackSettings(media: any): PlaybackSettings {
   };
 }
 
-const LOCAL_ROOT = "rv.data.URL.LocalRelativePath.Root";
+export const LOCAL_ROOT = "rv.data.URL.LocalRelativePath.Root";
 const SCALE_BEHAVIOR = "rv.data.Media.ScaleBehavior";
 const SCALE_ALIGNMENT = "rv.data.Media.ScaleAlignment";
 
