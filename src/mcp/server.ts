@@ -22,6 +22,15 @@ import {
 
 const READ_ONLY = { readOnlyHint: true, openWorldHint: false } as const;
 
+/**
+ * Said in the tool descriptions, not only here, so a model asked "when was
+ * this song created?" answers that it cannot know rather than guessing from
+ * whatever date it was given. See `PresentationDetails`.
+ */
+const CREATION_DATE_NOTE =
+  "No creation date is given: presentations do not record one, and the file system's is reset " +
+  "whenever a file is copied, synced or restored from backup, so it would mislead.";
+
 const MEDIA_BIN_INPUT = {
   path: z.string().optional().describe("The media bin file. Defaults to Playlists/Media in the library folder."),
 };
@@ -57,10 +66,33 @@ export function createServer(roots: readonly string[]): McpServer {
     {
       title: "List presentations",
       description:
-        "List ProPresenter presentation (.pro) files in the library folders. Optionally filter by a " +
-        "case- and accent-insensitive substring of the file name.",
+        "List ProPresenter presentation (.pro) files in the library folders, optionally filtered by a " +
+        "case- and accent-insensitive substring of the file name. Each entry has the file's size and " +
+        "`fileModified` (the file system's time). " +
+        "Filtering or sorting by when a presentation was last shown (`notUsedSince`, `usedSince`, " +
+        "`sort: \"lastUsed\"`) also returns ProPresenter's own `lastUsed` and `lastModified`, but is much " +
+        "slower: that date is stored inside each file, so every presentation the name filter leaves is " +
+        "read and decoded -- about a second per 500 files on a local disk, far longer on a " +
+        "network or cloud-synced folder. A plain listing only reads file names and is near-instant. " +
+        "Combine with `query` to narrow the files read, and prefer one such call over several. " +
+        CREATION_DATE_NOTE,
       inputSchema: {
         query: z.string().optional().describe("Part of the presentation's name, e.g. 'amazing grace'."),
+        notUsedSince: z
+          .string()
+          .optional()
+          .describe(
+            "ISO date, e.g. '2025-10-24'. Only presentations not shown since then, including never shown. " +
+              "Reads every file: see the description."
+          ),
+        usedSince: z
+          .string()
+          .optional()
+          .describe("ISO date. Only presentations shown on or after it. Reads every file: see the description."),
+        sort: z
+          .enum(["name", "lastUsed"])
+          .optional()
+          .describe("'lastUsed' lists the most recently shown first. Reads every file: see the description."),
         limit: z.number().int().min(1).max(2000).optional().describe("Maximum results (default 200)."),
       },
       annotations: READ_ONLY,
@@ -74,7 +106,12 @@ export function createServer(roots: readonly string[]): McpServer {
       title: "Read a presentation",
       description:
         "Read a presentation's slides: label, arrangement group and the text of every text box, line " +
-        "by line. Also reports `fidelity`: whether the file would survive being written back.",
+        "by line. Also reports `fidelity` (whether the file would survive being written back) and what " +
+        "the file records about itself: ProPresenter's `lastModified` and `lastUsed` (when it was last " +
+        "shown; absent if never), category, notes, CCLI details, music key, arrangements, and the " +
+        "ProPresenter version that saved it. `fileModified` is the file system's time, which copying or " +
+        "syncing also changes; `lastModified` is ProPresenter's own record, kept inside the file. " +
+        CREATION_DATE_NOTE,
       inputSchema: { path: z.string().describe("Path of the .pro file.") },
       annotations: READ_ONLY,
     },

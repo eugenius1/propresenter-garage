@@ -57,6 +57,14 @@ assistant such as Claude read your library from disk: list and search
 presentations, read their slides line by line, run the Presentations checks,
 and read or audit the media bin. It is **read-only** — it cannot change a file.
 
+It also reads what each presentation records about itself: when ProPresenter
+last edited it and last showed it, its category, notes, CCLI details, key and
+arrangements. So it can answer "which songs haven't we used this year?" —
+though that question opens every file, so it takes about a second per 500
+songs rather than being instant. It gives no creation date: presentations
+don't record one, and the file system's is reset by every copy, sync or
+restore.
+
 ProPresenter's own network API can show and trigger slides, and there are MCP
 servers for that, but it cannot read a presentation's file or edit its text.
 This works on the files instead, through the same code as the app.

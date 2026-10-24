@@ -1,4 +1,4 @@
-import { checkTypeFidelity, messageType, type FidelityReport, type RawDoc } from "./decode";
+import { checkTypeFidelity, enumLabel, messageType, type FidelityReport, type RawDoc } from "./decode";
 import { basename } from "./model";
 import { decodeRtf, encodeRtf, extractLines, type RtfLine } from "./rtf";
 
@@ -153,7 +153,7 @@ export function decodePresentation(bytes: Uint8Array): RawDoc {
 
 /** A presentation read from bytes, or why it could not be. */
 export type Opened =
-  | { doc: PresentationDoc; problem?: undefined }
+  | { doc: PresentationDoc; raw: RawDoc; problem?: undefined }
   | { problem: ReadProblem; detail?: string; doc?: undefined };
 
 /**
@@ -167,7 +167,8 @@ export type Opened =
 export function openPresentation(bytes: Uint8Array): Opened {
   if (bytes.length === 0) return { problem: "empty" };
   try {
-    return { doc: readPresentation(decodePresentation(bytes)) };
+    const raw = decodePresentation(bytes);
+    return { doc: readPresentation(raw), raw };
   } catch (e) {
     return { problem: readProblem(bytes), detail: (e as Error).message };
   }
@@ -256,6 +257,103 @@ export function readPresentation(doc: RawDoc): PresentationDoc {
   });
 
   return { name: (doc as any).name ?? "", slideCount, textBoxes };
+}
+
+/**
+ * What a presentation says about itself, beyond its slides.
+ *
+ * Every field comes from inside the file, so it survives copying, syncing and
+ * restoring from backup. That is the point of reading these rather than the
+ * file system: ProPresenter keeps its own record of when a presentation was
+ * last edited and last shown, and a copy carries it along.
+ *
+ * There is deliberately no creation date. The file has no field for one, and
+ * the file system's is reset by every copy, sync or restore -- a library moved
+ * to a new computer would report every song as created that day.
+ */
+export interface PresentationDetails {
+  /** When ProPresenter last saved an edit to it, as ISO 8601. */
+  lastModified?: string;
+  /** When it was last shown on screen, as ISO 8601. Absent if never. */
+  lastUsed?: string;
+  category?: string;
+  notes?: string;
+  ccli?: {
+    songTitle?: string;
+    author?: string;
+    artistCredits?: string;
+    publisher?: string;
+    copyrightYear?: number;
+    songNumber?: number;
+    album?: string;
+  };
+  musicKey?: { original?: string; user?: string };
+  /**
+   * Each named order of the song's groups, by group name.
+   *
+   * Which one is selected is not reported: in real 21.4 files the
+   * `selected_arrangement` id matched none of the file's arrangements, so
+   * what it points at is not understood well enough to pass on.
+   */
+  arrangements: { name: string; groups: string[] }[];
+  /** The ProPresenter that last saved the file, e.g. "21.4.2 on Windows". */
+  savedBy?: string;
+}
+
+/** `rv.data.Timestamp` as ISO 8601, or nothing for an unset one. */
+function isoTimestamp(ts: any): string | undefined {
+  // int64 arrives as a protobuf.js Long; Number() covers both forms.
+  const seconds = Number(ts?.seconds ?? 0);
+  if (!seconds) return undefined;
+  return new Date(seconds * 1000 + Math.floor((ts.nanos ?? 0) / 1e6)).toISOString();
+}
+
+/** Keep only the fields that hold something, so an empty CCLI reads as absent. */
+function present<T extends object>(fields: T): Partial<T> | undefined {
+  const kept = Object.entries(fields).filter(([, v]) => v !== undefined && v !== "" && v !== 0);
+  return kept.length ? (Object.fromEntries(kept) as Partial<T>) : undefined;
+}
+
+export function readDetails(doc: RawDoc): PresentationDetails {
+  const raw = doc as any;
+
+  const groupNames = new Map<string, string>();
+  for (const entry of raw.cue_groups ?? []) {
+    if (entry.group?.uuid?.string) groupNames.set(entry.group.uuid.string, entry.group.name ?? "");
+  }
+  const info = raw.application_info;
+  const v = info?.application_version;
+  const version = v && [v.major_version ?? 0, v.minor_version ?? 0, v.patch_version ?? 0].join(".");
+  const label = info?.platform ? enumLabel("rv.data.ApplicationInfo.Platform", info.platform) : "";
+  const platform = ({ MACOS: "macOS", WINDOWS: "Windows" } as Record<string, string>)[label] ?? label;
+
+  const music = raw.music ?? {};
+  return {
+    lastModified: isoTimestamp(raw.last_modified_date),
+    lastUsed: isoTimestamp(raw.last_date_used),
+    category: raw.category || undefined,
+    notes: raw.notes || undefined,
+    ccli: raw.ccli
+      ? present({
+          songTitle: raw.ccli.song_title,
+          author: raw.ccli.author,
+          artistCredits: raw.ccli.artist_credits,
+          publisher: raw.ccli.publisher,
+          copyrightYear: raw.ccli.copyright_year,
+          songNumber: raw.ccli.song_number,
+          album: raw.ccli.album,
+        })
+      : undefined,
+    musicKey: present({
+      original: music.original_music_key || raw.music_key || undefined,
+      user: music.user_music_key || undefined,
+    }),
+    arrangements: (raw.arrangements ?? []).map((a: any) => ({
+      name: a.name ?? "",
+      groups: (a.group_identifiers ?? []).map((id: any) => groupNames.get(id?.string) ?? "(missing group)"),
+    })),
+    savedBy: version ? (platform ? `${version} on ${platform}` : version) : undefined,
+  };
 }
 
 /**

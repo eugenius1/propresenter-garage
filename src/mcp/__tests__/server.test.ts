@@ -263,3 +263,127 @@ describe("readFoundFile", () => {
     await expect(readFoundFile(library)).rejects.toThrow(/Not a file|Could not read/);
   });
 });
+
+describe("what a presentation records about itself", () => {
+  // A library of its own, so the counts the tests above assert stay put.
+  let dated: string;
+  let datedClient: Client;
+  const at = (iso: string) => ({ seconds: Date.parse(iso) / 1000 });
+
+  async function list(args: Record<string, unknown> = {}) {
+    const result = await datedClient.callTool({ name: "list_presentations", arguments: args });
+    const text = (result.content as { text: string }[])[0].text;
+    return result.isError ? { error: text } : JSON.parse(text);
+  }
+
+  beforeAll(async () => {
+    dated = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "pp-mcp-dated-")));
+    const Presentation = messageType("rv.data.Presentation");
+    const write = (name: string, fields: Record<string, unknown>) =>
+      fs.writeFileSync(
+        path.join(dated, `${name}.pro`),
+        Presentation.encode(Presentation.fromObject({ name, ...fields })).finish()
+      );
+
+    write("Recent", {
+      application_info: {
+        platform: "PLATFORM_WINDOWS",
+        application_version: { major_version: 21, minor_version: 4, patch_version: 2 },
+      },
+      last_date_used: at("2026-10-13T18:37:48Z"),
+      last_modified_date: at("2026-10-23T18:47:31Z"),
+      category: "Louange",
+      notes: "Capo 2 pour la chorale",
+      ccli: { song_title: "Recent", author: "Someone", song_number: 1234567, copyright_year: 2019 },
+      music: { original_music_key: "G", user_music_key: "A" },
+      cue_groups: [
+        { group: { uuid: { string: "g-verse" }, name: "Couplet" } },
+        { group: { uuid: { string: "g-chorus" }, name: "Refrain" } },
+      ],
+      arrangements: [
+        {
+          uuid: { string: "a-1" },
+          name: "Dimanche",
+          group_identifiers: [{ string: "g-verse" }, { string: "g-chorus" }, { string: "g-gone" }],
+        },
+      ],
+    });
+    write("Old", { last_date_used: at("2024-01-07T10:00:00Z") });
+    write("Never", {});
+    fs.writeFileSync(path.join(dated, "Chords.pro"), "{title: Amazing Grace}\n[G]Amazing grace\n");
+
+    const server = createServer(await openRoots([dated]));
+    const [clientSide, serverSide] = InMemoryTransport.createLinkedPair();
+    datedClient = new Client({ name: "test", version: "0" });
+    await Promise.all([server.connect(serverSide), datedClient.connect(clientSide)]);
+  });
+
+  afterAll(async () => {
+    await datedClient?.close();
+    fs.rmSync(dated, { recursive: true, force: true });
+  });
+
+  it("reads ProPresenter's dates, notes, CCLI, key and arrangements", async () => {
+    const result = await datedClient.callTool({ name: "read_presentation", arguments: { path: "Recent.pro" } });
+    const doc = JSON.parse((result.content as { text: string }[])[0].text);
+    expect(doc).toMatchObject({
+      lastUsed: "2026-10-13T18:37:48.000Z",
+      lastModified: "2026-10-23T18:47:31.000Z",
+      category: "Louange",
+      notes: "Capo 2 pour la chorale",
+      ccli: { songTitle: "Recent", author: "Someone", songNumber: 1234567, copyrightYear: 2019 },
+      musicKey: { original: "G", user: "A" },
+      arrangements: [{ name: "Dimanche", groups: ["Couplet", "Refrain", "(missing group)"] }],
+      savedBy: "21.4.2 on Windows",
+    });
+    expect(doc.fileModified).toEqual(expect.any(String));
+    expect(doc).not.toHaveProperty("created");
+  });
+
+  it("leaves out what a file does not record", async () => {
+    const result = await datedClient.callTool({ name: "read_presentation", arguments: { path: "Never.pro" } });
+    const doc = JSON.parse((result.content as { text: string }[])[0].text);
+    for (const key of ["lastUsed", "lastModified", "category", "notes", "ccli", "musicKey", "savedBy"]) {
+      expect(doc[key]).toBeUndefined();
+    }
+    expect(doc.arrangements).toEqual([]);
+  });
+
+  it("lists without opening any file unless asked about use", async () => {
+    const { presentations, unreadable } = await list();
+    expect(unreadable).toBeUndefined();
+    for (const p of presentations) {
+      expect(p.fileModified).toEqual(expect.any(String));
+      expect(p).not.toHaveProperty("lastUsed");
+    }
+  });
+
+  it("finds what has not been shown since a date, never-shown included", async () => {
+    const { presentations, unreadable } = await list({ notUsedSince: "2025-01-01" });
+    expect(presentations.map((p: { name: string }) => p.name).sort()).toEqual(["Never", "Old"]);
+    expect(presentations.find((p: { name: string }) => p.name === "Never").lastUsed).toBeNull();
+    // A file it could not decode is said so, not quietly counted as unused.
+    expect(unreadable.map((f: string) => path.basename(f))).toEqual(["Chords.pro"]);
+  });
+
+  it("finds what has been shown since a date, most recent first", async () => {
+    const recent = await list({ usedSince: "2025-01-01" });
+    expect(recent.presentations.map((p: { name: string }) => p.name)).toEqual(["Recent"]);
+
+    const sorted = await list({ sort: "lastUsed" });
+    expect(sorted.presentations.map((p: { name: string }) => p.name)).toEqual(["Recent", "Old", "Never"]);
+  });
+
+  it("refuses a date it cannot read", async () => {
+    expect((await list({ usedSince: "last spring" })).error).toMatch(/not a date/);
+  });
+
+  it("tells the calling model about the cost and the missing creation date", async () => {
+    const { tools } = await datedClient.listTools();
+    const about = (name: string) => tools.find((t) => t.name === name)!.description!;
+    expect(about("list_presentations")).toMatch(/decoded/);
+    for (const name of ["list_presentations", "read_presentation"]) {
+      expect(about(name)).toMatch(/No creation date/);
+    }
+  });
+});

@@ -36,8 +36,8 @@
     }
   },
   "tools": [
-    { "name": "list_presentations", "description": "List presentation files, optionally filtered by name." },
-    { "name": "read_presentation", "description": "Read a presentation's slides, line by line." },
+    { "name": "list_presentations", "description": "List presentation files, by name or by when they were last shown." },
+    { "name": "read_presentation", "description": "Read a presentation's slides line by line, with its dates, notes, CCLI details and arrangements." },
     { "name": "search_text", "description": "Find a phrase in the slide text of every presentation." },
     { "name": "check_presentations", "description": "Run the Presentations text checks on a file, a folder or every library." },
     { "name": "read_media_bin", "description": "Read every playlist in the media bin and the items in it." },

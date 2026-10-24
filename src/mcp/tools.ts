@@ -9,7 +9,10 @@ import { itemLabel, itemPath, type MediaItem } from "../lib/model";
 import {
   checkPresentationFidelity,
   hasText,
+  decodePresentation,
   openPresentation,
+  readDetails,
+  type PresentationDetails,
   type PresentationDoc,
   type ReadProblem,
   type TextIssue,
@@ -56,42 +59,117 @@ function explain(problem: ReadProblem, detail = ""): string {
   return problem === "unreadable" ? f(problems.unreadable, { reason: detail }) : problems[problem];
 }
 
-function open(file: string, bytes: Uint8Array): PresentationDoc {
+function open(file: string, bytes: Uint8Array) {
   const opened = openPresentation(bytes);
   if (opened.problem) throw new LibraryError(`${file}: ${explain(opened.problem, opened.detail)}`);
-  return opened.doc;
+  return opened;
+}
+
+/**
+ * A listing entry. No creation date, on purpose: see `PresentationDetails`.
+ *
+ * `fileModified` is the file system's, and is free to read. `lastUsed` and
+ * `lastModified` are ProPresenter's own and live inside the file, so they are
+ * only present when the call asked for them by filtering or sorting on use.
+ */
+export interface ListedPresentation {
+  path: string;
+  name: string;
+  library: string;
+  sizeBytes: number;
+  fileModified: string;
+  lastUsed?: string | null;
+  lastModified?: string;
 }
 
 export interface PresentationListing {
   total: number;
   truncated: boolean;
-  presentations: { path: string; name: string; library: string; sizeBytes: number; modified: string }[];
+  /** Files that could not be decoded when dates were needed, so they are not silently dropped. */
+  unreadable?: string[];
+  presentations: ListedPresentation[];
 }
 
+export interface ListOptions {
+  query?: string;
+  limit?: number;
+  /** ISO date: only presentations not shown since then, including never shown. */
+  notUsedSince?: string;
+  /** ISO date: only presentations shown on or after it. */
+  usedSince?: string;
+  sort?: "name" | "lastUsed";
+}
+
+function parseDate(value: string | undefined, name: string): number | undefined {
+  if (value === undefined) return undefined;
+  const ms = Date.parse(value);
+  if (Number.isNaN(ms)) throw new LibraryError(`${name} is not a date: ${value}. Use ISO 8601, e.g. 2025-10-24.`);
+  return ms;
+}
+
+/**
+ * List presentations, by name alone or by when they were last shown.
+ *
+ * The two cost very differently. A name is the file's name, so a plain listing
+ * never opens a file. When a song was last shown is recorded only inside it,
+ * so filtering or sorting on use reads and decodes every file the name filter
+ * left -- the whole library, unless `query` narrowed it first. The tool
+ * description says so, so the calling model can choose.
+ */
 export async function listPresentations(
   roots: readonly string[],
-  { query, limit = 200 }: { query?: string; limit?: number } = {}
+  { query, limit = 200, notUsedSince, usedSince, sort = "name" }: ListOptions = {}
 ): Promise<PresentationListing> {
+  const before = parseDate(notUsedSince, "notUsedSince");
+  const since = parseDate(usedSince, "usedSince");
+  const needDates = before !== undefined || since !== undefined || sort === "lastUsed";
+
   const { files, truncated } = await findPresentations(roots);
   const wanted = query ? fold(query) : undefined;
-  const matching = files.filter((file) => !wanted || fold(presentationName(file)).includes(wanted));
+  const named = files.filter((file) => !wanted || fold(presentationName(file)).includes(wanted));
+
+  let matching: { file: string; details?: PresentationDetails }[] = named.map((file) => ({ file }));
+  const unreadable: string[] = [];
+  if (needDates) {
+    matching = [];
+    for (const file of named) {
+      let details: PresentationDetails;
+      try {
+        details = readDetails(decodePresentation(await readFoundFile(file)));
+      } catch {
+        unreadable.push(file);
+        continue;
+      }
+      const used = details.lastUsed ? Date.parse(details.lastUsed) : undefined;
+      if (before !== undefined && used !== undefined && used >= before) continue;
+      if (since !== undefined && (used === undefined || used < since)) continue;
+      matching.push({ file, details });
+    }
+    if (sort === "lastUsed") {
+      // Most recent first; never shown last.
+      const usedAt = (m: (typeof matching)[number]) => (m.details?.lastUsed ? Date.parse(m.details.lastUsed) : -Infinity);
+      matching.sort((a, b) => usedAt(b) - usedAt(a));
+    }
+  }
 
   return {
     total: matching.length,
     truncated: truncated || matching.length > limit,
+    unreadable: needDates ? unreadable : undefined,
     presentations: (
       await Promise.all(
-        matching.slice(0, limit).map(async (file) => {
+        matching.slice(0, limit).map(async ({ file, details }) => {
           // ProPresenter saves by replacing the file; one caught mid-save is
           // left out rather than failing the whole listing.
           const stat = await fs.stat(file).catch(() => undefined);
           return stat && {
-          path: file,
-          name: presentationName(file),
-          // ProPresenter keeps one folder per library, so the parent is its name.
-          library: path.basename(path.dirname(file)),
+            path: file,
+            name: presentationName(file),
+            // ProPresenter keeps one folder per library, so the parent is its name.
+            library: path.basename(path.dirname(file)),
             sizeBytes: stat.size,
-            modified: stat.mtime.toISOString(),
+            fileModified: stat.mtime.toISOString(),
+            ...(details && { lastUsed: details.lastUsed ?? null, lastModified: details.lastModified }),
           };
         })
       )
@@ -99,9 +177,11 @@ export async function listPresentations(
   };
 }
 
-export interface PresentationContent {
+export interface PresentationContent extends PresentationDetails {
   path: string;
   name: string;
+  /** The file system's modification time. `lastModified` is ProPresenter's own. */
+  fileModified?: string;
   slideCount: number;
   /** Whether writing this file back would keep everything in it. See CONTRIBUTING.md. */
   fidelity: Fidelity;
@@ -117,7 +197,9 @@ export interface PresentationContent {
 
 export async function readPresentationFile(roots: readonly string[], file: string): Promise<PresentationContent> {
   const { path: real, bytes } = await readLibraryFile(roots, file);
-  const doc = open(file, bytes);
+  const { doc, raw } = open(file, bytes);
+  // Replaced mid-save between the read and this: report the rest regardless.
+  const stat = await fs.stat(real).catch(() => undefined);
 
   const slides = new Map<number, PresentationContent["slides"][number]>();
   let emptyTextBoxes = 0;
@@ -137,6 +219,8 @@ export async function readPresentationFile(roots: readonly string[], file: strin
   return {
     path: real,
     name: doc.name || presentationName(real),
+    fileModified: stat?.mtime.toISOString(),
+    ...readDetails(raw),
     slideCount: doc.slideCount,
     fidelity: checkPresentationFidelity(bytes).fidelity,
     emptyTextBoxes,
@@ -185,7 +269,7 @@ export async function searchText(
     searched++;
     let doc: PresentationDoc;
     try {
-      doc = open(file, await readFoundFile(file));
+      doc = open(file, await readFoundFile(file)).doc;
     } catch {
       unreadable.push(file);
       continue;
