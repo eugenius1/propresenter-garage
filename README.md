@@ -8,8 +8,10 @@ An installable web app holding a suite of utilities for ProPresenter 7 files.
 
 **<https://eusebius.tech/propresenter-garage/>**
 
-Everything runs in the browser. No server, no upload: your media library never
-leaves the machine, and once installed the app works with no network at all.
+The app runs entirely in the browser. No server, no upload: your media library
+never leaves the machine, and once installed the app works with no network at
+all. The [MCP server](#for-ai-assistants-mcp) is different, because it hands
+what it reads to an AI assistant.
 
 ## Tools
 
@@ -72,6 +74,12 @@ This works on the files instead, through the same code as the app.
 It reads nothing outside the folders you give it. The usual one is
 `Documents/ProPresenter`, which holds `Libraries` and `Playlists` on both macOS
 and Windows.
+
+Unlike the app, what it reads does not stay on the machine. The server itself
+makes no network connection, but every answer it gives — slide text, notes,
+file names, media-bin entries — goes into the conversation with your
+assistant, and an assistant that runs on a hosted model, such as Claude, sends
+the conversation to that model's provider like anything else you type.
 
 #### Claude Desktop
 
