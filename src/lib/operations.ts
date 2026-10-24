@@ -1,9 +1,13 @@
-import { decodeMediaDocument, findNode, findParentOf, rawChildren, walkNodes } from "./model";
-import { encodeDocument, messageType, type RawDoc } from "./decode";
+import { findNode, findParentOf, rawChildren, walkNodes } from "./model";
+import { decodeAnyDocument, encodeDocument, messageType, wireCopy, type RawDoc } from "./decode";
 import { stamp } from "./download";
 
 /**
- * Edits to a media-bin document.
+ * Edits to a playlist document: the media bin, or the presentation playlists.
+ *
+ * Both are one `PlaylistDocument` with the same tree, so one set of edits
+ * serves both. What goes into a presentation playlist is built in
+ * `playlists.ts`.
  *
  * Applied to the raw protobuf message rather than rebuilt from the normalised
  * model. The model is a lossy projection -- it captures what the interface
@@ -44,7 +48,14 @@ export type Operation =
    * model does not capture every field. The entry is deep-copied on the way in,
    * so the document it came from is not aliased into this one.
    */
-  | { kind: "insertItem"; playlistUuid: string; itemName: string; entry: unknown }
+  | {
+      kind: "insertItem";
+      playlistUuid: string;
+      itemName: string;
+      entry: unknown;
+      /** Position to insert at, zero-based; the end when omitted. */
+      index?: number;
+    }
   /** Replace an entry wholesale with one from another document. */
   | { kind: "replaceItem"; playlistUuid: string; itemUuid: string; itemName: string; entry: unknown }
   /**
@@ -88,16 +99,20 @@ export class OperationError extends Error {
  */
 function copyEntry(entry: unknown, op: Operation): any {
   try {
-    const PlaylistItem = messageType("rv.data.PlaylistItem");
-    return PlaylistItem.decode(PlaylistItem.encode(entry as never).finish());
+    return wireCopy(messageType("rv.data.PlaylistItem"), entry);
   } catch (e) {
     throw new OperationError(`entry could not be copied: ${(e as Error).message}`, op);
   }
 }
 
-/** Deep-clone a document by round-tripping it through the wire format. */
+/**
+ * Deep-clone a document by round-tripping it through the wire format.
+ *
+ * Whatever its kind: the presentation playlists are edited exactly as the
+ * media bin is.
+ */
 function clone(doc: RawDoc): RawDoc {
-  return decodeMediaDocument(encodeDocument(doc));
+  return decodeAnyDocument(encodeDocument(doc));
 }
 
 function itemsOf(node: any): any[] | undefined {
@@ -181,7 +196,10 @@ function applyOne(doc: RawDoc, op: Operation): void {
     }
 
     case "insertItem": {
-      receivingItems(findPlaylist(doc, op.playlistUuid, op), op).push(copyEntry(op.entry, op));
+      const items = receivingItems(findPlaylist(doc, op.playlistUuid, op), op);
+      // Clamped for the same reason as a reorder.
+      const at = Math.max(0, Math.min(op.index ?? items.length, items.length));
+      items.splice(at, 0, copyEntry(op.entry, op));
       break;
     }
 

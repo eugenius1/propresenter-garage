@@ -386,7 +386,7 @@ export interface SourceEdit {
  * That space is syntax, never content, and only where the word does not
  * already have one -- adding a second would be a leading space of its own.
  */
-function endsWithControlWord(rtf: string, index: number): boolean {
+export function endsWithControlWord(rtf: string, index: number): boolean {
   let i = index - 1;
 
   let digits = 0;
