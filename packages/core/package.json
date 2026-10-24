@@ -1,0 +1,19 @@
+{
+  "name": "@propresenter-garage/core",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Reading, checking and editing ProPresenter 7 files. Used by the web app; no UI.",
+  "license": "GPL-3.0-or-later",
+  "type": "module",
+  "exports": {
+    "./*": "./src/*.ts"
+  },
+  "scripts": {
+    "protos": "node scripts/build-descriptor.mjs",
+    "protos:update": "node scripts/update-protos.mjs",
+    "report": "tsx src/report.mts"
+  },
+  "dependencies": {
+    "protobufjs": "^8.8.0"
+  }
+}

@@ -11,8 +11,10 @@ npm install
 npm run dev
 ```
 
-`npm run build` produces a static `dist/`. `npm test` runs the suite, and
-`npm run check` is the same gate CI uses: codegen, lint, both typechecks, tests.
+Run everything from the repository root: it is an npm workspace, and the root
+scripts reach into the packages. `npm run build` produces the static site in
+`packages/web/dist/`. `npm test` runs every package's suite in one pass, and
+`npm run check` is the same gate CI uses: codegen, lint, the typechecks, tests.
 
 Pushing to `main` deploys to GitHub Pages. The site needs a real HTTP server
 even though it is entirely static — ES modules and service workers are both
@@ -87,7 +89,7 @@ duplicates into false variants.
 
 ## Localisation
 
-Adding a locale means one file. `src/i18n/en.ts` is the canonical shape and
+Adding a locale means one file. `packages/core/src/i18n/en.ts` is the canonical shape and
 every other dictionary is typed against it, so a missing or misspelled key is a
 build error rather than an English string leaking through. Tests additionally
 assert that the locales share every key, that plural lists have matching
@@ -154,12 +156,12 @@ mutating a clone (moving an item, renaming a playlist, mirroring an image,
 disabling an effect) and asserting the diff reports exactly that change and
 nothing else.
 
-`scripts/make-mutated-sample.mjs` generates a plausibly-edited copy of a real
+`packages/core/scripts/make-mutated-sample.mjs` generates a plausibly-edited copy of a real
 file, which is handy for exercising the diff UI without waiting for two genuine
 weekly snapshots.
 
 **The gate the write path rests on** is in
-`src/lib/__tests__/rtf-splice.test.ts`, and it is the reason any of this is
+`packages/core/src/lib/__tests__/rtf-splice.test.ts`, and it is the reason any of this is
 safe to ship. For every one of the 604,966 visible characters in the 15,930
 text boxes of a real library, it deletes that character and re-reads the
 document, asserting the line lost exactly that character and no other line
@@ -168,7 +170,7 @@ written. It takes about eight seconds, which is why the comparison is plain
 JavaScript and only a failure reaches `expect` — half a million assertions take
 minutes where the work itself takes seconds.
 
-`src/lib/__tests__/fixes.test.ts` then runs the real thing: every findable
+`packages/core/src/lib/__tests__/fixes.test.ts` then runs the real thing: every findable
 problem in every file fixed, read back, and checked both for being gone and for
 having left every untouched box alone.
 
@@ -192,7 +194,7 @@ This has been fixed twice; the second time it turned CI red after a push.
 **RTF spaces are not all content.** A control word is terminated by a single
 space that is syntax: in `\cb2 Que ton nom`, the space after `\cb2` is a
 delimiter. Matching spaces with a regular expression reports a leading space on
-nearly every line in every file. `src/lib/rtf.ts` exists solely for this, and
+nearly every line in every file. `packages/core/src/lib/rtf.ts` exists solely for this, and
 the text it returns is a *projection* — writing a fix means editing the
 original RTF, not the extracted string. Every visible character carries the
 source range it came from, so a fix is a splice rather than a rewrite.
@@ -227,13 +229,13 @@ edited, whatever the bytes were. ProPresenter escapes everything above ASCII as
 **A zip says its names are UTF-8 with a flag, and old tools ignore it.** macOS
 ships Info-ZIP 6.00 from 2009, which predates bit 11 and mangles an accented
 name on extraction. Modern extractors honour it and a real library is full of
-accented names, so the flag stays; `src/lib/__tests__/zip.test.ts` asks
+accented names, so the flag stays; `packages/core/src/lib/__tests__/zip.test.ts` asks
 Info-ZIP only to verify the container and leaves extraction to Python.
 
 **An ellipsis is not a full stop.** "Gloire..." and "Gloire…" mark a line
 running on into the next slide, which is the opposite of the thing the
 trailing-full-stop check reports -- 30 of them in a real library of 24,181
-lines. `TRAILING_PUNCTUATION` in `src/lib/presentation.ts` carries the
+lines. `TRAILING_PUNCTUATION` in `packages/core/src/lib/presentation.ts` carries the
 lookbehind that separates the two, and it is exported as a pattern rather than
 a finished expression so the check and the fix cannot disagree about it.
 
@@ -246,7 +248,7 @@ all, so "every file has slides" is not true of real data.
 **`.pro` is ChordPro's extension too.** A chord chart sitting in a library is
 indistinguishable from a presentation until it is opened, and one turned up
 among 2,847 real files. Reported as a decode failure it read "invalid end group
-tag", which tells its owner nothing; `readProblem` in `src/lib/presentation.ts`
+tag", which tells its owner nothing; `readProblem` in `packages/core/src/lib/presentation.ts`
 separates the cases so the interface can say what the file actually is. The
 text test needs both halves -- no control characters *and* valid UTF-8 -- since
 `3c ff fe` has no control characters and is not text.
@@ -263,7 +265,7 @@ implies a full path is available.
 **Folder permission lapses when the last tab for the origin closes.** An
 installed app keeps it; a plain tab does not. Re-requesting needs a user
 gesture, so offer a button rather than re-requesting on load --
-`handlePermission` and `requestHandlePermission` in `src/lib/persistence.ts`
+`handlePermission` and `requestHandlePermission` in `packages/web/src/lib/persistence.ts`
 model this.
 
 **Only Chromium can write to a folder at all.** `folderAccess()` returns
@@ -287,7 +289,7 @@ trailing one is padding.
 the label stayed white and the button looked empty. Scope hover rules away from
 the variants they should not touch.
 
-**Contrast is measured, not judged.** `src/lib/__tests__/contrast.test.ts`
+**Contrast is measured, not judged.** `packages/web/src/lib/__tests__/contrast.test.ts`
 reads the Radix scales straight from the package and asserts the pairings the
 stylesheet actually makes. White on blue step 9 measures 3.26:1 and fails AA;
 that is why the accent is indigo. Add a pairing to that file rather than
@@ -312,25 +314,25 @@ merged there.
 
 ## Conventions
 
-- **`npm run check` must pass.** Codegen, `oxlint`, both TypeScript projects,
-  and the full suite -- 407 tests. The ones that matter most only run where
-  `PP_LIBRARY_DIR` points at a real library; CI skips them.
+- **`npm run check` must pass.** Codegen, `oxlint`, every package's
+  TypeScript projects, and the full suite. The tests that matter most only
+  run where `PP_LIBRARY_DIR` points at a real library; CI skips them.
 - **No licence headers in source files**: no `SPDX-License-Identifier` line
   and no `Copyright (C)` line. `LICENSE` and the `license` field in
   `package.json` cover the whole repository.
-- **Comments explain why, not what.** `src/lib/rtf.ts` and `src/lib/decode.ts`
+- **Comments explain why, not what.** `packages/core/src/lib/rtf.ts` and `packages/core/src/lib/decode.ts`
   are the register to aim for: each one says what went wrong without it.
-- **Every user-visible string goes in both dictionaries.** `src/i18n/en.ts` is
+- **Every user-visible string goes in both dictionaries.** `packages/core/src/i18n/en.ts` is
   canonical and `fr.ts` is typed against it; tests assert matching keys, plural
   arity, placeholders, and that no French string is accidentally the English
   one.
 - **Never write over an original ProPresenter file unguarded.** Media Bin
   exports are always a differently named copy the reader moves into place
-  themselves, via `exportFilename()` in `src/lib/operations.ts`. The one path
+  themselves, via `exportFilename()` in `packages/core/src/lib/operations.ts`. The one path
   that writes in place is the presentation fixer, under the four conditions
   set out in [AGENTS.md](AGENTS.md).
 - **Never commit a real ProPresenter library.** Real `.pro` files, media-bin
-  playlists and media folders are somebody's personal data. `public/__dev-*` is
+  playlists and media folders are somebody's personal data. `packages/web/public/__dev-*` is
   gitignored for exactly this; development copies go there and nowhere else.
 - **Commit messages are prose.** Explain the reasoning and what went wrong, not
   a changelog line.
@@ -342,11 +344,25 @@ they may never read.
 
 ## Layout
 
-`src/App.tsx` is the shell — title, appearance and language controls, the tool
-switcher, licence — and renders the active tool. Each tool under `src/tools/`
-owns everything specific to it, including its own file state, and its strings
-live under its own key in the dictionaries. Shared analysis lives in
-`src/lib/`, shared interface pieces in `src/components/`.
+Two packages under `packages/`, one version between them:
+
+- **`core`** (`@propresenter-garage/core`, private): reading, checking and
+  editing ProPresenter files — `src/lib/`, the vendored schema in `proto/`,
+  the descriptor generated from it, and the dictionaries in `src/i18n/`. No
+  UI and no Node APIs; its source is typechecked without Node's types so
+  neither creeps in. It is never built on its own: `web` imports its
+  TypeScript directly (`@propresenter-garage/core/lib/presentation`) and
+  bundles what it uses.
+- **`web`** (`@propresenter-garage/web`, private): the installable browser
+  app — React, the PWA, its stylesheet and icons, and the two browser-only
+  pieces of `lib/`, persistence and routing.
+
+`packages/web/src/App.tsx` is the shell — title, appearance and language
+controls, the tool switcher, licence — and renders the active tool. Each tool
+under `packages/web/src/tools/` owns everything specific to it, including its
+own file state, and its strings live under its own key in the dictionaries.
+Shared analysis lives in `packages/core/src/lib/`, shared interface pieces in
+`packages/web/src/components/`.
 
 Routing is a flat list of slugs in `App.tsx`: the first tool owns the root path
 and each other tool gets one segment. There is no registry and no extension

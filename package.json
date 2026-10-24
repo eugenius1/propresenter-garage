@@ -5,45 +5,33 @@
   "description": "A suite of utilities for ProPresenter 7 files. Runs entirely in your browser.",
   "license": "GPL-3.0-or-later",
   "type": "module",
+  "workspaces": [
+    "packages/core",
+    "packages/web"
+  ],
   "scripts": {
-    "protos": "node scripts/build-descriptor.mjs",
-    "protos:update": "node scripts/update-protos.mjs",
-    "icons": "node scripts/make-icons.mjs",
-    "dev": "npm run protos && vite",
-    "build": "npm run protos && tsc -b tsconfig.app.json && vite build && node scripts/spa-fallback.mjs",
-    "preview": "vite preview",
+    "protos": "npm run protos -w @propresenter-garage/core",
+    "protos:update": "npm run protos:update -w @propresenter-garage/core",
+    "dev": "npm run protos && npm run dev -w @propresenter-garage/web --",
+    "build": "npm run protos && npm run build -w @propresenter-garage/web",
+    "preview": "npm run preview -w @propresenter-garage/web",
+    "icons": "npm run icons -w @propresenter-garage/web",
+    "report": "npm run report -w @propresenter-garage/core --",
     "test": "vitest run",
     "test:watch": "vitest",
     "coverage": "vitest run --coverage",
     "lint": "oxlint",
     "lint:fix": "oxlint --fix",
-    "typecheck": "tsc --noEmit -p tsconfig.app.json && tsc --noEmit -p tsconfig.test.json",
-    "report": "tsx src/report.mts",
+    "typecheck": "tsc --noEmit -p packages/core && tsc --noEmit -p packages/core/tsconfig.test.json && tsc --noEmit -p packages/web && tsc --noEmit -p packages/web/tsconfig.test.json && tsc --noEmit -p tsconfig.node.json",
     "check": "npm run protos && npm run lint && npm run typecheck && npm test"
   },
-  "dependencies": {
-    "@radix-ui/colors": "^3.0.0",
-    "lucide-react": "^1.45.0",
-    "protobufjs": "^8.8.0",
-    "react": "^19.2.8",
-    "react-dom": "^19.2.8"
-  },
   "devDependencies": {
-    "@testing-library/jest-dom": "^7.0.1",
-    "@testing-library/react": "^16.3.3",
-    "@testing-library/user-event": "^14.6.7",
     "@types/node": "^24.13.4",
-    "@types/react": "^19.2.18",
-    "@types/react-dom": "^19.2.7",
-    "@vitejs/plugin-react": "^6.1.1",
     "@vitest/coverage-v8": "^5.0.0",
-    "fake-indexeddb": "^6.2.5",
-    "jsdom": "^30.0.1",
     "oxlint": "^1.81.0",
     "tsx": "^4.23.13",
     "typescript": "~6.0.2",
     "vite": "^8.3.0",
-    "vite-plugin-pwa": "^1.3.0",
     "vitest": "^5.0.0"
   }
 }
