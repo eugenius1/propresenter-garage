@@ -59,9 +59,16 @@ export function showLocationOf(doc: RawDoc): ShowLocation | undefined {
   return undefined;
 }
 
+/**
+ * A file URL's path, every escape undone.
+ *
+ * `decodeURIComponent` rather than `decodeURI`: the latter leaves `%23` and
+ * `%3F` as they are, so an entry for "Hymne #1.pro" -- written that way by
+ * {@link presentationEntry} itself -- would never match its relative path.
+ */
 function safeDecode(uri: string): string | undefined {
   try {
-    return decodeURI(uri);
+    return decodeURIComponent(uri);
   } catch {
     return undefined;
   }

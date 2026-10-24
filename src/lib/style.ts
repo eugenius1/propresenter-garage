@@ -120,9 +120,24 @@ export interface StyleOptions {
    * not set apart by this.
    */
   skipDistinctMacro?: boolean;
+  /**
+   * Restyle a slide even when it holds elements besides its words.
+   *
+   * Off by default. Applying a style replaces every element on the slide, so
+   * an image or a shape the slide carried of its own would go with no word
+   * of it in the words that are checked afterwards. Such a slide is left
+   * alone unless losing them is asked for.
+   */
+  replaceOtherElements?: boolean;
 }
 
-export type SkipReason = "listed" | "macro" | "distinctMacro" | "moreTextThanStyle" | "notASlide";
+export type SkipReason =
+  | "listed"
+  | "macro"
+  | "distinctMacro"
+  | "otherElements"
+  | "moreTextThanStyle"
+  | "notASlide";
 
 export interface SlidePlan {
   slideIndex: number;
@@ -181,11 +196,36 @@ function wordsOf(wrapper: any): string[] {
   return lines.slice(first, last + 1);
 }
 
-function textsOf(slide: any): string[][] {
+const hasRtf = (wrapper: any) => ArrayBuffer.isView(wrapper.element?.text?.rtf_data);
+
+/**
+ * The words on a slide, box by box.
+ *
+ * Read from any box with text, marked as a text element or not, so that no
+ * words are left behind. A restyled slide is read back through the style's
+ * own text elements only, since that is where they were put: a theme's shape
+ * can carry decorative text of its own that is not anybody's lyrics.
+ */
+function textsOf(slide: any, textElementsOnly = false): string[][] {
   return (slide.base_slide?.elements ?? [])
-    .filter((w: any) => ArrayBuffer.isView(w.element?.text?.rtf_data))
+    .filter(textElementsOnly ? isTextElement : hasRtf)
     .map(wordsOf)
     .filter((words: string[]) => words.length > 0);
+}
+
+/**
+ * Elements on a slide that show something other than its words.
+ *
+ * An image or a video, which has no text at all, and a shape, which
+ * ProPresenter marks with info but not as a text element. An empty text box
+ * is neither: themes leave them as placeholders, and nothing of it shows.
+ */
+function otherElements(slide: any): number {
+  return (slide.base_slide?.elements ?? []).filter((w: any) => {
+    if (!hasRtf(w)) return true;
+    const marked = (w.info ?? 0) !== 0;
+    return marked && !isTextElement(w) && wordsOf(w).length === 0;
+  }).length;
 }
 
 function styleSlots(style: SlideStyle): number {
@@ -213,7 +253,10 @@ export function planStyle(doc: RawDoc, style: SlideStyle, options: StyleOptions 
     if (!slide) skip = "notASlide";
     else if (listed.has(slideIndex)) skip = "listed";
     else if (names.some((n) => skipMacros.has(n))) skip = "macro";
-    else if (commonest && names.some((n) => n !== commonest)) skip = "distinctMacro";
+    // Set apart by carrying another macro *instead of* the usual one: a lyric
+    // slide that also fires a lighting cue still carries "Louange".
+    else if (commonest && names.length > 0 && !names.includes(commonest)) skip = "distinctMacro";
+    else if (!options.replaceOtherElements && otherElements(slide) > 0) skip = "otherElements";
     // Words with nowhere to go would be lost, which is the one thing this
     // must never do.
     else if (texts.length > slots) skip = "moreTextThanStyle";
@@ -223,7 +266,7 @@ export function planStyle(doc: RawDoc, style: SlideStyle, options: StyleOptions 
 }
 
 /** Escape text for an RTF body. `\uN ?` for anything beyond ASCII. */
-function escapeRtf(text: string, fallback: boolean): string {
+function escapeRtf(text: string, fallback: string): string {
   let out = "";
   for (const ch of text) {
     if (ch === "\\" || ch === "{" || ch === "}") out += `\\${ch}`;
@@ -233,7 +276,7 @@ function escapeRtf(text: string, fallback: boolean): string {
       // One escape per UTF-16 unit, signed, as RTF counts them.
       for (let i = 0; i < ch.length; i++) {
         const unit = ch.charCodeAt(i);
-        out += `\\u${unit > 0x7fff ? unit - 0x10000 : unit}${fallback ? " ?" : " "}`;
+        out += `\\u${unit > 0x7fff ? unit - 0x10000 : unit} ${fallback}`;
       }
     }
   }
@@ -272,9 +315,11 @@ export function restyleRtf(styleRtf: string, lines: readonly string[]): string {
   separator ??= styleRtf.includes("\\cocoartf") ? "\\\n" : "\\par ";
 
   const before = styleRtf.slice(0, start);
-  // `\uc0` says an escape has no fallback character, and a "?" after one
-  // would then be shown.
-  const fallback = !/\\uc0(?![0-9])/.test(before);
+  // `\ucN` says how many fallback characters follow each escape, and a
+  // reader skips exactly that many: one "?" too few eats a letter, one too
+  // many shows. RTF's own default is one.
+  const declared = [...before.matchAll(/\\uc(\d+)/g)].at(-1)?.[1];
+  const fallback = "?".repeat(declared === undefined ? 1 : Number(declared));
 
   let body = "";
   lines.forEach((line, i) => {
@@ -286,7 +331,22 @@ export function restyleRtf(styleRtf: string, lines: readonly string[]): string {
     body += text && endsWithControlWord(tail, tail.length) ? ` ${text}` : text;
   });
 
-  return before + body + styleRtf.slice(end);
+  // The sample can straddle groups -- `{\b Gloire} nom` -- and cutting it
+  // out takes a brace with it. Put back whatever the cut unbalanced.
+  const depth = groupDepth(styleRtf.slice(start, end));
+  const rebalance = depth < 0 ? "}".repeat(-depth) : "{".repeat(depth);
+  return before + body + rebalance + styleRtf.slice(end);
+}
+
+/** Groups opened minus groups closed, ignoring escaped braces. */
+function groupDepth(rtf: string): number {
+  let depth = 0;
+  for (let i = 0; i < rtf.length; i++) {
+    if (rtf[i] === "\\") i++;
+    else if (rtf[i] === "{") depth++;
+    else if (rtf[i] === "}") depth--;
+  }
+  return depth;
 }
 
 /**
@@ -459,8 +519,14 @@ function verify(original: RawDoc, after: Uint8Array, plan: SlidePlan[]): void {
     const restyled = !plan[i].skip;
     const key = restyled ? cueOutsideElements : wholeCue;
     if (key(cue) !== key(was[i].cue)) throw fail(restyled ? "slideActions" : "untouchedSlide", i);
-    if (restyled && JSON.stringify(textsOf(slideOf(cue))) !== JSON.stringify(plan[i].texts)) {
+    if (!restyled) return;
+    const slide = slideOf(cue);
+    if (JSON.stringify(textsOf(slide, true)) !== JSON.stringify(plan[i].texts)) {
       throw fail("words", i);
+    }
+    // Text can read back right from a document whose groups no longer close.
+    for (const wrapper of slide.base_slide.elements.filter(isTextElement)) {
+      if (groupDepth(decodeRtf(wrapper.element.text.rtf_data)) !== 0) throw fail("rtf", i);
     }
   });
 }

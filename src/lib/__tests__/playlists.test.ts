@@ -95,6 +95,21 @@ describe("where the ProPresenter folder is", () => {
   });
 });
 
+describe("where the folder is, from an awkward name", () => {
+  it("reads back an entry whose file name holds a # or a ?", () => {
+    const doc = decodePlaylistsDocument(syntheticPresentationFile()) as any;
+    const edited = applyOperations(doc, [
+      {
+        kind: "insertItem",
+        playlistUuid: doc.root_node.playlists.playlists[0].uuid.string,
+        itemName: "x",
+        entry: presentationEntry({ path: "Libraries/Chants/Hymne #1?.pro", location: MAC }),
+      },
+    ]);
+    expect(showLocationOf(edited)).toEqual(MAC);
+  });
+});
+
 describe("a media entry", () => {
   it("is the media bin's cue under identities of its own", () => {
     const original = firstMediaItem();
