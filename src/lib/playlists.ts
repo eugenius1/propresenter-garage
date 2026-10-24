@@ -104,9 +104,10 @@ export interface PresentationEntryOptions {
 
 /** A playlist entry that plays a presentation from the library. */
 export function presentationEntry(options: PresentationEntryOptions): RawDoc {
-  const path = options.path.replace(/\\/g, "/");
   const location = options.location;
   const mac = location?.platform !== "PLATFORM_WIN32";
+  // A backslash is a separator only on Windows; on a Mac it is part of the name.
+  const path = mac ? options.path : options.path.replace(/\\/g, "/");
   const relative = mac ? path.normalize("NFD") : path;
   const name = options.name ?? basename(relative).replace(/\.pro$/i, "");
   const absolute = !location

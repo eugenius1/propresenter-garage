@@ -63,6 +63,13 @@ describe("a presentation entry", () => {
     expect(entry.presentation.document_path.platform).toBe("PLATFORM_WIN32");
   });
 
+  it("keeps a backslash in a Mac file name as part of the name", () => {
+    const path = asObject(presentationEntry({ path: "Libraries/A/a\\b.pro", location: MAC }))
+      .presentation.document_path;
+    expect(path.local.path).toBe("Libraries/A/a\\b.pro");
+    expect(path.absolute_string).toBe("file:///Users/me/Documents/ProPresenter/Libraries/A/a%5Cb.pro");
+  });
+
   it("carries only the relative path when nobody knows where the folder is", () => {
     const path = asObject(presentationEntry({ path: "Libraries/Chants/Majeste.pro" })).presentation
       .document_path;
