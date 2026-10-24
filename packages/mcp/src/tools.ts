@@ -3,9 +3,27 @@ import path from "node:path";
 import { examine } from "@propresenter-garage/core/lib/fixes";
 import { isPresentationFile } from "@propresenter-garage/core/lib/folder";
 import { auditLibrary } from "@propresenter-garage/core/lib/audit";
-import { DecodeError, type Fidelity } from "@propresenter-garage/core/lib/decode";
+import { checkFidelity, DecodeError, type Fidelity } from "@propresenter-garage/core/lib/decode";
 import { loadMediaBytes } from "@propresenter-garage/core/lib/loadFile";
-import { itemLabel, itemPath, type MediaItem } from "@propresenter-garage/core/lib/model";
+import {
+  applicationInfo,
+  itemLabel,
+  itemPath,
+  rawChildren,
+  rawItems,
+  type MediaItem,
+} from "@propresenter-garage/core/lib/model";
+import { decodePlaylistsDocument } from "@propresenter-garage/core/lib/playlists";
+import {
+  planStyle,
+  presentationStyle,
+  StyleError,
+  styleSlots,
+  themeStyles,
+  type SkipReason,
+  type SlideStyle,
+  type StyleOptions,
+} from "@propresenter-garage/core/lib/style";
 import {
   checkPresentationFidelity,
   hasText,
@@ -22,7 +40,9 @@ import { fold } from "@propresenter-garage/core/lib/search";
 import { createI18n } from "@propresenter-garage/core/i18n/core";
 import {
   findMediaBin,
+  findPlaylists,
   findPresentations,
+  findThemes,
   LibraryError,
   readFoundFile,
   readLibraryFile,
@@ -476,5 +496,237 @@ export async function auditMediaBin(roots: readonly string[], file?: string) {
     absolutePathRoots: audit.absolutePathRoots,
     hiddenItems: audit.hiddenItems.map(located),
     nameMismatches: audit.nameMismatches.map((m) => ({ ...located(m.item), filename: m.filename })),
+  };
+}
+
+/** One entry of a presentation playlist, cut down to what says what it plays. */
+export interface PlaylistEntry {
+  kind: "presentation" | "header" | "media" | "cue" | "placeholder" | "planningCenter" | "other";
+  name: string;
+  /** Relative to the ProPresenter folder where the entry says so, else as stored. */
+  file?: string;
+  /** The arrangement a presentation entry plays, when it names one. */
+  arrangement?: string;
+}
+
+function playlistEntry(item: any): PlaylistEntry {
+  const name: string = item.name ?? "";
+  const fileOf = (url: any): string | undefined => url?.local?.path || url?.absolute_string || undefined;
+  if (item.presentation) {
+    return {
+      kind: "presentation",
+      name,
+      file: fileOf(item.presentation.document_path),
+      arrangement: item.presentation.arrangement_name || undefined,
+    };
+  }
+  if (item.header) return { kind: "header", name };
+  if (item.cue) {
+    const url = item.cue.actions?.find((a: any) => a.media)?.media?.element?.url;
+    return url ? { kind: "media", name, file: fileOf(url) } : { kind: "cue", name };
+  }
+  if (item.placeholder) return { kind: "placeholder", name };
+  if (item.planning_center) return { kind: "planningCenter", name };
+  return { kind: "other", name };
+}
+
+/** Every playlist under `node`, folders flattened into ` / ` paths as the media bin's are. */
+function playlistTree(node: any, ancestry: string[], out: { path: string; items: PlaylistEntry[] }[]) {
+  for (const child of rawChildren(node)) {
+    const trail = [...ancestry, child.name ?? ""];
+    // A folder holds playlists, not entries; an empty playlist is still listed.
+    if (rawChildren(child).length === 0 || rawItems(child).length > 0) {
+      out.push({ path: trail.join(" / "), items: rawItems(child).map(playlistEntry) });
+    }
+    playlistTree(child, trail, out);
+  }
+  return out;
+}
+
+/**
+ * ProPresenter's presentation playlists: the services built from songs,
+ * headers and media, as opposed to the media bin.
+ *
+ * A presentation entry's `file` is relative to the ProPresenter folder, which
+ * is how ProPresenter stores it, so it can be handed straight back to
+ * `read_presentation` when the server was pointed at that folder.
+ */
+export async function readPlaylists(roots: readonly string[], file?: string) {
+  const target = file ?? (await findPlaylists(roots));
+  if (!target) {
+    throw new LibraryError(
+      "No presentation playlists found. Pass the path of the `Library` file inside ProPresenter's `Playlists` folder."
+    );
+  }
+  const { path: real, bytes } = await readLibraryFile(roots, target);
+  let doc: any;
+  try {
+    doc = decodePlaylistsDocument(bytes);
+  } catch (e) {
+    if (e instanceof DecodeError) {
+      throw new LibraryError(`${target}: not ProPresenter's presentation playlists (${e.code}).`);
+    }
+    throw e;
+  }
+  return {
+    path: real,
+    ...applicationInfo(doc.application_info),
+    fidelity: checkFidelity(bytes).fidelity,
+    playlists: playlistTree(doc.root_node, [], []),
+  };
+}
+
+const LOSSY_SOURCE = "would not survive being written back, so its look is not copied";
+
+/** A `StyleError` in words a model can act on; anything else is not ours to explain. */
+function styleProblem(e: unknown, source: string): unknown {
+  if (!(e instanceof StyleError)) return e;
+  switch (e.code) {
+    case "lossy":
+      return new LibraryError(`${source}: ${LOSSY_SOURCE}.`);
+    case "noSuchSlide":
+      return new LibraryError(`${source} has no slide ${e.params.slide} (slideIndex ${Number(e.params.slide) - 1}).`);
+    case "noTextBox":
+      return new LibraryError(`The style "${e.params.style}" has no text box to put words in.`);
+    default:
+      return new LibraryError(`${source}: ${e.message}`);
+  }
+}
+
+/**
+ * The slide styles each theme offers, in the theme's own order.
+ *
+ * A theme that cannot be read is named with why rather than left out, so an
+ * absent theme is never mistaken for one that is not there.
+ */
+export async function listThemes(roots: readonly string[]) {
+  const themes: { name: string; path: string; styles: { styleIndex: number; name: string; textBoxes: number }[] }[] = [];
+  const unreadable: { path: string; reason: string }[] = [];
+  for (const { name, file } of await findThemes(roots)) {
+    try {
+      const styles = themeStyles((await readFoundFile(file)).bytes);
+      themes.push({
+        name,
+        path: file,
+        styles: styles.map((style, styleIndex) => ({ styleIndex, name: style.name, textBoxes: styleSlots(style) })),
+      });
+    } catch (e) {
+      unreadable.push({ path: file, reason: e instanceof StyleError ? LOSSY_SOURCE : (e as Error).message });
+    }
+  }
+  return { themes, unreadable };
+}
+
+export interface StyleSource {
+  /** A theme's name, as `list_themes` gives it, or the path of its `Theme` file. */
+  theme?: string;
+  /** A presentation whose slide's look is copied. */
+  fromPresentation?: string;
+  /** With `theme`: the style's name or `styleIndex`. With `fromPresentation`: the slide's `slideIndex`. */
+  style?: string | number;
+}
+
+async function loadThemeStyle(roots: readonly string[], theme: string, style: string | number | undefined) {
+  const wanted = fold(theme);
+  const named = (await findThemes(roots)).find((t) => fold(t.name) === wanted);
+  let bytes: Uint8Array;
+  try {
+    ({ bytes } = await readLibraryFile(roots, named?.file ?? theme));
+  } catch (e) {
+    if (named || !(e instanceof LibraryError)) throw e;
+    throw new LibraryError(`No theme named "${theme}". \`list_themes\` lists the themes there are.`);
+  }
+
+  let styles: SlideStyle[];
+  try {
+    styles = themeStyles(bytes);
+  } catch (e) {
+    if (e instanceof StyleError) throw styleProblem(e, theme);
+    throw new LibraryError(`${theme}: not a ProPresenter theme (${(e as Error).message}).`);
+  }
+  const names = styles.map((s, i) => `${i}: ${s.name}`).join(", ");
+  if (style === undefined) {
+    if (styles.length === 1) return styles[0];
+    throw new LibraryError(`Theme "${theme}" has ${styles.length} styles; pass \`style\` as a name or styleIndex: ${names}.`);
+  }
+  const found = typeof style === "number" ? styles[style] : styles.find((s) => fold(s.name) === fold(style));
+  if (!found) throw new LibraryError(`No style ${JSON.stringify(style)} in theme "${theme}". It has: ${names}.`);
+  return found;
+}
+
+async function loadStyle(roots: readonly string[], { theme, fromPresentation, style }: StyleSource): Promise<SlideStyle> {
+  if (!theme === !fromPresentation) throw new LibraryError("Give exactly one of `theme` and `fromPresentation`.");
+  if (theme) return loadThemeStyle(roots, theme, style);
+
+  if (typeof style !== "number") {
+    throw new LibraryError("With `fromPresentation`, `style` is the slideIndex of the slide to copy, as read_presentation gives it.");
+  }
+  const { bytes } = await readLibraryFile(roots, fromPresentation!);
+  open(fromPresentation!, bytes);
+  try {
+    return presentationStyle(bytes, style);
+  } catch (e) {
+    throw styleProblem(e, fromPresentation!);
+  }
+}
+
+export interface StylePreview {
+  path: string;
+  style: string;
+  /** Whether the presentation would survive being written back. Applying is refused when it would not. */
+  fidelity: Fidelity;
+  restyled: number;
+  leftAlone: number;
+  slides: {
+    slideIndex: number;
+    label: string;
+    group?: string;
+    macros?: string[];
+    /** Why the slide would be left alone, when it would. */
+    skip?: SkipReason;
+    /** The words each box would carry afterwards, line by line. */
+    words: string[][];
+  }[];
+}
+
+/**
+ * What giving a presentation's slides another slide's look would do, without
+ * doing it: which slides would change, which would be left alone and why, and
+ * the words each would carry.
+ *
+ * The plan `applyStyle` itself follows and then checks its result against, so
+ * the preview and a later write cannot disagree. There is no write here: that
+ * would be a fifth write path, and AGENTS.md says what one has to keep.
+ */
+export async function previewStyle(
+  roots: readonly string[],
+  { path: file, ...rest }: StyleSource & Omit<StyleOptions, "skipSlides"> & { path: string; skipSlides?: number[] }
+): Promise<StylePreview> {
+  const { theme, fromPresentation, style, ...options } = rest;
+  const { path: real, bytes } = await readLibraryFile(roots, file);
+  const { raw } = open(file, bytes);
+  const slideStyle = await loadStyle(roots, { theme, fromPresentation, style });
+
+  let plan;
+  try {
+    plan = planStyle(raw, slideStyle, options);
+  } catch (e) {
+    throw styleProblem(e, file);
+  }
+  const restyled = plan.filter((slide) => !slide.skip).length;
+  return {
+    path: real,
+    style: slideStyle.name,
+    fidelity: checkPresentationFidelity(bytes).fidelity,
+    restyled,
+    leftAlone: plan.length - restyled,
+    slides: plan.map((slide) => ({
+      slideIndex: slide.slideIndex,
+      label: slide.cueName,
+      group: slide.groupName,
+      macros: slide.macros.length ? slide.macros : undefined,
+      skip: slide.skip,
+      words: slide.texts,
+    })),
   };
 }

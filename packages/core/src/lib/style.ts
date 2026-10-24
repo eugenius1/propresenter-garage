@@ -228,7 +228,8 @@ function otherElements(slide: any): number {
   }).length;
 }
 
-function styleSlots(style: SlideStyle): number {
+/** How many text boxes a style has to put words in. */
+export function styleSlots(style: SlideStyle): number {
   return (style.baseSlide.elements ?? []).filter(isTextElement).length;
 }
 

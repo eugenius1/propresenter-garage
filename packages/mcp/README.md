@@ -9,6 +9,10 @@ read a ProPresenter 7 library from disk. Part of
   last showed it, category, notes, CCLI details, key and arrangements
 - Run the Presentations text checks on a file or a whole library
 - Read or audit the media bin
+- Read the presentation playlists: each service and the songs, headers and
+  media in it
+- List the themes, and preview giving a presentation the look of a theme slide
+  or of another presentation's slide, slide by slide
 
 It is **read-only**: it never writes a file, and it reads nothing outside the
 folders you give it.

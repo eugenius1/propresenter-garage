@@ -163,19 +163,61 @@ export async function findPresentations(dirs: readonly string[]): Promise<{ file
 }
 
 /**
- * The media bin, found where ProPresenter keeps it.
- *
- * `Playlists/Media` inside the ProPresenter folder. Looked for under each root
- * and one level down, so pointing the server at either the ProPresenter folder
- * or the folder above it finds the same file.
+ * The ProPresenter folders under the roots: each root, and `ProPresenter`
+ * inside it, so pointing the server at either the ProPresenter folder or the
+ * folder above it finds the same files.
  */
-export async function findMediaBin(roots: readonly string[]): Promise<string | undefined> {
-  for (const root of roots) {
-    const candidates = [path.join(root, "Playlists", "Media"), path.join(root, "ProPresenter", "Playlists", "Media")];
-    for (const candidate of candidates) {
-      const stat = await fs.stat(candidate).catch(() => undefined);
-      if (stat?.isFile()) return candidate;
-    }
+function showFolders(roots: readonly string[]): string[] {
+  return roots.flatMap((root) => [root, path.join(root, "ProPresenter")]);
+}
+
+/** A file ProPresenter keeps at a fixed place in its folder, e.g. `Playlists/Media`. */
+async function findShowFile(roots: readonly string[], ...segments: string[]): Promise<string | undefined> {
+  for (const folder of showFolders(roots)) {
+    const candidate = path.join(folder, ...segments);
+    const stat = await fs.stat(candidate).catch(() => undefined);
+    if (stat?.isFile()) return candidate;
   }
   return undefined;
+}
+
+/** The media bin, `Playlists/Media` inside the ProPresenter folder. */
+export function findMediaBin(roots: readonly string[]): Promise<string | undefined> {
+  return findShowFile(roots, "Playlists", "Media");
+}
+
+/** The presentation playlists, `Playlists/Library` inside the ProPresenter folder. */
+export function findPlaylists(roots: readonly string[]): Promise<string | undefined> {
+  return findShowFile(roots, "Playlists", "Library");
+}
+
+export interface FoundTheme {
+  /** The theme's folder name, which is the name ProPresenter shows. */
+  name: string;
+  file: string;
+}
+
+/**
+ * Every theme under the roots: `Themes/<name>/Theme` in the ProPresenter folder.
+ *
+ * Symlinks are not followed, for the same reason as `findPresentations`. Two
+ * roots that are the same folder seen twice list its themes once.
+ */
+export async function findThemes(roots: readonly string[]): Promise<FoundTheme[]> {
+  const themes: FoundTheme[] = [];
+  const seen = new Set<string>();
+  for (const folder of showFolders(roots)) {
+    const dir = path.join(folder, "Themes");
+    const entries = await fs.readdir(dir, { withFileTypes: true }).catch(() => []);
+    entries.sort((a, b) => a.name.localeCompare(b.name));
+    for (const entry of entries) {
+      if (!entry.isDirectory() || entry.name.startsWith(".")) continue;
+      const file = path.join(dir, entry.name, "Theme");
+      const stat = await fs.lstat(file).catch(() => undefined);
+      if (!stat?.isFile() || seen.has(file)) continue;
+      seen.add(file);
+      themes.push({ name: entry.name, file });
+    }
+  }
+  return themes;
 }

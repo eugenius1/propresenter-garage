@@ -5,7 +5,12 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { syntheticMediaFile, syntheticTextPresentation, SYNTHETIC } from "@propresenter-garage/core/lib/__tests__/synthetic";
-import { messageType } from "@propresenter-garage/core/lib/decode";
+import { encodeDocument, messageType } from "@propresenter-garage/core/lib/decode";
+import { decodeMediaDocument, rawItems, walkNodes } from "@propresenter-garage/core/lib/model";
+import { applyOperations } from "@propresenter-garage/core/lib/operations";
+import { decodePlaylistsDocument, headerEntry, mediaEntry, presentationEntry } from "@propresenter-garage/core/lib/playlists";
+import { decodePresentation, encodePresentation, slidesInOrder } from "@propresenter-garage/core/lib/presentation";
+import { syntheticPresentationFile } from "@propresenter-garage/core/lib/__tests__/synthetic";
 import { openRoots, readFoundFile, resolveInRoots } from "../library";
 import { createServer } from "../server";
 import { auditMediaBin } from "../tools";
@@ -75,7 +80,10 @@ describe("the tools offered", () => {
       "audit_media_bin",
       "check_presentations",
       "list_presentations",
+      "list_themes",
+      "preview_style",
       "read_media_bin",
+      "read_playlists",
       "read_presentation",
       "search_text",
     ]);
@@ -388,5 +396,165 @@ describe("what a presentation records about itself", () => {
     for (const name of ["list_presentations", "read_presentation"]) {
       expect(about(name)).toMatch(/No creation date/);
     }
+  });
+});
+
+describe("playlists and themes", () => {
+  // A ProPresenter folder of its own, so the counts the tests above assert stay put.
+  let show: string;
+  let server: Awaited<ReturnType<typeof connect>>;
+  const json = async (name: string, args: Record<string, unknown> = {}) => (await server.call(name, args)).json();
+  const song = () => path.join(show, "Libraries", "Default", "Checked Song.pro");
+
+  /** A theme slide whose one text box is set in bold, centred, over a shape. */
+  const lyricsSlide = {
+    elements: [
+      {
+        info: 3,
+        element: {
+          uuid: { string: "THEME-LYRICS" },
+          name: "Lyrics",
+          text: {
+            rtf_data: new TextEncoder().encode(
+              "{\\rtf1\\ansi\\ansicpg1252\\cocoartf2709\n{\\fonttbl\\f0\\fswiss\\fcharset0 Helvetica-Bold;}\n" +
+                "\\pard\\qc\\partightenfactor0\n\n\\f0\\b\\fs200 \\cf2 Style words}"
+            ),
+          },
+        },
+      },
+      { info: 1, element: { uuid: { string: "THEME-SHAPE" }, name: "Shape" } },
+    ],
+  };
+
+  beforeAll(async () => {
+    show = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "pp-mcp-show-")));
+    fs.mkdirSync(path.join(show, "Libraries", "Default"), { recursive: true });
+    fs.mkdirSync(path.join(show, "Playlists"));
+    fs.writeFileSync(song(), syntheticTextPresentation());
+    fs.writeFileSync(path.join(show, "Playlists", "Media"), syntheticMediaFile());
+
+    // A presentation whose second slide's box is marked as a text element, so it can lend its look.
+    const styled = decodePresentation(syntheticTextPresentation("Styled")) as any;
+    slidesInOrder(styled)[1].cue.actions[0].slide.presentation.base_slide.elements[0].info = 3;
+    fs.writeFileSync(path.join(show, "Libraries", "Default", "Styled.pro"), encodePresentation(styled));
+
+    // A service: a header, the song, and a background from the media bin.
+    const playlists = decodePlaylistsDocument(syntheticPresentationFile()) as any;
+    const sunday = playlists.root_node.playlists.playlists[0].uuid.string;
+    const background = walkNodes((decodeMediaDocument(syntheticMediaFile()) as any).root_node).flatMap(rawItems)[0];
+    const location = { root: show, platform: "PLATFORM_MACOS" as const };
+    const service = applyOperations(playlists, [
+      { kind: "insertItem", playlistUuid: sunday, itemName: "Chants", entry: headerEntry("Chants") },
+      {
+        kind: "insertItem",
+        playlistUuid: sunday,
+        itemName: "Checked Song",
+        entry: presentationEntry({ path: "Libraries/Default/Checked Song.pro", location }),
+      },
+      { kind: "insertItem", playlistUuid: sunday, itemName: "Fond", entry: mediaEntry(background) },
+    ]);
+    fs.writeFileSync(path.join(show, "Playlists", "Library"), encodeDocument(service));
+
+    const Theme = messageType("rv.data.Template.Document");
+    fs.mkdirSync(path.join(show, "Themes", "White"), { recursive: true });
+    fs.writeFileSync(
+      path.join(show, "Themes", "White", "Theme"),
+      Theme.encode(
+        Theme.fromObject({
+          slides: [
+            { name: "Lyrics", base_slide: lyricsSlide },
+            { name: "Blank", base_slide: { elements: [] } },
+          ],
+        })
+      ).finish()
+    );
+    fs.mkdirSync(path.join(show, "Themes", "Broken"), { recursive: true });
+    fs.writeFileSync(path.join(show, "Themes", "Broken", "Theme"), "not a theme");
+
+    server = await connect([show]);
+  });
+
+  afterAll(async () => {
+    await server?.client.close();
+    fs.rmSync(show, { recursive: true, force: true });
+  });
+
+  it("reads a service from Playlists/Library, entries in order", async () => {
+    const result = await json("read_playlists");
+    expect(result.path).toBe(path.join(show, "Playlists", "Library"));
+    expect(result.playlists).toEqual([
+      {
+        path: "Sunday",
+        items: [
+          { kind: "header", name: "Chants" },
+          { kind: "presentation", name: "Checked Song", file: "Libraries/Default/Checked Song.pro" },
+          // A media entry is the media bin's cue, under the bin's own name.
+          { kind: "media", name: "Rose Gradient", file: "Media/Assets/rose-gradient.jpg" },
+        ],
+      },
+    ]);
+  });
+
+  it("hands out a presentation's file in a form read_presentation takes back", async () => {
+    const entry = (await json("read_playlists")).playlists[0].items[1];
+    expect((await json("read_presentation", { path: entry.file })).name).toBe("Checked Song");
+  });
+
+  it("refuses the media bin passed as the presentation playlists", async () => {
+    const result = await server.call("read_playlists", { path: "Playlists/Media" });
+    expect(result.isError).toBe(true);
+    expect(result.text).toMatch(/not ProPresenter's presentation playlists/);
+  });
+
+  it("lists each theme's styles, and names one it cannot read", async () => {
+    const { themes, unreadable } = await json("list_themes");
+    expect(themes).toEqual([
+      {
+        name: "White",
+        path: path.join(show, "Themes", "White", "Theme"),
+        styles: [
+          { styleIndex: 0, name: "Lyrics", textBoxes: 1 },
+          { styleIndex: 1, name: "Blank", textBoxes: 0 },
+        ],
+      },
+    ]);
+    expect(unreadable).toEqual([expect.objectContaining({ path: path.join(show, "Themes", "Broken", "Theme") })]);
+  });
+
+  it("previews a theme style slide by slide, and writes nothing", async () => {
+    const before = fs.readFileSync(song());
+    const preview = await json("preview_style", { path: song(), theme: "white", style: "Lyrics" });
+
+    expect(preview).toMatchObject({ style: "Lyrics", fidelity: expect.stringMatching(/identical|equivalent/) });
+    expect(preview.restyled + preview.leftAlone).toBe(preview.slides.length);
+    expect(preview.slides.find((s: any) => s.label === "Leading").words).toEqual([["Fine here", " leading space"]]);
+    expect(fs.readFileSync(song())).toEqual(before);
+  });
+
+  it("leaves alone the slides it is told to, and says why", async () => {
+    const preview = await json("preview_style", { path: song(), theme: "White", style: 0, skipSlides: [1] });
+    expect(preview.slides[1].skip).toBe("listed");
+    expect(preview.slides[0].skip).toBeUndefined();
+  });
+
+  it("takes a style from another presentation's slide, numbered as read_presentation numbers it", async () => {
+    const preview = await json("preview_style", { path: song(), fromPresentation: "Libraries/Default/Styled.pro", style: 1 });
+    expect(preview.style).toBe("Styled 2");
+    expect(preview.restyled).toBeGreaterThan(0);
+  });
+
+  it("says what is wrong with a style it cannot use", async () => {
+    const error = async (args: Record<string, unknown>) => {
+      const result = await server.call("preview_style", { path: song(), ...args });
+      expect(result.isError).toBe(true);
+      return result.text;
+    };
+    expect(await error({ theme: "White" })).toMatch(/2 styles.*0: Lyrics, 1: Blank/);
+    expect(await error({ theme: "White", style: "Chorus" })).toMatch(/No style "Chorus".*0: Lyrics/);
+    expect(await error({ theme: "White", style: "Blank" })).toMatch(/has no text box/);
+    expect(await error({ theme: "Navy" })).toMatch(/No theme named "Navy"/);
+    expect(await error({ theme: "Broken" })).toMatch(/not a ProPresenter theme/);
+    expect(await error({ theme: "White", fromPresentation: "Libraries/Default/Styled.pro" })).toMatch(/exactly one/);
+    expect(await error({ fromPresentation: "Libraries/Default/Styled.pro", style: 99 })).toMatch(/no slide 100/);
   });
 });
