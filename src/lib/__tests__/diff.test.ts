@@ -92,9 +92,11 @@ describe.each(SOURCES)("diff against a mutated copy [$name]", (source) => {
 
   it("detects changed playback settings as retimed", () => {
     const mutated = clone(bytes);
+    // The element, not the action: see `mediaKind` for a bin whose actions
+    // were all typed as audio.
     const item = playlistsWithItems(mutated)
       .flatMap((p) => p.items.items)
-      .find((i: any) => i.cue?.actions?.some((a: any) => a.media?.video))!;
+      .find((i: any) => i.cue?.actions?.some((a: any) => a.media?.element?.video))!;
     const media = item.cue.actions.find((a: any) => a.media).media;
     media.transition_duration = (media.transition_duration ?? 0) + 2.5;
 
