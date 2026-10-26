@@ -1,5 +1,5 @@
 import { checkTypeFidelity, messageType, type FidelityReport, type RawDoc } from "./decode";
-import { basename } from "./model";
+import { applicationInfo, basename } from "./model";
 import { decodeRtf, encodeRtf, extractLines, type RtfLine } from "./rtf";
 
 /**
@@ -151,6 +151,29 @@ export function decodePresentation(bytes: Uint8Array): RawDoc {
   return Presentation.decode(bytes) as RawDoc;
 }
 
+/** A presentation read from bytes, or why it could not be. */
+export type Opened =
+  | { doc: PresentationDoc; raw: RawDoc; problem?: undefined }
+  | { problem: ReadProblem; detail?: string; doc?: undefined };
+
+/**
+ * Read a presentation's text, or classify why not.
+ *
+ * Emptiness is checked before decoding, because nothing goes wrong decoding
+ * no bytes: protobuf reads them as a presentation with nothing in it, and the
+ * reader would be told about a song with no slides rather than about a file
+ * with no content.
+ */
+export function openPresentation(bytes: Uint8Array): Opened {
+  if (bytes.length === 0) return { problem: "empty" };
+  try {
+    const raw = decodePresentation(bytes);
+    return { doc: readPresentation(raw), raw };
+  } catch (e) {
+    return { problem: readProblem(bytes), detail: (e as Error).message };
+  }
+}
+
 export function encodePresentation(doc: RawDoc): Uint8Array {
   return Presentation.encode(doc).finish();
 }
@@ -265,6 +288,107 @@ export function readPresentation(doc: RawDoc): PresentationDoc {
 }
 
 /**
+ * What a presentation says about itself, beyond its slides.
+ *
+ * Every field comes from inside the file, so it survives copying, syncing and
+ * restoring from backup. That is the point of reading these rather than the
+ * file system: ProPresenter keeps its own record of when a presentation was
+ * last edited and last shown, and a copy carries it along.
+ *
+ * There is deliberately no creation date. The file has no field for one, and
+ * the file system's is reset by every copy, sync or restore -- a library moved
+ * to a new computer would report every song as created that day.
+ */
+export interface PresentationDetails {
+  /**
+   * When ProPresenter last saved an edit to it, as ISO 8601.
+   *
+   * Checked against Windows on real 21.4 files: it matched the file system's
+   * modification time to the minute, and unlike that time it survived a
+   * round trip through a Google Drive backup.
+   */
+  lastModified?: string;
+  /** When it was last shown on screen, as ISO 8601. Absent if never. */
+  lastUsed?: string;
+  category?: string;
+  notes?: string;
+  ccli?: {
+    songTitle?: string;
+    author?: string;
+    artistCredits?: string;
+    publisher?: string;
+    copyrightYear?: number;
+    songNumber?: number;
+    album?: string;
+  };
+  musicKey?: { original?: string; user?: string };
+  /**
+   * Each named order of the song's groups, by group name; `null` for an id
+   * that names no group in the file.
+   *
+   * Which one is selected is not reported: in real 21.4 files the
+   * `selected_arrangement` id matched none of the file's arrangements, so
+   * what it points at is not understood well enough to pass on.
+   */
+  arrangements: { name: string; groups: (string | null)[] }[];
+  /** The ProPresenter that last saved the file, reported as the media bin's is. */
+  savedBy?: { appVersion: string; platform: string };
+}
+
+/** `rv.data.Timestamp` as ISO 8601, or nothing for an unset one. */
+function isoTimestamp(ts: any): string | undefined {
+  // int64 arrives as a protobuf.js Long; Number() covers both forms.
+  const seconds = Number(ts?.seconds ?? 0);
+  if (!seconds) return undefined;
+  const date = new Date(seconds * 1000 + Math.floor((ts.nanos ?? 0) / 1e6));
+  // A corrupt or absurd value is no date at all, not a reason to fail the read:
+  // toISOString() throws on anything outside the range Date can hold.
+  return Number.isNaN(date.getTime()) ? undefined : date.toISOString();
+}
+
+/** Keep only the fields that hold something, so an empty CCLI reads as absent. */
+function present<T extends object>(fields: T): Partial<T> | undefined {
+  const kept = Object.entries(fields).filter(([, v]) => v !== undefined && v !== "" && v !== 0);
+  return kept.length ? (Object.fromEntries(kept) as Partial<T>) : undefined;
+}
+
+export function readDetails(doc: RawDoc): PresentationDetails {
+  const raw = doc as any;
+
+  const groupNames = new Map<string, string>();
+  for (const entry of raw.cue_groups ?? []) {
+    if (entry.group?.uuid?.string) groupNames.set(entry.group.uuid.string, entry.group.name ?? "");
+  }
+  const music = raw.music ?? {};
+  return {
+    lastModified: isoTimestamp(raw.last_modified_date),
+    lastUsed: isoTimestamp(raw.last_date_used),
+    category: raw.category || undefined,
+    notes: raw.notes || undefined,
+    ccli: raw.ccli
+      ? present({
+          songTitle: raw.ccli.song_title,
+          author: raw.ccli.author,
+          artistCredits: raw.ccli.artist_credits,
+          publisher: raw.ccli.publisher,
+          copyrightYear: raw.ccli.copyright_year,
+          songNumber: raw.ccli.song_number,
+          album: raw.ccli.album,
+        })
+      : undefined,
+    musicKey: present({
+      original: music.original_music_key || raw.music_key || undefined,
+      user: music.user_music_key || undefined,
+    }),
+    arrangements: (raw.arrangements ?? []).map((a: any) => ({
+      name: a.name ?? "",
+      groups: (a.group_identifiers ?? []).map((id: any) => groupNames.get(id?.string) ?? null),
+    })),
+    savedBy: raw.application_info ? applicationInfo(raw.application_info) : undefined,
+  };
+}
+
+/**
  * Replace the RTF of the named boxes, leaving every other field untouched.
  *
  * Edits the decoded message rather than rebuilding it: the model above is a
@@ -276,6 +400,16 @@ export function writeTextBoxes(doc: RawDoc, replacements: ReadonlyMap<number, st
     const replacement = replacements.get(site.boxIndex);
     if (replacement !== undefined) site.text.rtf_data = encodeRtf(replacement);
   });
+}
+
+/**
+ * Whether a box shows anything at all.
+ *
+ * A box that does not is a theme placeholder: counted, never reported, and
+ * the same answer wherever it is asked.
+ */
+export function hasText(box: Pick<TextBox, "lines">): boolean {
+  return box.lines.some((line) => line.text.trim() !== "");
 }
 
 /**
@@ -354,8 +488,7 @@ export function checkPresentation(
   let emptyTextBoxes = 0;
 
   for (const box of doc.textBoxes) {
-    const hasText = box.lines.some((line) => line.text.trim() !== "");
-    if (!hasText) {
+    if (!hasText(box)) {
       emptyTextBoxes++;
       continue;
     }

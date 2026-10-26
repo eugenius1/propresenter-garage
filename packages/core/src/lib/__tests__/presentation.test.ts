@@ -3,6 +3,7 @@ import {
   checkPresentation,
   decodePresentation,
   encodePresentation,
+  readDetails,
   readPresentation,
   readProblem,
   type PresentationDoc,
@@ -276,6 +277,24 @@ describe.skipIf(!hasRealLibrary)("against real presentations", () => {
     expect(slides).toBeGreaterThan(files.length);
   });
 
+  it("reads the dates ProPresenter keeps as plausible ones", () => {
+    // Guards the timestamp reading: a wrong epoch or a unit slip lands decades
+    // away, which no real library spans.
+    const earliest = Date.parse("2000-01-01");
+    const latest = Date.now() + 24 * 3600 * 1000;
+    let dated = 0;
+    for (const name of files) {
+      const details = readDetails(decodePresentation(readLibraryFile(name)));
+      for (const iso of [details.lastModified, details.lastUsed]) {
+        if (!iso) continue;
+        dated++;
+        expect(Date.parse(iso), name).toBeGreaterThan(earliest);
+        expect(Date.parse(iso), name).toBeLessThan(latest);
+      }
+    }
+    expect(dated).toBeGreaterThan(0);
+  });
+
   it("re-encodes every file byte for byte", () => {
     for (const name of files) {
       const bytes = readLibraryFile(name);
@@ -301,5 +320,16 @@ describe.skipIf(!hasRealLibrary)("against real presentations", () => {
     }
     expect(lines).toBeGreaterThan(20);
     expect(leading / lines).toBeLessThan(0.25);
+  });
+});
+
+describe("reading what a presentation records about itself", () => {
+  it("leaves out a timestamp Date cannot hold rather than failing the read", () => {
+    const details = readDetails({
+      last_date_used: { seconds: 1e15, nanos: 0 },
+      last_modified_date: { seconds: 1_761_300_000, nanos: 0 },
+    } as any);
+    expect(details.lastUsed).toBeUndefined();
+    expect(details.lastModified).toBe("2025-10-24T10:00:00.000Z");
   });
 });

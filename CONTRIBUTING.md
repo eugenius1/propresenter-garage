@@ -14,7 +14,8 @@ npm run dev
 Run everything from the repository root: it is an npm workspace, and the root
 scripts reach into the packages. `npm run build` produces the static site in
 `packages/web/dist/`. `npm test` runs every package's suite in one pass, and
-`npm run check` is the same gate CI uses: codegen, lint, the typechecks, tests.
+`npm run check` is the same gate CI uses: codegen, lint, the typechecks, tests,
+and the MCP server's bundle and extension.
 
 Pushing to `main` deploys to GitHub Pages. The site needs a real HTTP server
 even though it is entirely static — ES modules and service workers are both
@@ -315,8 +316,9 @@ merged there.
 ## Conventions
 
 - **`npm run check` must pass.** Codegen, `oxlint`, every package's
-  TypeScript projects, and the full suite. The tests that matter most only
-  run where `PP_LIBRARY_DIR` points at a real library; CI skips them.
+  TypeScript projects, the full suite, and the MCP bundle and extension. The
+  tests that matter most only run where `PP_LIBRARY_DIR` points at a real
+  library; CI skips them.
 - **No licence headers in source files**: no `SPDX-License-Identifier` line
   and no `Copyright (C)` line. `LICENSE` and the `license` field in
   `package.json` cover the whole repository.
@@ -344,18 +346,28 @@ they may never read.
 
 ## Layout
 
-Two packages under `packages/`, one version between them:
+Three packages under `packages/`, one version between them:
 
 - **`core`** (`@propresenter-garage/core`, private): reading, checking and
   editing ProPresenter files — `src/lib/`, the vendored schema in `proto/`,
   the descriptor generated from it, and the dictionaries in `src/i18n/`. No
   UI and no Node APIs; its source is typechecked without Node's types so
-  neither creeps in. It is never built on its own: `web` imports its
+  neither creeps in. It is never built on its own: `web` and `mcp` import its
   TypeScript directly (`@propresenter-garage/core/lib/presentation`) and
-  bundles what it uses.
+  bundle what they use.
 - **`web`** (`@propresenter-garage/web`, private): the installable browser
   app — React, the PWA, its stylesheet and icons, and the two browser-only
   pieces of `lib/`, persistence and routing.
+- **`mcp`** (`propresenter-garage-mcp`, published to npm): the MCP server.
+
+`core` and `mcp` may import only what their own `package.json` declares, and
+`packages/mcp/src/__tests__/workspace.test.ts` fails if either reaches for
+anything else. npm hoists every dependency to the root, so an undeclared
+import would otherwise resolve quietly, and for `mcp` it would drag the app
+into the server's bundle.
+
+All three carry the root's version, and the same test fails if one drifts.
+Bump them together with `npm version <v> --workspaces --include-workspace-root`.
 
 `packages/web/src/App.tsx` is the shell — title, appearance and language
 controls, the tool switcher, licence — and renders the active tool. Each tool
@@ -363,6 +375,26 @@ under `packages/web/src/tools/` owns everything specific to it, including its
 own file state, and its strings live under its own key in the dictionaries.
 Shared analysis lives in `packages/core/src/lib/`, shared interface pieces in
 `packages/web/src/components/`.
+
+`packages/mcp/` is the MCP server. It calls `core` and nothing in `core` knows
+it exists. Its `vite.config.ts` bundles it into one self-contained file,
+`dist/propresenter-mcp.mjs`, and that file is the whole npm package: `bin`
+points at it and there are no runtime dependencies, so `npx` starts it with
+nothing to install. npm packs only what is inside the package, so
+`packages/mcp/LICENSE` is a committed copy of the root licence, which the same
+test holds equal. `library.ts` is the only place it touches the disk: every
+path a tool is given is resolved with `realpath` before it is compared with
+the configured folders, and nothing opens a file for writing.
+
+`packages/mcp/manifest.json` wraps the same bundle as a Claude Desktop
+extension; `scripts/pack-mcpb.mjs` stamps in the version from the package's
+`package.json` and packs it with the official `mcpb` CLI, which validates the
+manifest, and `npm run check` runs it too. The manifest's tool list is what
+Claude Desktop shows before the server starts, so a test holds it to the tools
+the server registers: add a tool to both or the suite fails. The folders
+arrive as arguments from a required `directory` setting; the `${HOME}` default
+only prefills the form, because Claude Desktop does not expand variables
+inside a default when it builds the command line.
 
 Routing is a flat list of slugs in `App.tsx`: the first tool owns the root path
 and each other tool gets one segment. There is no registry and no extension
