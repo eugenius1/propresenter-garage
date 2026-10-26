@@ -1,4 +1,4 @@
-import { constants as fsConstants } from "node:fs";
+import { constants as fsConstants, type Stats } from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { isPresentationFile } from "@propresenter-garage/core/lib/folder";
@@ -21,6 +21,9 @@ export const MAX_FILE_BYTES = 64 * 1024 * 1024;
 
 /** Enough for a big church library several times over; a stop for a root pointed at `/`. */
 export const MAX_WALK_FILES = 20_000;
+
+/** The same stop for a root with few presentations under a huge tree, which never reaches the file count. */
+export const MAX_WALK_DIRS = 50_000;
 
 export class LibraryError extends Error {
   constructor(message: string) {
@@ -81,17 +84,15 @@ export async function resolveInRoots(roots: readonly string[], p: string): Promi
 }
 
 /**
- * Read a file the walk below found, refusing anything absurdly large.
- *
- * No `realpath` here: the walk starts at resolved roots and never follows a
- * symlink, so what it finds is inside them already. Opened with `O_NOFOLLOW`
- * so a file swapped for a symlink after the walk is refused rather than
- * followed, and sized from the open handle so the cap is checked before
- * anything is read. Paths a model supplies go through `readLibraryFile`.
- *
- * Every failure comes back as a `LibraryError`, because to a caller scanning
- * a library one unreadable file is a finding about that file, not a crash.
+ * Whether a path is still its own real path: no component of it, the last
+ * included, is a symlink now. Every path this module hands out was built from
+ * resolved roots without following a link, so one that fails this has had a
+ * folder or file swapped for a symlink since.
  */
+async function isUnmoved(p: string): Promise<boolean> {
+  return (await fs.realpath(p).catch(() => undefined)) === p;
+}
+
 export interface FoundFile {
   bytes: Uint8Array;
   /** From the handle the bytes were read through, so they describe the same file. */
@@ -99,11 +100,37 @@ export interface FoundFile {
   modified: Date;
 }
 
+async function isSameFile(file: string, opened: Stats): Promise<boolean> {
+  const now = await fs.stat(file).catch(() => undefined);
+  return now !== undefined && now.dev === opened.dev && now.ino === opened.ino;
+}
+
+/**
+ * Read a file inside the roots, refusing anything absurdly large.
+ *
+ * The path must be one this module produced: from the walk below, or resolved
+ * by `readLibraryFile`. Opened with `O_NOFOLLOW` so a file swapped for a
+ * symlink is refused rather than followed, and sized from the open handle so
+ * the cap is checked before anything is read.
+ *
+ * `O_NOFOLLOW` covers only the last component, so a folder above the file
+ * swapped for a symlink between finding the path and opening it would still
+ * be followed out of the roots. Node has no `openat` to anchor the open to the
+ * root, so the path is checked once the file is open instead: it must still
+ * be its own real path, and still lead to the very file the handle holds,
+ * which catches a link swapped in for the open and back out before the check.
+ * What is left is a swap timed separately around each of those calls.
+ *
+ * Every failure comes back as a `LibraryError`, because to a caller scanning
+ * a library one unreadable file is a finding about that file, not a crash.
+ */
 export async function readFoundFile(file: string): Promise<FoundFile> {
   let handle;
   try {
     handle = await fs.open(file, fsConstants.O_RDONLY | (fsConstants.O_NOFOLLOW ?? 0));
     const stat = await handle.stat();
+    if (!(await isUnmoved(file))) throw new LibraryError(`Could not read ${file}: it is reached through a symlink`);
+    if (!(await isSameFile(file, stat))) throw new LibraryError(`Could not read ${file}: it changed while being opened`);
     if (!stat.isFile()) throw new LibraryError(`Not a file: ${file}`);
     if (stat.size > MAX_FILE_BYTES) throw new LibraryError(`Too large to be a ProPresenter file: ${file}`);
     return { bytes: await handle.readFile(), size: stat.size, modified: stat.mtime };
@@ -134,15 +161,25 @@ export async function resolveFolder(roots: readonly string[], p: string): Promis
  * Symlinked folders are not followed. A library has no reason to contain one,
  * and following them is how a walk escapes its root or loops forever. Which
  * files count is `isPresentationFile`, the rule the browser's folder scan uses.
+ *
+ * A queued folder is checked again just before it is listed, not trusted from
+ * the listing that queued it: one swapped for a symlink in between would take
+ * the walk outside its root.
  */
-export async function findPresentations(dirs: readonly string[]): Promise<{ files: string[]; truncated: boolean }> {
+export async function findPresentations(
+  dirs: readonly string[],
+  maxDirs = MAX_WALK_DIRS
+): Promise<{ files: string[]; truncated: boolean }> {
   const files: string[] = [];
   const pending = [...dirs];
 
-  while (pending.length > 0) {
-    const dir = pending.shift()!;
+  // An index rather than `shift()`, which copies the queue for every folder.
+  for (let next = 0; next < pending.length; next++) {
+    if (next === maxDirs) return { files, truncated: true };
+    const dir = pending[next];
     let entries;
     try {
+      if (!(await isUnmoved(dir))) continue;
       entries = await fs.readdir(dir, { withFileTypes: true });
     } catch {
       continue;

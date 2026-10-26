@@ -384,7 +384,10 @@ nothing to install. npm packs only what is inside the package, so
 `packages/mcp/LICENSE` is a committed copy of the root licence, which the same
 test holds equal. `library.ts` is the only place it touches the disk: every
 path a tool is given is resolved with `realpath` before it is compared with
-the configured folders, and nothing opens a file for writing.
+the configured folders, and nothing opens a file for writing. Node has no
+`openat`, so an open cannot be anchored to a folder; every file is checked
+again once it is open, and every folder before the walk lists it, so a folder
+swapped for a symlink in between is refused rather than followed out.
 
 `packages/mcp/manifest.json` wraps the same bundle as a Claude Desktop
 extension; `scripts/pack-mcpb.mjs` stamps in the version from the package's
