@@ -1,5 +1,5 @@
-import { constants as fsConstants, type Stats } from "node:fs";
-import fs from "node:fs/promises";
+import { constants as fsConstants } from "node:fs";
+import fs, { type FileHandle } from "node:fs/promises";
 import path from "node:path";
 import { isPresentationFile } from "@propresenter-garage/core/lib/folder";
 
@@ -100,8 +100,10 @@ export interface FoundFile {
   modified: Date;
 }
 
-async function isSameFile(file: string, opened: Stats): Promise<boolean> {
-  const now = await fs.stat(file).catch(() => undefined);
+/** Compared as BigInts: an inode past 2^53 loses precision as a number, and two files could then match. */
+async function isSameFile(file: string, handle: FileHandle): Promise<boolean> {
+  const opened = await handle.stat({ bigint: true });
+  const now = await fs.stat(file, { bigint: true }).catch(() => undefined);
   return now !== undefined && now.dev === opened.dev && now.ino === opened.ino;
 }
 
@@ -130,7 +132,7 @@ export async function readFoundFile(file: string): Promise<FoundFile> {
     handle = await fs.open(file, fsConstants.O_RDONLY | (fsConstants.O_NOFOLLOW ?? 0));
     const stat = await handle.stat();
     if (!(await isUnmoved(file))) throw new LibraryError(`Could not read ${file}: it is reached through a symlink`);
-    if (!(await isSameFile(file, stat))) throw new LibraryError(`Could not read ${file}: it changed while being opened`);
+    if (!(await isSameFile(file, handle))) throw new LibraryError(`Could not read ${file}: it changed while being opened`);
     if (!stat.isFile()) throw new LibraryError(`Not a file: ${file}`);
     if (stat.size > MAX_FILE_BYTES) throw new LibraryError(`Too large to be a ProPresenter file: ${file}`);
     return { bytes: await handle.readFile(), size: stat.size, modified: stat.mtime };
