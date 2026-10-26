@@ -2,7 +2,7 @@
   "files": [],
   "references": [
     { "path": "./packages/core" },
-    { "path": "./packages/web" },
+    { "path": "./apps/web" },
     { "path": "./tsconfig.node.json" }
   ]
 }

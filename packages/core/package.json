@@ -11,7 +11,8 @@
   "scripts": {
     "protos": "node scripts/build-descriptor.mjs",
     "protos:update": "node scripts/update-protos.mjs",
-    "report": "tsx src/report.mts"
+    "report": "tsx src/report.mts",
+    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.test.json"
   },
   "dependencies": {
     "protobufjs": "^8.8.0"

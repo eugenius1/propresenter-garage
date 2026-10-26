@@ -10,7 +10,7 @@ packages/core/src/generated/
 # Real ProPresenter files are somebody's actual media library. Never commit one.
 # The pattern is deliberately broad: it used to name one filename, which left
 # every other scratch copy dropped in here unprotected.
-packages/web/public/__dev-*
+apps/web/public/__dev-*
 
 # Written by `npm run coverage` and by the suite in CI.
 coverage/

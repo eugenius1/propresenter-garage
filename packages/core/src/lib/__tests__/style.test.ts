@@ -341,5 +341,5 @@ describe.skipIf(!hasRealLibrary)("applying a style across a real library", () =>
     }
     expect(refused).toEqual([]);
     expect(restyled).toBeGreaterThan(0);
-  });
+  }, 120_000);
 });

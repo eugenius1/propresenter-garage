@@ -6,8 +6,8 @@
   "license": "GPL-3.0-or-later",
   "type": "module",
   "workspaces": [
-    "packages/core",
-    "packages/web"
+    "packages/*",
+    "apps/*"
   ],
   "scripts": {
     "protos": "npm run protos -w @propresenter-garage/core",
@@ -22,7 +22,7 @@
     "coverage": "vitest run --coverage",
     "lint": "oxlint",
     "lint:fix": "oxlint --fix",
-    "typecheck": "tsc --noEmit -p packages/core && tsc --noEmit -p packages/core/tsconfig.test.json && tsc --noEmit -p packages/web && tsc --noEmit -p packages/web/tsconfig.test.json && tsc --noEmit -p tsconfig.node.json",
+    "typecheck": "npm run typecheck --workspaces --if-present && tsc --noEmit -p tsconfig.node.json",
     "check": "npm run protos && npm run lint && npm run typecheck && npm test"
   },
   "devDependencies": {

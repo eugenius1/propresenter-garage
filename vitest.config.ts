@@ -8,15 +8,15 @@ import { defineConfig } from "vitest/config";
  */
 export default defineConfig({
   test: {
-    projects: ["packages/*"],
+    projects: ["packages/*", "apps/*"],
     // Only CI measures coverage, for the Codecov upload; locally it would slow
     // every `npm test` for a number nobody reads. `npm run coverage` forces it.
     coverage: {
       enabled: !!process.env.CI,
-      include: ["packages/*/src/**"],
+      include: ["{packages,apps}/*/src/**"],
       exclude: [
-        "packages/*/src/**/__tests__/**",
-        "packages/*/src/**/*.test.{ts,tsx}",
+        "{packages,apps}/*/src/**/__tests__/**",
+        "{packages,apps}/*/src/**/*.test.{ts,tsx}",
         "packages/core/src/generated/**",
       ],
       reporter: ["lcov", "text-summary"],

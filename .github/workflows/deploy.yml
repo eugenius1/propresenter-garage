@@ -43,7 +43,7 @@ jobs:
       # directly and never runs Jekyll over it.
       - uses: actions/upload-pages-artifact@v5
         with:
-          path: packages/web/dist
+          path: apps/web/dist
 
   deploy:
     needs: build
