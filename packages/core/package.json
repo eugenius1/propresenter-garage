@@ -2,7 +2,7 @@
   "name": "@propresenter-garage/core",
   "version": "0.0.0",
   "private": true,
-  "description": "Reading, checking and editing ProPresenter 7 files. Used by the web app; no UI.",
+  "description": "Reading, checking and editing ProPresenter 7 files. Shared by the web app and the MCP server; no UI.",
   "license": "GPL-3.0-or-later",
   "type": "module",
   "exports": {

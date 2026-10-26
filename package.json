@@ -23,7 +23,9 @@
     "lint": "oxlint",
     "lint:fix": "oxlint --fix",
     "typecheck": "npm run typecheck --workspaces --if-present && tsc --noEmit -p tsconfig.node.json",
-    "check": "npm run protos && npm run lint && npm run typecheck && npm test"
+    "mcp:build": "npm run protos && npm run build -w propresenter-garage-mcp",
+    "mcp:pack": "npm run mcp:build && npm run pack:mcpb -w propresenter-garage-mcp",
+    "check": "npm run protos && npm run lint && npm run typecheck && npm test && npm run mcp:pack"
   },
   "devDependencies": {
     "@types/node": "^24.13.4",
@@ -31,7 +33,7 @@
     "oxlint": "^1.81.0",
     "tsx": "^4.23.13",
     "typescript": "~6.0.2",
-    "vite": "^8.3.0",
+    "vite": "^8.3.5",
     "vitest": "^5.0.0"
   }
 }

@@ -3,6 +3,7 @@
   "references": [
     { "path": "./packages/core" },
     { "path": "./apps/web" },
+    { "path": "./packages/mcp" },
     { "path": "./tsconfig.node.json" }
   ]
 }
