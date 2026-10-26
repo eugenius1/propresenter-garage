@@ -29,7 +29,8 @@
   "scripts": {
     "build": "vite build --logLevel warn",
     "pack:mcpb": "node scripts/pack-mcpb.mjs",
-    "prepack": "npm run protos -w @propresenter-garage/core && npm run build"
+    "prepack": "npm run protos -w @propresenter-garage/core && npm run build",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "devDependencies": {
     "@propresenter-garage/core": "*",

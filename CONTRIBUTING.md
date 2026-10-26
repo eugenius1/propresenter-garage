@@ -13,7 +13,7 @@ npm run dev
 
 Run everything from the repository root: it is an npm workspace, and the root
 scripts reach into the packages. `npm run build` produces the static site in
-`packages/web/dist/`. `npm test` runs every package's suite in one pass, and
+`apps/web/dist/`. `npm test` runs every package's suite in one pass, and
 `npm run check` is the same gate CI uses: codegen, lint, the typechecks, tests,
 and the MCP server's bundle and extension.
 
@@ -266,7 +266,7 @@ implies a full path is available.
 **Folder permission lapses when the last tab for the origin closes.** An
 installed app keeps it; a plain tab does not. Re-requesting needs a user
 gesture, so offer a button rather than re-requesting on load --
-`handlePermission` and `requestHandlePermission` in `packages/web/src/lib/persistence.ts`
+`handlePermission` and `requestHandlePermission` in `apps/web/src/lib/persistence.ts`
 model this.
 
 **Only Chromium can write to a folder at all.** `folderAccess()` returns
@@ -290,7 +290,7 @@ trailing one is padding.
 the label stayed white and the button looked empty. Scope hover rules away from
 the variants they should not touch.
 
-**Contrast is measured, not judged.** `packages/web/src/lib/__tests__/contrast.test.ts`
+**Contrast is measured, not judged.** `apps/web/src/lib/__tests__/contrast.test.ts`
 reads the Radix scales straight from the package and asserts the pairings the
 stylesheet actually makes. White on blue step 9 measures 3.26:1 and fails AA;
 that is why the accent is indigo. Add a pairing to that file rather than
@@ -334,7 +334,7 @@ merged there.
   that writes in place is the presentation fixer, under the four conditions
   set out in [AGENTS.md](AGENTS.md).
 - **Never commit a real ProPresenter library.** Real `.pro` files, media-bin
-  playlists and media folders are somebody's personal data. `packages/web/public/__dev-*` is
+  playlists and media folders are somebody's personal data. `apps/web/public/__dev-*` is
   gitignored for exactly this; development copies go there and nowhere else.
 - **Commit messages are prose.** Explain the reasoning and what went wrong, not
   a changelog line.
@@ -346,7 +346,8 @@ they may never read.
 
 ## Layout
 
-Three packages under `packages/`, one version between them:
+What other code imports or npm installs lives under `packages/`, and the
+deployed site under `apps/`, one version between all three:
 
 - **`core`** (`@propresenter-garage/core`, private): reading, checking and
   editing ProPresenter files — `src/lib/`, the vendored schema in `proto/`,
@@ -369,12 +370,12 @@ into the server's bundle.
 All three carry the root's version, and the same test fails if one drifts.
 Bump them together with `npm version <v> --workspaces --include-workspace-root`.
 
-`packages/web/src/App.tsx` is the shell — title, appearance and language
+`apps/web/src/App.tsx` is the shell — title, appearance and language
 controls, the tool switcher, licence — and renders the active tool. Each tool
-under `packages/web/src/tools/` owns everything specific to it, including its
+under `apps/web/src/tools/` owns everything specific to it, including its
 own file state, and its strings live under its own key in the dictionaries.
 Shared analysis lives in `packages/core/src/lib/`, shared interface pieces in
-`packages/web/src/components/`.
+`apps/web/src/components/`.
 
 `packages/mcp/` is the MCP server. It calls `core` and nothing in `core` knows
 it exists. Its `vite.config.ts` bundles it into one self-contained file,

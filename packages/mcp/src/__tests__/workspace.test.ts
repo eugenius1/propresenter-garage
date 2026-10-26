@@ -16,7 +16,7 @@ interface Manifest {
   devDependencies?: Record<string, string>;
 }
 const manifest = (dir: string): Manifest => JSON.parse(fs.readFileSync(path.join(REPO, dir, "package.json"), "utf8"));
-const PACKAGES = ["core", "web", "mcp"];
+const PACKAGES = ["packages/core", "apps/web", "packages/mcp"];
 
 describe("the workspace", () => {
   it("carries one version in every package", () => {
@@ -24,7 +24,7 @@ describe("the workspace", () => {
     // that drifted would ship a release nobody can match to a commit. Bump
     // them together: npm version <v> --workspaces --include-workspace-root
     const root = manifest(".");
-    for (const name of PACKAGES) expect(manifest(`packages/${name}`).version, name).toBe(root.version);
+    for (const dir of PACKAGES) expect(manifest(dir).version, dir).toBe(root.version);
   });
 
   it("ships the repository's own licence with the npm package", () => {

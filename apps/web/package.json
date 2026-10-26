@@ -9,7 +9,8 @@
     "dev": "vite",
     "build": "tsc -p tsconfig.json --noEmit && vite build && node scripts/spa-fallback.mjs",
     "preview": "vite preview",
-    "icons": "node scripts/make-icons.mjs"
+    "icons": "node scripts/make-icons.mjs",
+    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.test.json"
   },
   "dependencies": {
     "@propresenter-garage/core": "*",
