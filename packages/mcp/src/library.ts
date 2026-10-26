@@ -142,6 +142,22 @@ export async function readFoundFile(file: string): Promise<FoundFile> {
   }
 }
 
+/**
+ * The size and date of a file the walk found, without reading it, or nothing
+ * if it is no longer a plain file there: ProPresenter saves by replacing the
+ * file, and one caught mid-save is left out. Not followed if it has become a
+ * symlink since the walk.
+ */
+export async function statFoundFile(file: string): Promise<{ size: number; modified: Date } | undefined> {
+  const stat = await fs.lstat(file).catch(() => undefined);
+  return stat?.isFile() ? { size: stat.size, modified: stat.mtime } : undefined;
+}
+
+/** Whether a path `resolveInRoots` returned is a file rather than a folder. */
+export async function isFile(real: string): Promise<boolean> {
+  return (await fs.stat(real)).isFile();
+}
+
 /** Read one file from inside the roots, refusing anything absurdly large. */
 export async function readLibraryFile(roots: readonly string[], p: string): Promise<FoundFile & { path: string }> {
   const real = await resolveInRoots(roots, p);
