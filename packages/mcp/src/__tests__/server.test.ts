@@ -117,7 +117,9 @@ describe("read_presentation", () => {
     const first = doc.slides[0];
     expect(first).toMatchObject({ slideIndex: 0, label: "Clean", group: "Verse" });
     expect(first.textBoxes[0]).toEqual({ boxIndex: 0, lines: ["A tidy line", "And another"] });
-    expect(doc.slides.find((s: { label: string }) => s.label === "Empty")).toBeUndefined();
+    // A slide whose only box is an empty placeholder is still listed, with no boxes.
+    expect(doc.slides).toHaveLength(doc.slideCount);
+    expect(doc.slides.find((s: { label: string }) => s.label === "Empty").textBoxes).toEqual([]);
   });
 
   it("names a chord chart for what it is", async () => {

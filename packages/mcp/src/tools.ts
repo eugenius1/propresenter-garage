@@ -12,6 +12,7 @@ import {
   decodePresentation,
   openPresentation,
   readDetails,
+  slidesInOrder,
   type PresentationDetails,
   type PresentationDoc,
   type ReadProblem,
@@ -220,8 +221,9 @@ export interface PresentationContent extends PresentationDetails {
   slideCount: number;
   /** Whether writing this file back would keep everything in it. See CONTRIBUTING.md. */
   fidelity: Fidelity;
-  /** Theme placeholders with no text in them, left out of `slides`. */
+  /** Theme placeholders with no text in them, left out of their slides' `textBoxes`. */
   emptyTextBoxes: number;
+  /** Every slide, in ProPresenter's order; one with no text has empty `textBoxes`. */
   slides: {
     slideIndex: number;
     label: string;
@@ -234,19 +236,22 @@ export async function readPresentationFile(roots: readonly string[], file: strin
   const { path: real, bytes, modified } = await readLibraryFile(roots, file);
   const { doc, raw } = open(file, bytes);
 
-  const slides = new Map<number, PresentationContent["slides"][number]>();
+  // Every slide, not only those with words: a blank or image-only slide is
+  // still one ProPresenter shows, and leaving it out read as a gap in the
+  // numbering with nothing to say why.
+  const slides: PresentationContent["slides"] = slidesInOrder(raw).map(({ cue, groupName }, slideIndex) => ({
+    slideIndex,
+    label: cue.name ?? "",
+    group: groupName,
+    textBoxes: [],
+  }));
   let emptyTextBoxes = 0;
   for (const box of doc.textBoxes) {
     if (!hasText(box)) {
       emptyTextBoxes++;
       continue;
     }
-    let slide = slides.get(box.slideIndex);
-    if (!slide) {
-      slide = { slideIndex: box.slideIndex, label: box.cueName, group: box.groupName, textBoxes: [] };
-      slides.set(box.slideIndex, slide);
-    }
-    slide.textBoxes.push({ boxIndex: box.boxIndex, lines: box.lines.map((line) => line.text) });
+    slides[box.slideIndex].textBoxes.push({ boxIndex: box.boxIndex, lines: box.lines.map((line) => line.text) });
   }
 
   return {
@@ -257,7 +262,7 @@ export async function readPresentationFile(roots: readonly string[], file: strin
     slideCount: doc.slideCount,
     fidelity: checkPresentationFidelity(bytes).fidelity,
     emptyTextBoxes,
-    slides: [...slides.values()],
+    slides,
   };
 }
 
