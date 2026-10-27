@@ -113,13 +113,17 @@ export default function App() {
 
       <p className="footnote">
         <span className="copyright">
-          {f(t.app.copyright, { years: copyrightYears() })} ·{" "}
+          {f(t.app.copyright, { years: copyrightYears() })}{" "}
+          <a href="https://eusebius.tech/" target="_blank" rel="noreferrer">
+            Eusebius Ngemera
+          </a>{" "}
+          ·{" "}
           <a
-            href="https://github.com/eugenius1/propresenter-garage/blob/main/LICENSE"
+            href="https://github.com/eugenius1/propresenter-garage"
             target="_blank"
             rel="noreferrer"
           >
-            GPLv3
+            {t.app.licence}
           </a>
         </span>
         {f(t.app.footnoteBefore, { version: PROTO_VERSION.version.split(",")[0] })}{" "}

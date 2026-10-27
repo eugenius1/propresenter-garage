@@ -37,7 +37,7 @@ describe("dictionaries", () => {
     // Proper nouns and format-only strings are legitimately shared.
     const allowed = new Set([
       "meta.localeTag", "meta.name", "meta.quoteOpen", "meta.quoteClose", "meta.colon",
-      "app.title", "app.copyright", "app.footnoteLink", "tools.mediaBin.appOn",
+      "app.title", "app.copyright", "app.licence", "app.footnoteLink", "tools.mediaBin.appOn",
       "library.image", "library.audio", "kinds.image", "kinds.audio",
       "errors.playlistType.audio", "playback.none",
       // Platform names, not words.
