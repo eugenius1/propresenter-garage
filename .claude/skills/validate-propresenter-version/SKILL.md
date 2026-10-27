@@ -141,6 +141,15 @@ same file, each with a fresh document uuid as above:
 4. Run the export safety gate (CONTRIBUTING.md) on ProPresenter's copy as
    well.
 
+ProPresenter saves an edited presentation only when you switch to another
+one. Check the file's modification time before reading it.
+
+When it saves, it rewrites the whole file. It upper-cases uuids, drops empty
+notes, rewrites `application_info`, and re-serialises the RTF, e.g. `\'e9`
+where the core writes `\u233 ?`. That is not part of the operation. Compare
+the words that `extractLines` gives, not the RTF bytes, and set the re-save
+noise aside before calling anything a difference.
+
 ### Replacing the playlist files
 
 ProPresenter keeps `Playlists/Library` and `Playlists/Media` in memory and

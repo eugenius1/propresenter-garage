@@ -192,6 +192,7 @@ for a person. Each run adds a row here:
 | --- | --- | --- | --- |
 | 21.4.2 | 2026-09-11 | Export safety gate over a real library; not opened in the app | Every file `identical` |
 | 20.0.1 (macOS) | 2026-10-24 | The full procedure | Slides were numbered in storage order, not display order. A media bin's actions were all typed as audio. Both fixed in #23. Every file `identical` |
+| 20.0.1 (macOS) | 2026-10-27 | `applyStyle` against ProPresenter's own Themes menu, field by field, on one song | The words box keeps the slide's element uuid. A theme's guides go to `template_guidelines`. The words carry an `original_font` range. All three now matched in #36 |
 
 ## Things that will bite you
 
