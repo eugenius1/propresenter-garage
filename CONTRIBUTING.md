@@ -129,8 +129,8 @@ result is one of:
 | `lossy` | Decoded content differs. Something is uncovered by the schema; writing this file back could corrupt it. |
 
 Real files from ProPresenter 20.0.1 and 21.4.2 verify as `identical` (see
-[Checked against ProPresenter](#checked-against-propresenter)), which is what
-makes a write path viable at all. Any write path must refuse to touch a file rated
+[Checked against ProPresenter](#checked-against-propresenter)): the strongest
+result the gate gives, and the evidence that a write path is viable at all. Any write path must refuse to touch a file rated
 `lossy`, and must check the file in front of it rather than trusting that the
 corpus checked out once — `checkTypeFidelity()` takes the message type, so a
 presentation goes through the same gate as a playlist.
@@ -190,7 +190,7 @@ for a person. Each run adds a row here:
 
 | ProPresenter | Date | Checked | Found |
 | --- | --- | --- | --- |
-| 21.4.2 | unknown | Export safety gate over a real library; not opened in the app | Every file `identical` |
+| 21.4.2 | 2026-09-11 | Export safety gate over a real library; not opened in the app | Every file `identical` |
 | 20.0.1 (macOS) | 2026-10-24 | The full procedure | Slides were numbered in storage order, not display order. A media bin's actions were all typed as audio. Both fixed in #23. Every file `identical` |
 
 ## Things that will bite you

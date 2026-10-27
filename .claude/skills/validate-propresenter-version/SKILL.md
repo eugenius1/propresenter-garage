@@ -52,23 +52,26 @@ arrangements or workspaces. Report those to the user before you start.
 
 ## 3. Back up before anything else
 
-The data folder is `applicationShowDirectory` in
-`defaults read com.renewedvision.propresenter`, normally
-`~/Documents/ProPresenter`. Back up the folders this procedure writes to, and
-check the copy:
+The data folder is whatever ProPresenter's `applicationShowDirectory` setting
+says, which is not always `~/Documents/ProPresenter`. Read it, then back up
+the folders this procedure writes to and check the copy:
 
 ```bash
-B=~/Documents/ProPresenter-backup-<date>   # as agreed in step 1
-cd ~/Documents/ProPresenter && mkdir -p "$B" && cp -Rp Libraries Playlists Configuration "$B"/
+SHOW=$(defaults read com.renewedvision.propresenter applicationShowDirectory)
+SHOW=${SHOW/#\~/$HOME}
+B=~/Documents/ProPresenter-backup-$(date +%F)   # or the folder agreed in step 1
+mkdir -p "$B" && cd "$SHOW" && cp -Rp Libraries Playlists Configuration "$B"/
 for d in Libraries Playlists Configuration; do diff -rq "$d" "$B/$d"; done
 ```
+
+Every later step works in `$SHOW`, not in a path assumed from these notes.
 
 Leave `Media` out. It is gigabytes, and nothing here touches it.
 
 ## 4. Run the suite against the installation
 
-Point `PP_LIBRARY_DIR` and `PP_MEDIA_FILE` at the installation's `Libraries`
-and `Playlists/Media`, as
+Point `PP_LIBRARY_DIR` and `PP_MEDIA_FILE` at `$SHOW/Libraries` and
+`$SHOW/Playlists/Media`, as
 [CONTRIBUTING.md](../../../CONTRIBUTING.md#testing-against-real-files)
 describes, and run `npm test`.
 
@@ -95,26 +98,38 @@ and `read_media_bin` give the parser's view. A short `npx tsx` script against
 ## 6. Round-trip what the core writes
 
 Write every test file first, then check them all in one ProPresenter
-session. Each one is a **new** file, with its own document uuid and a name
-such as `Song (Garage style).pro`. The functions are in
-`packages/core/src/lib`.
+session. The functions are in `packages/core/src/lib`, and none of them
+writes a file. Each returns bytes, and a short `npx tsx` script saves them:
 
-- **Fixer.** Use `planFixes`/`applyFixes` (`fixes.ts`). They write in place
-  by design, under the conditions in AGENTS.md, so point them at a copy, never
-  at the user's file. The lines should read as promised, and the plan's slide
-  numbers should match the app's.
-- **Restyle.** Use `applyStyle` (`style.ts`), once with a theme from
-  `themeStyles()` and once with another song's slide from
-  `presentationStyle()`. The title slide and macros should be unchanged.
-- **Media Bin export.** Remove the agreed entry with `applyOperations`
-  (`operations.ts`). The bin should open without it.
+- under a **new** name, such as `Song (Garage style).pro`, never over an
+  existing file;
+- after decoding with `decodePresentation`, giving the document a fresh uuid
+  from `newUuid()` (`decode.ts`), and encoding with `encodePresentation`. A
+  plain file copy keeps the original's uuid, and two documents claiming one
+  identity is not something to test by accident.
+
+The round-trips:
+
+- **Fixer.** `planFixes`/`applyFixes` (`fixes.ts`) return the fixed bytes.
+  The Presentations tool is what writes them back in place, under the
+  conditions in AGENTS.md. Here, save them as a copy. The lines should read
+  as promised, and the plan's slide numbers should match the app's.
+- **Restyle.** `applyStyle` (`style.ts`) returns `{ bytes, plan }`. Run it
+  once with a theme from `themeStyles()` and once with another song's slide
+  from `presentationStyle()`. Check the plan before opening the file. The
+  title slide is skipped only when it carries a macro the lyric slides do
+  not. One with no macro needs its number in `skipSlides`. The title slide
+  and macros should come out unchanged.
+- **Media Bin export.** `exportOperations` (`operations.ts`) returns the
+  edited bin's bytes. Remove the agreed entry with it. The bin should open
+  without it.
 - **Playlist.** Build one with `presentationEntry`, `headerEntry` and
-  `mediaEntry` (`playlists.ts`), then reorder it, insert into it and rename
-  it. It should open with every entry found, and every other playlist should
+  `mediaEntry` (`playlists.ts`), then reorder it, insert into it and rename it
+  with `exportOperations`. It should open with every entry found, and every other playlist should
   be unchanged.
 
 To check a core feature against ProPresenter's own, make two copies of the
-same file:
+same file, each with a fresh document uuid as above:
 
 1. Do the operation in ProPresenter on one copy, e.g. right-click → Themes on
    the lyric slides.
