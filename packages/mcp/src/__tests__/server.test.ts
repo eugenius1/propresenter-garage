@@ -608,9 +608,9 @@ describe("playlists and themes", () => {
         path: "Sunday",
         items: [
           { kind: "header", name: "Chants" },
-          { kind: "presentation", name: "Checked Song", file: "Libraries/Default/Checked Song.pro" },
+          { kind: "presentation", name: "Checked Song", file: song() },
           // A media entry is the media bin's cue, under the bin's own name.
-          { kind: "media", name: "Rose Gradient", file: "Media/Assets/rose-gradient.jpg" },
+          { kind: "media", name: "Rose Gradient", file: path.join(show, "Media", "Assets", "rose-gradient.jpg") },
         ],
       },
     ]);
@@ -619,6 +619,21 @@ describe("playlists and themes", () => {
   it("hands out a presentation's file in a form read_presentation takes back", async () => {
     const entry = (await json("read_playlists")).playlists[0].items[1];
     expect((await json("read_presentation", { path: entry.file })).name).toBe("Checked Song");
+  });
+
+  it("hands out the same file when the server is pointed at the folder above", async () => {
+    const above = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "pp-mcp-above-")));
+    fs.renameSync(show, path.join(above, "ProPresenter"));
+    const outer = await connect([above]);
+    try {
+      const entry = (await outer.call("read_playlists", {})).json().playlists[0].items[1];
+      expect(entry.file).toBe(path.join(above, "ProPresenter", "Libraries", "Default", "Checked Song.pro"));
+      expect((await outer.call("read_presentation", { path: entry.file })).json().name).toBe("Checked Song");
+    } finally {
+      await outer.client.close();
+      fs.renameSync(path.join(above, "ProPresenter"), show);
+      fs.rmSync(above, { recursive: true, force: true });
+    }
   });
 
   it("refuses the media bin passed as the presentation playlists", async () => {

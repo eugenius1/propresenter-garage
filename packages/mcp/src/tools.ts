@@ -2,12 +2,13 @@ import path from "node:path";
 import { examine } from "@propresenter-garage/core/lib/fixes";
 import { isPresentationFile } from "@propresenter-garage/core/lib/folder";
 import { auditLibrary } from "@propresenter-garage/core/lib/audit";
-import { checkFidelity, DecodeError, type Fidelity } from "@propresenter-garage/core/lib/decode";
+import { checkFidelity, DecodeError, enumLabel, type Fidelity } from "@propresenter-garage/core/lib/decode";
 import { loadMediaBytes } from "@propresenter-garage/core/lib/loadFile";
 import {
   applicationInfo,
   itemLabel,
   itemPath,
+  LOCAL_ROOT,
   rawChildren,
   rawItems,
   type MediaItem,
@@ -526,15 +527,19 @@ export async function auditMediaBin(roots: readonly string[], file?: string) {
 export interface PlaylistEntry {
   kind: "presentation" | "header" | "media" | "cue" | "placeholder" | "planningCenter" | "other";
   name: string;
-  /** Relative to the ProPresenter folder where the entry says so, else as stored. */
+  /** Absolute where the entry is inside the ProPresenter folder, else as stored. */
   file?: string;
   /** The arrangement a presentation entry plays, when it names one. */
   arrangement?: string;
 }
 
-function playlistEntry(item: any): PlaylistEntry {
+function playlistEntry(item: any, showFolder: string): PlaylistEntry {
   const name: string = item.name ?? "";
-  const fileOf = (url: any): string | undefined => url?.local?.path || url?.absolute_string || undefined;
+  const fileOf = (url: any): string | undefined => {
+    const local = url?.local;
+    if (local?.path && enumLabel(LOCAL_ROOT, local.root) === "SHOW") return path.join(showFolder, local.path);
+    return local?.path || url?.absolute_string || undefined;
+  };
   if (item.presentation) {
     return {
       kind: "presentation",
@@ -554,14 +559,19 @@ function playlistEntry(item: any): PlaylistEntry {
 }
 
 /** Every playlist under `node`, folders flattened into ` / ` paths as the media bin's are. */
-function playlistTree(node: any, ancestry: string[], out: { path: string; items: PlaylistEntry[] }[]) {
+function playlistTree(
+  node: any,
+  showFolder: string,
+  ancestry: string[],
+  out: { path: string; items: PlaylistEntry[] }[]
+) {
   for (const child of rawChildren(node)) {
     const trail = [...ancestry, child.name ?? ""];
     // A folder holds playlists, not entries; an empty playlist is still listed.
     if (rawChildren(child).length === 0 || rawItems(child).length > 0) {
-      out.push({ path: trail.join(" / "), items: rawItems(child).map(playlistEntry) });
+      out.push({ path: trail.join(" / "), items: rawItems(child).map((item) => playlistEntry(item, showFolder)) });
     }
-    playlistTree(child, trail, out);
+    playlistTree(child, showFolder, trail, out);
   }
   return out;
 }
@@ -570,9 +580,10 @@ function playlistTree(node: any, ancestry: string[], out: { path: string; items:
  * ProPresenter's presentation playlists: the services built from songs,
  * headers and media, as opposed to the media bin.
  *
- * A presentation entry's `file` is relative to the ProPresenter folder, which
- * is how ProPresenter stores it, so it can be handed straight back to
- * `read_presentation` when the server was pointed at that folder.
+ * ProPresenter stores a presentation entry's file relative to its own folder,
+ * the one holding `Playlists/Library`. That is resolved here, so `file` can be
+ * handed straight back to `read_presentation` wherever the server was pointed:
+ * at the ProPresenter folder, or at the folder above it.
  */
 export async function readPlaylists(roots: readonly string[], file?: string) {
   const { path: real, bytes, decoded } = await loadPlaylistFile(
@@ -587,7 +598,7 @@ export async function readPlaylists(roots: readonly string[], file?: string) {
     path: real,
     ...applicationInfo(decoded.application_info),
     fidelity: checkFidelity(bytes).fidelity,
-    playlists: playlistTree(decoded.root_node, [], []),
+    playlists: playlistTree(decoded.root_node, path.dirname(path.dirname(real)), [], []),
   };
 }
 

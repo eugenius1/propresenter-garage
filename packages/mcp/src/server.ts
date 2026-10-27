@@ -188,9 +188,9 @@ export function createServer(roots: readonly string[]): McpServer {
       title: "Read the presentation playlists",
       description:
         "Read ProPresenter's presentation playlists (the services built from songs, headers and media, as " +
-        "opposed to the media bin): every playlist and its entries in order. A presentation entry's `file` " +
-        "is relative to the ProPresenter folder and can be passed to read_presentation; `arrangement` is " +
-        "the arrangement it plays, when it names one.",
+        "opposed to the media bin): every playlist and its entries in order. A presentation or media entry's " +
+        "`file` is an absolute path when it lies inside the ProPresenter folder, and a presentation's can be " +
+        "passed to read_presentation; `arrangement` is the arrangement it plays, when it names one.",
       inputSchema: {
         path: z
           .string()
