@@ -171,15 +171,87 @@ describe("applying a style to a presentation", () => {
     expect(decodeRtf(slide.elements[0].element.text.rtf_data)).toContain("Helvetica-Bold");
   });
 
-  it("gives copied elements fresh identities, and keeps builds pointing at them", () => {
-    const { bytes } = applyStyle(syntheticTextPresentation(), styleSlide());
+  it("keeps each slide's own box identity, and gives the style's other elements fresh ones", () => {
+    // ProPresenter's Themes menu does the same: the box that takes a slide's
+    // words keeps that slide's uuid, the shape behind it is new.
+    const before = syntheticTextPresentation();
+    const { bytes, plan } = applyStyle(before, styleSlide());
     const slides = baseSlides(bytes);
-    const lyricIds = slides.map((s: any) => s.elements[0].element.uuid.string);
-    expect(new Set(lyricIds).size).toBe(slides.length);
-    expect(lyricIds).not.toContain("STYLE-LYRICS");
+    const was = baseSlides(before);
+    const withWords = plan.filter((p) => p.texts.length > 0).map((p) => p.slideIndex);
+    expect(withWords.length).toBeGreaterThan(0);
+    for (const i of withWords) {
+      expect(slides[i].elements[0].element.uuid.string).toBe(was[i].elements[0].element.uuid.string);
+    }
+    const shapeIds = slides.map((s: any) => s.elements[1].element.uuid.string);
+    expect(new Set(shapeIds).size).toBe(slides.length);
+    expect(shapeIds).not.toContain("STYLE-SHAPE");
     for (const s of slides) {
       expect(s.elements[0].build_in.elementUUID.string).toBe(s.elements[0].element.uuid.string);
     }
+  });
+
+  it("gives a style box with no words to take a fresh identity", () => {
+    const doc = decodePresentation(syntheticTextPresentation()) as any;
+    // An empty box, as on a song's Pause slide: nothing to carry over.
+    const box = doc.cues[0].actions[0].slide.presentation.base_slide.elements[0];
+    box.element.text.rtf_data = new TextEncoder().encode("{\\rtf1 }");
+    const { bytes } = applyStyle(encodePresentation(doc), styleSlide());
+    const id = baseSlides(bytes)[0].elements[0].element.uuid.string;
+    expect(id).not.toBe(box.element.uuid.string);
+    expect(id).not.toBe("STYLE-LYRICS");
+  });
+
+  it("brings the style's guides in as the theme's, and leaves the slide's own alone", () => {
+    const style = styleSlide();
+    style.baseSlide.guidelines = [
+      { uuid: { string: "STYLE-GUIDE" }, location: 840 },
+    ].map((g) => messageType("rv.data.AlignmentGuide").fromObject(g));
+    const doc = decodePresentation(syntheticTextPresentation()) as any;
+    const target = doc.cues[0].actions[0].slide.presentation;
+    target.base_slide.guidelines = [
+      messageType("rv.data.AlignmentGuide").fromObject({ uuid: { string: "OWN-GUIDE" }, location: 100 }),
+    ];
+
+    const { bytes } = applyStyle(encodePresentation(doc), style);
+    const after = slidesInOrder(decodePresentation(bytes)).map(
+      ({ cue }) => cue.actions[0].slide.presentation
+    );
+    expect(after[0].base_slide.guidelines.map((g: any) => g.uuid.string)).toEqual(["OWN-GUIDE"]);
+    for (const p of after) {
+      expect(p.template_guidelines.map((g: any) => g.location)).toEqual([840]);
+      expect(p.template_guidelines[0].uuid.string).not.toBe("STYLE-GUIDE");
+    }
+    expect(new Set(after.map((p) => p.template_guidelines[0].uuid.string)).size).toBe(after.length);
+  });
+
+  it("records the style's font over the new words, as ProPresenter does", () => {
+    const font = { name: "Arial-BoldMT", size: 60, bold: true, family: "Arial" };
+    const caps = { range: { start: 0, end: 17 }, capitalization: "CAPITALIZATION_ALL_CAPS" };
+    const sample = "{\\rtf1\\ansi\\uc1\\pard Your Title Here!!}";
+    const { bytes } = applyStyle(
+      syntheticTextPresentation(),
+      styleSlide(sample, { font, custom_attributes: [caps] })
+    );
+    const custom = baseSlides(bytes)[0].elements[0].element.text.attributes.custom_attributes;
+    // "A tidy line" / "And another": capitals line by line, the font over all.
+    expect(custom.map((a: any) => [a.range.start ?? 0, a.range.end])).toEqual([[0, 11], [12, 23], [0, 23]]);
+    expect(messageType("rv.data.Font").toObject(custom[2].original_font)).toEqual(font);
+  });
+
+  it("passes on the theme's font from a style that was itself themed", () => {
+    // A slide restyled once already: its box has since been set in another
+    // font, but the font the theme gave it is the one to carry on.
+    const themed = { name: "Arial-BoldMT", family: "Arial" };
+    const style = styleSlide("{\\rtf1\\ansi\\uc1\\pard Sample}", {
+      font: { name: "Helvetica", family: "Helvetica" },
+      custom_attributes: [{ range: { start: 0, end: 6 }, original_font: themed }],
+    });
+    const { bytes } = applyStyle(syntheticTextPresentation(), style);
+    const custom = baseSlides(bytes)[0].elements[0].element.text.attributes.custom_attributes;
+    expect(custom).toHaveLength(1);
+    expect(messageType("rv.data.Font").toObject(custom[0].original_font)).toEqual(themed);
+    expect(custom[0].range.end).toBe(23);
   });
 
   it("never edits the style it was given", () => {
@@ -302,6 +374,16 @@ describe("where a style comes from", () => {
     const text = decodeRtf(style.baseSlide.elements[0].element.text.rtf_data);
     expect(linesOf(text)).toEqual(["Fine here", " leading space"]);
     expect(() => presentationStyle(syntheticTextPresentation(), 99)).toThrow(StyleError);
+  });
+
+  it("takes a themed slide's guides from where its theme put them", () => {
+    const doc = decodePresentation(syntheticTextPresentation()) as any;
+    doc.cues[0].actions[0].slide.presentation.template_guidelines = [
+      messageType("rv.data.AlignmentGuide").fromObject({ uuid: { string: "THEME-GUIDE" }, location: 631 }),
+    ];
+    const style = presentationStyle(encodePresentation(doc), 0);
+    expect(style.guidelines?.map((g: any) => g.location)).toEqual([631]);
+    expect(presentationStyle(syntheticTextPresentation(), 0).guidelines).toBeUndefined();
   });
 
   it("lists a theme's slides in its own order", () => {
