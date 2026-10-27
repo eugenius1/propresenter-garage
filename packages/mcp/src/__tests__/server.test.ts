@@ -527,7 +527,7 @@ describe("playlists and themes", () => {
 
     expect(preview).toMatchObject({ style: "Lyrics", fidelity: expect.stringMatching(/identical|equivalent/) });
     expect(preview.restyled + preview.leftAlone).toBe(preview.slides.length);
-    expect(preview.slides.find((s: any) => s.label === "Leading").words).toEqual([["Fine here", " leading space"]]);
+    expect(preview.slides.find((s: any) => s.label === "Leading").textBoxes).toEqual([{ lines: ["Fine here", " leading space"] }]);
     expect(fs.readFileSync(song())).toEqual(before);
   });
 

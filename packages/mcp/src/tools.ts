@@ -684,15 +684,18 @@ export interface StylePreview {
     macros?: string[];
     /** Why the slide would be left alone, when it would. */
     skip?: SkipReason;
-    /** The words each box would carry afterwards, line by line. */
-    words: string[][];
+    /**
+     * The text each of the style's boxes would carry afterwards, filled in
+     * order. No `boxIndex`: the boxes are the style's, not the slide's own.
+     */
+    textBoxes: { lines: string[] }[];
   }[];
 }
 
 /**
  * What giving a presentation's slides another slide's look would do, without
  * doing it: which slides would change, which would be left alone and why, and
- * the words each would carry.
+ * the text each would carry.
  *
  * The plan `applyStyle` itself follows and then checks its result against, so
  * the preview and a later write cannot disagree. There is no write here: that
@@ -726,7 +729,7 @@ export async function previewStyle(
       group: slide.groupName,
       macros: slide.macros.length ? slide.macros : undefined,
       skip: slide.skip,
-      words: slide.texts,
+      textBoxes: slide.textBoxes.map((lines) => ({ lines })),
     })),
   };
 }

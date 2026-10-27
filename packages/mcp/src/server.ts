@@ -222,7 +222,7 @@ export function createServer(roots: readonly string[]): McpServer {
       description:
         "Preview giving a presentation's slides the look of a theme's slide style or of another " +
         "presentation's slide, as ProPresenter's 'apply theme slide' does, without changing anything: " +
-        "nothing is written. For each slide: whether it would be restyled, and the words each box would " +
+        "nothing is written. For each slide: whether it would be restyled, and the lines each text box would " +
         "carry afterwards; or `skip`, why it would be left alone. `listed`: in skipSlides. `macro`: " +
         "triggers a macro in skipMacros. `distinctMacro`: carries a different macro from most slides, " +
         "usually a title slide. `otherElements`: holds an image or shape restyling would remove (set " +

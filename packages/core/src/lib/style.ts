@@ -147,12 +147,12 @@ export interface SlidePlan {
   /** Why it is left alone, when it is. */
   skip?: SkipReason;
   /**
-   * The words of each box that holds any, in order.
+   * The lines of each box that holds any text, in order.
    *
    * What the slide will say afterwards, line for line -- and what it is
    * checked against once it has been rebuilt.
    */
-  texts: string[][];
+  textBoxes: string[][];
 }
 
 /** The macros a cue triggers, by name. */
@@ -190,7 +190,7 @@ function isTextElement(wrapper: any): boolean {
  * centred two lines by adding a blank one above them would drag that blank
  * into a style that centres by itself. A blank between two lines is kept.
  */
-function wordsOf(wrapper: any): string[] {
+function linesOf(wrapper: any): string[] {
   const lines = extractLines(decodeRtf(wrapper.element.text.rtf_data)).map((l) => l.text);
   const [first, last] = shownBounds(lines);
   return lines.slice(first, last + 1);
@@ -199,18 +199,18 @@ function wordsOf(wrapper: any): string[] {
 const hasRtf = (wrapper: any) => ArrayBuffer.isView(wrapper.element?.text?.rtf_data);
 
 /**
- * The words on a slide, box by box.
+ * The lines on a slide, box by box.
  *
  * Read from any box with text, marked as a text element or not, so that no
  * words are left behind. A restyled slide is read back through the style's
  * own text elements only, since that is where they were put: a theme's shape
  * can carry decorative text of its own that is not anybody's lyrics.
  */
-function textsOf(slide: any, textElementsOnly = false): string[][] {
+function textBoxesOf(slide: any, textElementsOnly = false): string[][] {
   return (slide.base_slide?.elements ?? [])
     .filter(textElementsOnly ? isTextElement : hasRtf)
-    .map(wordsOf)
-    .filter((words: string[]) => words.length > 0);
+    .map(linesOf)
+    .filter((lines: string[]) => lines.length > 0);
 }
 
 /**
@@ -224,7 +224,7 @@ function otherElements(slide: any): number {
   return (slide.base_slide?.elements ?? []).filter((w: any) => {
     if (!hasRtf(w)) return true;
     const marked = (w.info ?? 0) !== 0;
-    return marked && !isTextElement(w) && wordsOf(w).length === 0;
+    return marked && !isTextElement(w) && linesOf(w).length === 0;
   }).length;
 }
 
@@ -247,7 +247,7 @@ export function planStyle(doc: RawDoc, style: SlideStyle, options: StyleOptions 
 
   return slides.map(({ cue, groupName }, slideIndex) => {
     const slide = slideOf(cue);
-    const texts = slide ? textsOf(slide) : [];
+    const textBoxes = slide ? textBoxesOf(slide) : [];
     const names = macros[slideIndex];
 
     let skip: SkipReason | undefined;
@@ -260,9 +260,9 @@ export function planStyle(doc: RawDoc, style: SlideStyle, options: StyleOptions 
     else if (!options.replaceOtherElements && otherElements(slide) > 0) skip = "otherElements";
     // Words with nowhere to go would be lost, which is the one thing this
     // must never do.
-    else if (texts.length > slots) skip = "moreTextThanStyle";
+    else if (textBoxes.length > slots) skip = "moreTextThanStyle";
 
-    return { slideIndex, cueName: cue.name ?? "", groupName, macros: names, skip, texts };
+    return { slideIndex, cueName: cue.name ?? "", groupName, macros: names, skip, textBoxes };
   });
 }
 
@@ -430,7 +430,7 @@ function prepareStyle(style: SlideStyle): PreparedStyle {
 }
 
 /** The style's slide, rebuilt around one target slide's words. */
-function restyledSlide(target: any, style: PreparedStyle, texts: string[][]): any {
+function restyledSlide(target: any, style: PreparedStyle, textBoxes: string[][]): any {
   const copy = Slide.decode(style.bytes) as any;
   copy.uuid = target.base_slide?.uuid;
 
@@ -446,10 +446,10 @@ function restyledSlide(target: any, style: PreparedStyle, texts: string[][]): an
     const box = style.boxes.get(i);
     if (!box) return;
 
-    const words = texts[next++] ?? [];
-    element.text.rtf_data = encodeRtf(restyleRtf(box.rtf, words));
+    const lines = textBoxes[next++] ?? [];
+    element.text.rtf_data = encodeRtf(restyleRtf(box.rtf, lines));
     if (box.attributes) {
-      element.text.attributes.custom_attributes = stretchAttribute(box.attributes, words);
+      element.text.attributes.custom_attributes = stretchAttribute(box.attributes, lines);
     }
   });
   remapUuids(copy.elements, renamed);
@@ -485,7 +485,7 @@ export function applyStyle(
   slidesInOrder(doc).forEach(({ cue }, i) => {
     if (plan[i].skip) return;
     const slide = slideOf(cue);
-    slide.base_slide = restyledSlide(slide, prepared, plan[i].texts);
+    slide.base_slide = restyledSlide(slide, prepared, plan[i].textBoxes);
   });
 
   const out = encodePresentation(doc);
@@ -522,7 +522,7 @@ function verify(original: RawDoc, after: Uint8Array, plan: SlidePlan[]): void {
     if (key(cue) !== key(was[i].cue)) throw fail(restyled ? "slideActions" : "untouchedSlide", i);
     if (!restyled) return;
     const slide = slideOf(cue);
-    if (JSON.stringify(textsOf(slide, true)) !== JSON.stringify(plan[i].texts)) {
+    if (JSON.stringify(textBoxesOf(slide, true)) !== JSON.stringify(plan[i].textBoxes)) {
       throw fail("words", i);
     }
     // Text can read back right from a document whose groups no longer close.
