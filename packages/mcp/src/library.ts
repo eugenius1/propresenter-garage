@@ -200,8 +200,10 @@ export interface FoundTheme {
 /**
  * Every theme under the roots: `Themes/<name>/Theme` in the ProPresenter folder.
  *
- * Symlinks are not followed, for the same reason as `findPresentations`. Two
- * roots that are the same folder seen twice list its themes once.
+ * Symlinks are not followed, for the same reason as `findPresentations`, and
+ * each theme is checked to be inside the roots after `realpath`: the walk
+ * starts at fixed names, and `Themes`, or the `ProPresenter` folder above it,
+ * can itself be a symlink leading out. A theme reached twice is listed once.
  */
 export async function findThemes(roots: readonly string[]): Promise<FoundTheme[]> {
   const themes: FoundTheme[] = [];
@@ -214,9 +216,11 @@ export async function findThemes(roots: readonly string[]): Promise<FoundTheme[]
       if (!entry.isDirectory() || entry.name.startsWith(".")) continue;
       const file = path.join(dir, entry.name, "Theme");
       const stat = await fs.lstat(file).catch(() => undefined);
-      if (!stat?.isFile() || seen.has(file)) continue;
-      seen.add(file);
-      themes.push({ name: entry.name, file });
+      if (!stat?.isFile()) continue;
+      const real = await fs.realpath(file).catch(() => undefined);
+      if (!real || seen.has(real) || !roots.some((root) => isInside(root, real))) continue;
+      seen.add(real);
+      themes.push({ name: entry.name, file: real });
     }
   }
   return themes;

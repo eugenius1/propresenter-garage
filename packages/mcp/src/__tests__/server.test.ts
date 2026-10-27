@@ -521,6 +521,18 @@ describe("playlists and themes", () => {
     expect(unreadable).toEqual([expect.objectContaining({ path: path.join(show, "Themes", "Broken", "Theme") })]);
   });
 
+  it("does not list themes a symlinked Themes folder leads out to", async () => {
+    const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "pp-mcp-linked-")));
+    fs.symlinkSync(path.join(show, "Themes"), path.join(root, "Themes"));
+    const linked = await connect([root]);
+    try {
+      expect((await linked.call("list_themes", {})).json()).toEqual({ themes: [], unreadable: [] });
+    } finally {
+      await linked.client.close();
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   it("previews a theme style slide by slide, and writes nothing", async () => {
     const before = fs.readFileSync(song());
     const preview = await json("preview_style", { path: song(), theme: "white", style: "Lyrics" });
