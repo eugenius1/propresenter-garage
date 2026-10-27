@@ -238,6 +238,31 @@ describe("applying a style to a presentation", () => {
     expect(messageType("rv.data.Font").toObject(custom[2].original_font)).toEqual(font);
   });
 
+  it("gives a themed song another theme, shape and all", () => {
+    // The first theme's shape is the theme's, not the slide's own: counting
+    // it as an element of the slide's would refuse every slide.
+    const style = styleSlide(COCOA, { font: { name: "Arial-BoldMT", family: "Arial" } });
+    style.baseSlide.guidelines = [
+      messageType("rv.data.AlignmentGuide").fromObject({ uuid: { string: "STYLE-GUIDE" }, location: 840 }),
+    ];
+    const once = applyStyle(syntheticTextPresentation(), style);
+    const twice = applyStyle(once.bytes, style);
+    expect(twice.plan.map((p) => p.skip)).toEqual(once.plan.map((p) => p.skip));
+    expect(textsAfter(twice.bytes)).toEqual(textsAfter(once.bytes));
+    expect(baseSlides(twice.bytes)[0].elements).toHaveLength(2);
+  });
+
+  it("still leaves alone a shape of the slide's own on a slide no theme filled", () => {
+    const doc = decodePresentation(syntheticTextPresentation()) as any;
+    doc.cues[0].actions[0].slide.presentation.base_slide.elements.push(
+      messageType("rv.data.Slide.Element").fromObject({
+        info: 1,
+        element: { uuid: { string: "BADGE" }, name: "Badge", text: { rtf_data: new TextEncoder().encode("{\\rtf1 }") } },
+      })
+    );
+    expect(planStyle(doc, styleSlide())[0].skip).toBe("otherElements");
+  });
+
   it("passes on the theme's font from a style that was itself themed", () => {
     // A slide restyled once already: its box has since been set in another
     // font, but the font the theme gave it is the one to carry on.
