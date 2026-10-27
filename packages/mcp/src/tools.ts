@@ -422,20 +422,44 @@ export async function checkPresentations(
   return result;
 }
 
-async function loadMediaBin(roots: readonly string[], file: string | undefined) {
-  const target = file ?? (await findMediaBin(roots));
-  if (!target) {
-    throw new LibraryError("No media bin found. Pass the path of the `Media` file inside ProPresenter's `Playlists` folder.");
-  }
+/**
+ * A playlist document of the show folder, found where ProPresenter keeps it
+ * unless the caller names one, and decoded.
+ *
+ * `bytes` is handed back as well, for the fidelity check that is made on the
+ * file as it was read.
+ */
+async function loadPlaylistFile<T>(
+  roots: readonly string[],
+  file: string | undefined,
+  find: (roots: readonly string[]) => Promise<string | undefined>,
+  missing: string,
+  what: string,
+  decode: (name: string, bytes: Uint8Array) => T
+) {
+  const target = file ?? (await find(roots));
+  if (!target) throw new LibraryError(missing);
   const { path: real, bytes } = await readLibraryFile(roots, target);
   try {
-    return { path: real, loaded: loadMediaBytes(path.basename(real), bytes) };
+    return { path: real, bytes, decoded: decode(path.basename(real), bytes) };
   } catch (e) {
     if (e instanceof DecodeError) {
-      throw new LibraryError(`${target}: not a ProPresenter media bin (${e.code}).`);
+      throw new LibraryError(`${target}: not ${what} (${e.code}).`);
     }
     throw e;
   }
+}
+
+async function loadMediaBin(roots: readonly string[], file: string | undefined) {
+  const { path: real, decoded } = await loadPlaylistFile(
+    roots,
+    file,
+    findMediaBin,
+    "No media bin found. Pass the path of the `Media` file inside ProPresenter's `Playlists` folder.",
+    "a ProPresenter media bin",
+    loadMediaBytes
+  );
+  return { path: real, loaded: decoded };
 }
 
 function compactItem(item: MediaItem) {
@@ -552,44 +576,44 @@ function playlistTree(node: any, ancestry: string[], out: { path: string; items:
  * `read_presentation` when the server was pointed at that folder.
  */
 export async function readPlaylists(roots: readonly string[], file?: string) {
-  const target = file ?? (await findPlaylists(roots));
-  if (!target) {
-    throw new LibraryError(
-      "No presentation playlists found. Pass the path of the `Library` file inside ProPresenter's `Playlists` folder."
-    );
-  }
-  const { path: real, bytes } = await readLibraryFile(roots, target);
-  let doc: any;
-  try {
-    doc = decodePlaylistsDocument(bytes);
-  } catch (e) {
-    if (e instanceof DecodeError) {
-      throw new LibraryError(`${target}: not ProPresenter's presentation playlists (${e.code}).`);
-    }
-    throw e;
-  }
+  const { path: real, bytes, decoded } = await loadPlaylistFile(
+    roots,
+    file,
+    findPlaylists,
+    "No presentation playlists found. Pass the path of the `Library` file inside ProPresenter's `Playlists` folder.",
+    "ProPresenter's presentation playlists",
+    (_name, bytes) => decodePlaylistsDocument(bytes)
+  );
   return {
     path: real,
-    ...applicationInfo(doc.application_info),
+    ...applicationInfo(decoded.application_info),
     fidelity: checkFidelity(bytes).fidelity,
-    playlists: playlistTree(doc.root_node, [], []),
+    playlists: playlistTree(decoded.root_node, [], []),
   };
 }
-
-const LOSSY_SOURCE = "would not survive being written back, so its look is not copied";
 
 /** A `StyleError` in words a model can act on; anything else is not ours to explain. */
 function styleProblem(e: unknown, source: string): unknown {
   if (!(e instanceof StyleError)) return e;
   switch (e.code) {
     case "lossy":
-      return new LibraryError(`${source}: ${LOSSY_SOURCE}.`);
+      return new LibraryError(`${source}: would not survive being written back, so its look is not copied.`);
     case "noSuchSlide":
       return new LibraryError(`${source} has no slide ${e.params.slide} (slideIndex ${Number(e.params.slide) - 1}).`);
     case "noTextBox":
       return new LibraryError(`The style "${e.params.style}" has no text box to put words in.`);
     default:
       return new LibraryError(`${source}: ${e.message}`);
+  }
+}
+
+/** A theme's styles, or why they cannot be read, as a `LibraryError` naming `source`. */
+function readThemeStyles(bytes: Uint8Array, source: string): SlideStyle[] {
+  try {
+    return themeStyles(bytes);
+  } catch (e) {
+    if (e instanceof StyleError) throw styleProblem(e, source);
+    throw new LibraryError(`${source}: not a ProPresenter theme (${(e as Error).message}).`);
   }
 }
 
@@ -604,14 +628,14 @@ export async function listThemes(roots: readonly string[]) {
   const unreadable: { path: string; reason: string }[] = [];
   for (const { name, file } of await findThemes(roots)) {
     try {
-      const styles = themeStyles((await readFoundFile(file)).bytes);
+      const styles = readThemeStyles((await readFoundFile(file)).bytes, name);
       themes.push({
         name,
         path: file,
         styles: styles.map((style, styleIndex) => ({ styleIndex, name: style.name, textBoxes: styleSlots(style) })),
       });
     } catch (e) {
-      unreadable.push({ path: file, reason: e instanceof StyleError ? LOSSY_SOURCE : (e as Error).message });
+      unreadable.push({ path: file, reason: (e as Error).message });
     }
   }
   return { themes, unreadable };
@@ -637,13 +661,7 @@ async function loadThemeStyle(roots: readonly string[], theme: string, style: st
     throw new LibraryError(`No theme named "${theme}". \`list_themes\` lists the themes there are.`);
   }
 
-  let styles: SlideStyle[];
-  try {
-    styles = themeStyles(bytes);
-  } catch (e) {
-    if (e instanceof StyleError) throw styleProblem(e, theme);
-    throw new LibraryError(`${theme}: not a ProPresenter theme (${(e as Error).message}).`);
-  }
+  const styles = readThemeStyles(bytes, theme);
   const names = styles.map((s, i) => `${i}: ${s.name}`).join(", ");
   if (style === undefined) {
     if (styles.length === 1) return styles[0];
@@ -703,9 +721,8 @@ export interface StylePreview {
  */
 export async function previewStyle(
   roots: readonly string[],
-  { path: file, ...rest }: StyleSource & Omit<StyleOptions, "skipSlides"> & { path: string; skipSlides?: number[] }
+  { path: file, theme, fromPresentation, style, ...options }: StyleSource & StyleOptions & { path: string }
 ): Promise<StylePreview> {
-  const { theme, fromPresentation, style, ...options } = rest;
   const { path: real, bytes } = await readLibraryFile(roots, file);
   const { raw } = open(file, bytes);
   const slideStyle = await loadStyle(roots, { theme, fromPresentation, style });
