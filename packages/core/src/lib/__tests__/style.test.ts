@@ -93,11 +93,12 @@ const textsAfter = (bytes: Uint8Array) =>
     })
     .filter((t) => t.length);
 
-/** Each slide's `rv.data.Slide`, as ProPresenter numbers them. */
-const baseSlides = (bytes: Uint8Array): any[] =>
-  slidesInOrder(decodePresentation(bytes)).map(
-    ({ cue }) => cue.actions[0].slide.presentation.base_slide
-  );
+/** Each slide's `rv.data.PresentationSlide`, as ProPresenter numbers them. */
+const presentations = (bytes: Uint8Array): any[] =>
+  slidesInOrder(decodePresentation(bytes)).map(({ cue }) => cue.actions[0].slide.presentation);
+
+/** Each slide's `rv.data.Slide`. */
+const baseSlides = (bytes: Uint8Array): any[] => presentations(bytes).map((p) => p.base_slide);
 
 describe("restyling one box", () => {
   it("keeps the style's formatting and replaces only its words", () => {
@@ -214,9 +215,7 @@ describe("applying a style to a presentation", () => {
     ];
 
     const { bytes } = applyStyle(encodePresentation(doc), style);
-    const after = slidesInOrder(decodePresentation(bytes)).map(
-      ({ cue }) => cue.actions[0].slide.presentation
-    );
+    const after = presentations(bytes);
     expect(after[0].base_slide.guidelines.map((g: any) => g.uuid.string)).toEqual(["OWN-GUIDE"]);
     for (const p of after) {
       expect(p.template_guidelines.map((g: any) => g.location)).toEqual([840]);
@@ -383,7 +382,7 @@ describe("where a style comes from", () => {
     ];
     const style = presentationStyle(encodePresentation(doc), 0);
     expect(style.guidelines?.map((g: any) => g.location)).toEqual([631]);
-    expect(presentationStyle(syntheticTextPresentation(), 0).guidelines).toBeUndefined();
+    expect(presentationStyle(syntheticTextPresentation(), 0).guidelines).toEqual([]);
   });
 
   it("lists a theme's slides in its own order", () => {

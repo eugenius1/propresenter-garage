@@ -119,11 +119,12 @@ export function presentationStyle(bytes: Uint8Array, slideIndex: number): SlideS
   const presentation = slide && slideOf(slide.cue);
   const baseSlide = presentation?.base_slide;
   if (!baseSlide) throw new StyleError("noSuchSlide", { slide: String(slideIndex + 1) });
-  const guidelines = presentation.template_guidelines;
   return {
     name: `${(doc as any).name ?? ""} ${slideIndex + 1}`.trim(),
     baseSlide,
-    ...(guidelines?.length ? { guidelines } : {}),
+    // Only a theme's guides travel with the look. The slide's own stay with
+    // it, even when there are no theme guides to take their place.
+    guidelines: presentation.template_guidelines ?? [],
   };
 }
 
@@ -411,7 +412,7 @@ function attributeVerdict(attributes: any, sample: readonly string[]): any {
 }
 
 function stretchAttribute(verdict: any, lines: readonly string[]): any[] {
-  if (verdict === undefined || verdict === "drop") return [];
+  if (verdict === "drop") return [];
   let offset = 0;
   return lines.map((line) => {
     const copy = wireCopy(CustomAttribute, verdict);
@@ -463,21 +464,35 @@ function remapUuids(node: any, renamed: ReadonlyMap<string, string>): void {
  * what its attributes become -- is worked out here rather than again for
  * every slide it is applied to.
  */
+interface StyleBox {
+  /** Which of the target's boxes with words this one takes, counting from 0. */
+  slot: number;
+  rtf: string;
+  /** What {@link attributeVerdict} made of its per-range attributes. */
+  verdict: any;
+  font: any;
+}
+
 interface PreparedStyle {
   bytes: Uint8Array;
   /** Per element position, for the boxes that take words. */
-  boxes: Map<number, { rtf: string; attributes: any; font: any }>;
+  boxes: Map<number, StyleBox>;
   guidelines: any[];
 }
 
 function prepareStyle(style: SlideStyle): PreparedStyle {
-  const boxes = new Map<number, { rtf: string; attributes: any; font: any }>();
+  const boxes = new Map<number, StyleBox>();
   (style.baseSlide.elements ?? []).forEach((wrapper: any, i: number) => {
     if (!isTextElement(wrapper)) return;
     const rtf = decodeRtf(wrapper.element.text.rtf_data);
     const sample = extractLines(rtf).map((l) => l.text);
     const attributes = wrapper.element.text.attributes;
-    boxes.set(i, { rtf, attributes: attributeVerdict(attributes, sample), font: styleFont(attributes) });
+    boxes.set(i, {
+      slot: boxes.size,
+      rtf,
+      verdict: attributeVerdict(attributes, sample),
+      font: styleFont(attributes),
+    });
   });
   return {
     bytes: Slide.encode(style.baseSlide).finish(),
@@ -494,32 +509,31 @@ function prepareStyle(style: SlideStyle): PreparedStyle {
  * anything outside the slide that names it pointing at it. Every other
  * element copied from the style is new, and gets a fresh one.
  */
-function restyle(target: any, style: PreparedStyle, texts: string[][]): void {
+function restyle(target: any, style: PreparedStyle): void {
   const copy = Slide.decode(style.bytes) as any;
   copy.uuid = target.base_slide?.uuid;
   // The slide's own guides are the slide's; the style's arrive as the theme's.
   copy.guidelines = target.base_slide?.guidelines ?? [];
-  const ids = wordBoxes(target).map((box) => box.wrapper.element?.uuid?.string);
+  const sources = wordBoxes(target);
 
   const renamed = new Map<string, string>();
-  let next = 0;
   (copy.elements ?? []).forEach((wrapper: any, i: number) => {
     const element = wrapper.element;
     const box = style.boxes.get(i);
-    const slot = box ? next++ : -1;
+    const source = box && sources[box.slot];
     if (element?.uuid?.string) {
-      const id = ids[slot] ?? newUuid().string;
+      const id = source?.wrapper.element?.uuid?.string ?? newUuid().string;
       renamed.set(element.uuid.string, id);
       element.uuid.string = id;
     }
     if (!box) return;
 
-    const words = texts[slot] ?? [];
+    const words = source?.words ?? [];
     element.text.rtf_data = encodeRtf(restyleRtf(box.rtf, words));
-    if (box.attributes || box.font) {
-      const custom = stretchAttribute(box.attributes, words);
-      if (box.font && words.length > 0) custom.push(originalFont(box.font, words));
-      element.text.attributes.custom_attributes = custom;
+    const attributes = element.text.attributes;
+    if (attributes) {
+      attributes.custom_attributes = box.verdict ? stretchAttribute(box.verdict, words) : [];
+      if (box.font && words.length > 0) attributes.custom_attributes.push(originalFont(box.font, words));
     }
   });
   remapUuids(copy.elements, renamed);
@@ -559,7 +573,7 @@ export function applyStyle(
   const plan = planStyle(doc, style, options);
   const prepared = prepareStyle(style);
   slidesInOrder(doc).forEach(({ cue }, i) => {
-    if (!plan[i].skip) restyle(slideOf(cue), prepared, plan[i].texts);
+    if (!plan[i].skip) restyle(slideOf(cue), prepared);
   });
 
   const out = encodePresentation(doc);
