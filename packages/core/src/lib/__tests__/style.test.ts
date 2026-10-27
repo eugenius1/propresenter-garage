@@ -203,6 +203,26 @@ describe("applying a style to a presentation", () => {
     expect(id).not.toBe("STYLE-LYRICS");
   });
 
+  it("keeps a box's identity when it is the uuid another style element had", () => {
+    // Restyling the style's own slide: its empty first box takes the words,
+    // and with them the uuid its second box had. That second box is renamed,
+    // and the rename must not reach the first box's new uuid as well.
+    const style = styleSlide();
+    style.baseSlide.elements.unshift(
+      Slide.fromObject({
+        elements: [{ info: 3, element: { uuid: { string: "STYLE-EMPTY" }, text: { rtf_data: new TextEncoder().encode("{\\rtf1 }") } } }],
+      }).elements[0]
+    );
+    const doc = decodePresentation(syntheticTextPresentation()) as any;
+    const box = doc.cues[0].actions[0].slide.presentation.base_slide.elements[0];
+    box.element.uuid.string = "STYLE-LYRICS";
+    const { bytes } = applyStyle(encodePresentation(doc), style);
+    const [empty, lyrics] = baseSlides(bytes)[0].elements;
+    expect(empty.element.uuid.string).toBe("STYLE-LYRICS");
+    expect(lyrics.element.uuid.string).not.toBe("STYLE-LYRICS");
+    expect(lyrics.build_in.elementUUID.string).toBe(lyrics.element.uuid.string);
+  });
+
   it("brings the style's guides in as the theme's, and leaves the slide's own alone", () => {
     const style = styleSlide();
     style.baseSlide.guidelines = [

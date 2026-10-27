@@ -534,10 +534,10 @@ function restyle(target: any, style: PreparedStyle): void {
     const element = wrapper.element;
     const box = style.boxes.get(i);
     const source = box && sources[box.slot];
+    // Only collected here: one remapUuids pass below renames each uuid once,
+    // so a box given the uuid another element had is not renamed again.
     if (element?.uuid?.string) {
-      const id = source?.wrapper.element?.uuid?.string ?? newUuid().string;
-      renamed.set(element.uuid.string, id);
-      element.uuid.string = id;
+      renamed.set(element.uuid.string, source?.wrapper.element?.uuid?.string ?? newUuid().string);
     }
     if (!box) return;
 
