@@ -1,4 +1,3 @@
-import fs from "node:fs/promises";
 import path from "node:path";
 import { examine } from "@propresenter-garage/core/lib/fixes";
 import { isPresentationFile } from "@propresenter-garage/core/lib/folder";
@@ -23,11 +22,13 @@ import { createI18n } from "@propresenter-garage/core/i18n/core";
 import {
   findMediaBin,
   findPresentations,
+  isFile,
   LibraryError,
   readFoundFile,
   readLibraryFile,
   resolveFolder,
   resolveInRoots,
+  statFoundFile,
 } from "./library";
 
 /**
@@ -185,10 +186,8 @@ export async function listPresentations(
   if (before === undefined && since === undefined && sort !== "lastUsed") {
     const presentations = await Promise.all(
       named.slice(0, limit).map(async (file) => {
-        // ProPresenter saves by replacing the file; one caught mid-save is
-        // left out rather than failing the whole listing.
-        const stat = await fs.stat(file).catch(() => undefined);
-        return stat && listed(file, stat.size, stat.mtime);
+        const stat = await statFoundFile(file);
+        return stat && listed(file, stat.size, stat.modified);
       })
     );
     return {
@@ -359,7 +358,7 @@ export async function checkPresentations(
   { path: target, limit = 100 }: { path?: string; limit?: number } = {}
 ): Promise<CheckResult> {
   const resolved = target ? await resolveInRoots(roots, target) : undefined;
-  const single = resolved !== undefined && (await fs.stat(resolved)).isFile();
+  const single = resolved !== undefined && (await isFile(resolved));
   if (single && !isPresentationFile(path.basename(resolved))) {
     throw new LibraryError(`Not a presentation (.pro) file: ${target}`);
   }
