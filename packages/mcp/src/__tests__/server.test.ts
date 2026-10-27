@@ -621,6 +621,44 @@ describe("playlists and themes", () => {
     expect((await json("read_presentation", { path: entry.file })).name).toBe("Checked Song");
   });
 
+  it("gives the recorded absolute path for a copy kept outside Playlists", async () => {
+    const copy = path.join(show, "Backups", "2026", "Library");
+    fs.mkdirSync(path.dirname(copy), { recursive: true });
+    fs.copyFileSync(path.join(show, "Playlists", "Library"), copy);
+    try {
+      const entry = (await json("read_playlists", { path: copy })).playlists[0].items[1];
+      // From the entry's absolute_string, not two folders up from the copy.
+      expect(entry.file).toBe(song());
+    } finally {
+      fs.rmSync(path.join(show, "Backups"), { recursive: true, force: true });
+    }
+  });
+
+  it("gives the recorded absolute path for an entry relative to another root", async () => {
+    const PlaylistItem = messageType("rv.data.PlaylistItem");
+    const location = { root: show, platform: "PLATFORM_MACOS" as const };
+    const recorded = presentationEntry({ path: "Libraries/Default/Checked Song.pro", location });
+    const entry = PlaylistItem.toObject(recorded, { enums: String }) as any;
+    entry.presentation.document_path.local = { root: "ROOT_USER_DOCUMENTS", path: "Elsewhere/Checked Song.pro" };
+    const playlists = decodePlaylistsDocument(syntheticPresentationFile()) as any;
+    const service = applyOperations(playlists, [
+      {
+        kind: "insertItem",
+        playlistUuid: playlists.root_node.playlists.playlists[0].uuid.string,
+        itemName: "Checked Song",
+        entry: PlaylistItem.fromObject(entry),
+      },
+    ]);
+    const file = path.join(show, "Playlists", "Documents Library");
+    fs.writeFileSync(file, encodeDocument(service));
+    try {
+      const items = (await json("read_playlists", { path: file })).playlists[0].items;
+      expect(items.find((i: any) => i.kind === "presentation").file).toBe(song());
+    } finally {
+      fs.rmSync(file);
+    }
+  });
+
   it("hands out the same file when the server is pointed at the folder above", async () => {
     const above = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "pp-mcp-above-")));
     fs.renameSync(show, path.join(above, "ProPresenter"));

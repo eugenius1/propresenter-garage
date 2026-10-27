@@ -1,4 +1,5 @@
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { examine } from "@propresenter-garage/core/lib/fixes";
 import { isPresentationFile } from "@propresenter-garage/core/lib/folder";
 import { auditLibrary } from "@propresenter-garage/core/lib/audit";
@@ -427,7 +428,7 @@ export async function checkPresentations(
  * unless the caller names one, and decoded.
  *
  * `bytes` is handed back as well, for the fidelity check that is made on the
- * file as it was read.
+ * file as it was read, and `target`, the path before symlinks were resolved.
  */
 async function loadPlaylistFile<T>(
   roots: readonly string[],
@@ -441,7 +442,7 @@ async function loadPlaylistFile<T>(
   if (!target) throw new LibraryError(missing);
   const { path: real, bytes } = await readLibraryFile(roots, target);
   try {
-    return { path: real, bytes, decoded: decode(path.basename(real), bytes) };
+    return { path: real, target, bytes, decoded: decode(path.basename(real), bytes) };
   } catch (e) {
     if (e instanceof DecodeError) {
       throw new LibraryError(`${target}: not ${what} (${e.code}).`);
@@ -527,18 +528,44 @@ export async function auditMediaBin(roots: readonly string[], file?: string) {
 export interface PlaylistEntry {
   kind: "presentation" | "header" | "media" | "cue" | "placeholder" | "planningCenter" | "other";
   name: string;
-  /** Absolute where the entry is inside the ProPresenter folder, else as stored. */
+  /** Absolute where the entry says where it is; else as stored. */
   file?: string;
   /** The arrangement a presentation entry plays, when it names one. */
   arrangement?: string;
 }
 
-function playlistEntry(item: any, showFolder: string): PlaylistEntry {
+/**
+ * The path a URL's `absolute_string` names: a Mac's file URL decoded, a
+ * Windows path as it is. Nothing for a URL that does not parse, so the
+ * stored relative path is used instead.
+ */
+function absolutePathOf(url: any): string | undefined {
+  const absolute: string | undefined = url?.absolute_string || undefined;
+  if (!absolute?.startsWith("file:")) return absolute;
+  try {
+    return fileURLToPath(absolute);
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * One entry, its file made a path `read_presentation` can open.
+ *
+ * A path relative to the show folder is joined to it when that folder is
+ * known. Any other entry, or one read from a playlists file whose show folder
+ * is not, gives the absolute path ProPresenter recorded beside it: a path
+ * relative to Documents, say, would otherwise be looked up under the library
+ * folders and miss, or find another file of the same name.
+ */
+function playlistEntry(item: any, showFolder: string | undefined): PlaylistEntry {
   const name: string = item.name ?? "";
   const fileOf = (url: any): string | undefined => {
     const local = url?.local;
-    if (local?.path && enumLabel(LOCAL_ROOT, local.root) === "SHOW") return path.join(showFolder, local.path);
-    return local?.path || url?.absolute_string || undefined;
+    if (showFolder && local?.path && enumLabel(LOCAL_ROOT, local.root) === "SHOW") {
+      return path.join(showFolder, local.path);
+    }
+    return absolutePathOf(url) ?? (local?.path || undefined);
   };
   if (item.presentation) {
     return {
@@ -561,7 +588,7 @@ function playlistEntry(item: any, showFolder: string): PlaylistEntry {
 /** Every playlist under `node`, folders flattened into ` / ` paths as the media bin's are. */
 function playlistTree(
   node: any,
-  showFolder: string,
+  showFolder: string | undefined,
   ancestry: string[],
   out: { path: string; items: PlaylistEntry[] }[]
 ) {
@@ -584,9 +611,14 @@ function playlistTree(
  * the one holding `Playlists/Library`. That is resolved here, so `file` can be
  * handed straight back to `read_presentation` wherever the server was pointed:
  * at the ProPresenter folder, or at the folder above it.
+ *
+ * The show folder is known when the file was found where ProPresenter keeps
+ * it, or a file the caller named sits in a `Playlists` folder. A copy kept
+ * anywhere else says nothing about where the show folder is, and its entries
+ * give the absolute paths ProPresenter recorded instead.
  */
 export async function readPlaylists(roots: readonly string[], file?: string) {
-  const { path: real, bytes, decoded } = await loadPlaylistFile(
+  const { path: real, target, bytes, decoded } = await loadPlaylistFile(
     roots,
     file,
     findPlaylists,
@@ -594,11 +626,18 @@ export async function readPlaylists(roots: readonly string[], file?: string) {
     "ProPresenter's presentation playlists",
     (_name, bytes) => decodePlaylistsDocument(bytes)
   );
+  // Found, `target` is `<show folder>/Playlists/Library` as built from a root.
+  const showFolder =
+    file === undefined
+      ? path.dirname(path.dirname(target))
+      : path.basename(path.dirname(real)) === "Playlists"
+        ? path.dirname(path.dirname(real))
+        : undefined;
   return {
     path: real,
     ...applicationInfo(decoded.application_info),
     fidelity: checkFidelity(bytes).fidelity,
-    playlists: playlistTree(decoded.root_node, path.dirname(path.dirname(real)), [], []),
+    playlists: playlistTree(decoded.root_node, showFolder, [], []),
   };
 }
 
