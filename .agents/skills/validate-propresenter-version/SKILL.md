@@ -215,8 +215,8 @@ writes them when it quits. To replace them:
 
 Add an entry to
 [docs/propresenter-versions.md](../../../docs/propresenter-versions.md) under
-the version's heading, adding the heading if it is new: the date, what was
-checked, and what turned up. Fix any parser bugs you found with tests that
+the version's heading, adding the heading if it is new: the date, the
+platform, what was checked, and what turned up. Fix any parser bugs you found with tests that
 follow AGENTS.md.
 
 ## Keep this skill current

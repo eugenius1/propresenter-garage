@@ -8,13 +8,13 @@ version first.
 
 ## 21.4.2
 
-**2026-09-11.** Export safety gate over a real library; not opened in the app.
+**2026-09-11, platform not recorded.** Export safety gate over a real library; not opened in the app.
 
 - Every file `identical`.
 
-## 20.0.1 (macOS)
+## 20.0.1
 
-**2026-10-27.** `applyStyle` compared with ProPresenter's own Themes menu,
+**2026-10-27, macOS.** `applyStyle` compared with ProPresenter's own Themes menu,
 field by field, on one song (#36).
 
 - The box holding the words keeps the slide's element uuid. `applyStyle`
@@ -24,7 +24,7 @@ field by field, on one song (#36).
 - The words carry an `original_font` range for the theme box's font.
 - All three now match.
 
-**2026-10-24.** The full procedure: the suite against an installation, then
+**2026-10-24, macOS.** The full procedure: the suite against an installation, then
 slide numbering and text, media-bin kinds, a fixer run, three restyles, a
 Media Bin export and a built playlist, each opened in the app (#23).
 
