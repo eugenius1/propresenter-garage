@@ -24,6 +24,13 @@ import { decodeRtf, encodeRtf, endsWithControlWord, extractLines } from "./rtf";
  * from -- there is no back-reference to a theme -- so applying one is exactly
  * that replacement and nothing more.
  *
+ * Checked against ProPresenter 20's own Themes menu on a real song, field by
+ * field, and three details follow what it wrote rather than what seemed
+ * reasonable: a box that takes a slide's words keeps that slide's element
+ * uuid, the style's alignment guides go to the slide's `template_guidelines`
+ * instead of becoming guides of its own, and the new words carry the style's
+ * font as an `original_font` attribute.
+ *
  * The words are what must survive. A style slide's RTF carries its own sample
  * text ("You called my name", or another song's chorus), so the new box is the
  * style's RTF with that text spliced out and the target's spliced in, leaving
@@ -42,6 +49,8 @@ const Slide = messageType("rv.data.Slide");
 const Cue = messageType("rv.data.Cue");
 const CustomAttribute = messageType("rv.data.Graphics.Text.Attributes.CustomAttribute");
 const IntRange = messageType("rv.data.IntRange");
+const AlignmentGuide = messageType("rv.data.AlignmentGuide");
+const Font = messageType("rv.data.Font");
 
 /** `Slide.Element.Info.INFO_IS_TEXT_ELEMENT`: the boxes that take words. */
 const TEXT_ELEMENT = 2;
@@ -52,6 +61,15 @@ export interface SlideStyle {
   name: string;
   /** The `rv.data.Slide` to copy, decoded. Never edited. */
   baseSlide: any;
+  /**
+   * The alignment guides that come with the style, when they are not the
+   * base slide's own.
+   *
+   * A theme slide keeps its guides on its base slide. A presentation slide
+   * that was themed keeps the theme's in `template_guidelines` beside it, and
+   * those are the ones that belong to its look.
+   */
+  guidelines?: any[];
 }
 
 export type StyleErrorCode =
@@ -98,9 +116,16 @@ export function presentationStyle(bytes: Uint8Array, slideIndex: number): SlideS
   if (!checkPresentationFidelity(bytes).exportSafe) throw new StyleError("lossy");
   const doc = decodePresentation(bytes);
   const slide = slidesInOrder(doc)[slideIndex];
-  const baseSlide = slide && slideOf(slide.cue)?.base_slide;
+  const presentation = slide && slideOf(slide.cue);
+  const baseSlide = presentation?.base_slide;
   if (!baseSlide) throw new StyleError("noSuchSlide", { slide: String(slideIndex + 1) });
-  return { name: `${(doc as any).name ?? ""} ${slideIndex + 1}`.trim(), baseSlide };
+  return {
+    name: `${(doc as any).name ?? ""} ${slideIndex + 1}`.trim(),
+    baseSlide,
+    // Only a theme's guides travel with the look. The slide's own stay with
+    // it, even when there are no theme guides to take their place.
+    guidelines: presentation.template_guidelines ?? [],
+  };
 }
 
 export interface StyleOptions {
@@ -207,10 +232,15 @@ const hasRtf = (wrapper: any) => ArrayBuffer.isView(wrapper.element?.text?.rtf_d
  * can carry decorative text of its own that is not anybody's lyrics.
  */
 function textsOf(slide: any, textElementsOnly = false): string[][] {
+  return wordBoxes(slide, textElementsOnly).map((box) => box.words);
+}
+
+/** The boxes {@link textsOf} reads, with the element each one came from. */
+function wordBoxes(slide: any, textElementsOnly = false): { wrapper: any; words: string[] }[] {
   return (slide.base_slide?.elements ?? [])
     .filter(textElementsOnly ? isTextElement : hasRtf)
-    .map(wordsOf)
-    .filter((words: string[]) => words.length > 0);
+    .map((wrapper: any) => ({ wrapper, words: wordsOf(wrapper) }))
+    .filter((box: { words: string[] }) => box.words.length > 0);
 }
 
 /**
@@ -219,12 +249,25 @@ function textsOf(slide: any, textElementsOnly = false): string[][] {
  * An image or a video, which has no text at all, and a shape, which
  * ProPresenter marks with info but not as a text element. An empty text box
  * is neither: themes leave them as placeholders, and nothing of it shows.
+ *
+ * Nor is a shape on a slide a theme was applied to. It came with the theme,
+ * like the lower third's band behind the words, and counting it would refuse
+ * every slide of a song that is only being given another theme. Such a slide
+ * says so with the theme's guides, or with an `original_font` on its words
+ * when the theme had no guides: see {@link styleFont}. An empty Pause slide
+ * has no words to carry the font, which is why the guides count as well.
  */
 function otherElements(slide: any): number {
-  return (slide.base_slide?.elements ?? []).filter((w: any) => {
+  const elements: any[] = slide.base_slide?.elements ?? [];
+  const themed =
+    (slide.template_guidelines?.length ?? 0) > 0 ||
+    elements.some((w) =>
+      (w.element?.text?.attributes?.custom_attributes ?? []).some((a: any) => a.original_font)
+    );
+  return elements.filter((w: any) => {
     if (!hasRtf(w)) return true;
     const marked = (w.info ?? 0) !== 0;
-    return marked && !isTextElement(w) && wordsOf(w).length === 0;
+    return !themed && marked && !isTextElement(w) && wordsOf(w).length === 0;
   }).length;
 }
 
@@ -359,10 +402,12 @@ function groupDepth(rtf: string): number {
  * only be guessed at, so it goes.
  *
  * Returns the attribute to stretch, `"drop"`, or undefined when there are
- * none -- decided once per style box, not once per slide.
+ * none -- decided once per style box, not once per slide. An `original_font`
+ * is not one of them: it is written afresh for the new words, see
+ * {@link originalFont}.
  */
 function attributeVerdict(attributes: any, sample: readonly string[]): any {
-  const custom: any[] = attributes?.custom_attributes ?? [];
+  const custom: any[] = (attributes?.custom_attributes ?? []).filter((a: any) => !a.original_font);
   if (custom.length === 0) return undefined;
 
   const joined = sample.join("\n");
@@ -391,6 +436,27 @@ function stretchAttribute(verdict: any, lines: readonly string[]): any[] {
 }
 
 /**
+ * The font a style box set, which ProPresenter records over the words a theme
+ * pours in.
+ *
+ * Its Themes menu writes one `original_font` range across the whole box, and
+ * nothing else in a real library of 476 files carries one, so it is the mark
+ * of a box filled by a theme. The schema keeps it beside `original_font_size`
+ * and `font_scale_factor`, which suggests it is what shrink-to-fit scales
+ * from. A style box that already has one, being a themed slide itself, passes
+ * on the theme's font rather than whatever the box was changed to since.
+ */
+function styleFont(attributes: any): any {
+  return (attributes?.custom_attributes ?? []).find((a: any) => a.original_font)?.original_font ?? attributes?.font;
+}
+
+function originalFont(font: any, lines: readonly string[]): any {
+  const attribute = CustomAttribute.fromObject({ range: { start: 0, end: lines.join("\n").length } }) as any;
+  attribute.original_font = wireCopy(Font, font);
+  return attribute;
+}
+
+/**
  * Point every reference to an old element uuid at its replacement.
  *
  * Builds and visibility links name elements by uuid, so renaming an element
@@ -404,6 +470,15 @@ function remapUuids(node: any, renamed: ReadonlyMap<string, string>): void {
   for (const value of Object.values(node)) remapUuids(value, renamed);
 }
 
+interface StyleBox {
+  /** Which of the target's boxes with words this one takes, counting from 0. */
+  slot: number;
+  rtf: string;
+  /** What {@link attributeVerdict} made of its per-range attributes. */
+  verdict: any;
+  font: any;
+}
+
 /**
  * A style read once for a whole presentation.
  *
@@ -414,45 +489,74 @@ function remapUuids(node: any, renamed: ReadonlyMap<string, string>): void {
 interface PreparedStyle {
   bytes: Uint8Array;
   /** Per element position, for the boxes that take words. */
-  boxes: Map<number, { rtf: string; attributes: any }>;
+  boxes: Map<number, StyleBox>;
+  guidelines: any[];
 }
 
 function prepareStyle(style: SlideStyle): PreparedStyle {
-  const boxes = new Map<number, { rtf: string; attributes: any }>();
+  const boxes = new Map<number, StyleBox>();
   (style.baseSlide.elements ?? []).forEach((wrapper: any, i: number) => {
     if (!isTextElement(wrapper)) return;
     const rtf = decodeRtf(wrapper.element.text.rtf_data);
     const sample = extractLines(rtf).map((l) => l.text);
-    boxes.set(i, { rtf, attributes: attributeVerdict(wrapper.element.text.attributes, sample) });
+    const attributes = wrapper.element.text.attributes;
+    boxes.set(i, {
+      slot: boxes.size,
+      rtf,
+      verdict: attributeVerdict(attributes, sample),
+      font: styleFont(attributes),
+    });
   });
-  return { bytes: Slide.encode(style.baseSlide).finish(), boxes };
+  return {
+    bytes: Slide.encode(style.baseSlide).finish(),
+    boxes,
+    guidelines: style.guidelines ?? style.baseSlide.guidelines ?? [],
+  };
 }
 
-/** The style's slide, rebuilt around one target slide's words. */
-function restyledSlide(target: any, style: PreparedStyle, texts: string[][]): any {
+/**
+ * The style's slide, rebuilt around one target slide's words, in place.
+ *
+ * A box that takes a target box's words takes its uuid too, as ProPresenter
+ * does: it is the same box in a new look, and keeping its identity keeps
+ * anything outside the slide that names it pointing at it. Every other
+ * element copied from the style is new, and gets a fresh one.
+ */
+function restyle(target: any, style: PreparedStyle): void {
   const copy = Slide.decode(style.bytes) as any;
   copy.uuid = target.base_slide?.uuid;
+  // The slide's own guides are the slide's; the style's arrive as the theme's.
+  copy.guidelines = target.base_slide?.guidelines ?? [];
+  const sources = wordBoxes(target);
 
   const renamed = new Map<string, string>();
-  let next = 0;
   (copy.elements ?? []).forEach((wrapper: any, i: number) => {
     const element = wrapper.element;
-    if (element?.uuid?.string) {
-      const fresh = newUuid().string;
-      renamed.set(element.uuid.string, fresh);
-      element.uuid.string = fresh;
-    }
     const box = style.boxes.get(i);
+    const source = box && sources[box.slot];
+    // Only collected here: one remapUuids pass below renames each uuid once,
+    // so a box given the uuid another element had is not renamed again.
+    if (element?.uuid?.string) {
+      renamed.set(element.uuid.string, source?.wrapper.element?.uuid?.string ?? newUuid().string);
+    }
     if (!box) return;
 
-    const words = texts[next++] ?? [];
+    const words = source?.words ?? [];
     element.text.rtf_data = encodeRtf(restyleRtf(box.rtf, words));
-    if (box.attributes) {
-      element.text.attributes.custom_attributes = stretchAttribute(box.attributes, words);
+    const attributes = element.text.attributes;
+    if (attributes) {
+      attributes.custom_attributes = box.verdict ? stretchAttribute(box.verdict, words) : [];
+      if (box.font && words.length > 0) attributes.custom_attributes.push(originalFont(box.font, words));
     }
   });
   remapUuids(copy.elements, renamed);
-  return copy;
+
+  target.base_slide = copy;
+  target.template_guidelines = style.guidelines.map((guide: any) => {
+    const fresh = wireCopy(AlignmentGuide, guide);
+    fresh.uuid = newUuid();
+    return fresh;
+  });
 }
 
 export interface StyleResult {
@@ -482,30 +586,40 @@ export function applyStyle(
   const plan = planStyle(doc, style, options);
   const prepared = prepareStyle(style);
   slidesInOrder(doc).forEach(({ cue }, i) => {
-    if (plan[i].skip) return;
-    const slide = slideOf(cue);
-    slide.base_slide = restyledSlide(slide, prepared, plan[i].texts);
+    if (!plan[i].skip) restyle(slideOf(cue), prepared);
   });
 
   const out = encodePresentation(doc);
-  verify(original, out, plan);
+  verify(original, out, plan, prepared);
   return { bytes: out, plan };
 }
 
 /** The whole cue, for a slide that was meant to be left alone. */
 const wholeCue = (cue: any) => canonicalObject(Cue, cue);
 
-/** The cue with its slide's elements taken out: what restyling must not touch. */
+/**
+ * The cue with its slide's elements and theme guides taken out: what
+ * restyling must not touch.
+ */
 const cueOutsideElements = (cue: any) =>
   canonicalObject(Cue, cue, (o) => {
     for (const a of o.actions ?? []) {
       const presentation = a.slide?.presentation;
-      if (presentation?.base_slide) presentation.base_slide = { uuid: presentation.base_slide.uuid };
+      if (!presentation) continue;
+      const { uuid, guidelines } = presentation.base_slide ?? {};
+      presentation.base_slide = { uuid, guidelines };
+      delete presentation.template_guidelines;
     }
   });
 
-function verify(original: RawDoc, after: Uint8Array, plan: SlidePlan[]): void {
+function verify(original: RawDoc, after: Uint8Array, plan: SlidePlan[], style: PreparedStyle): void {
   const result = decodePresentation(after);
+  // A guide apart from its identity, which is meant to be new on every slide.
+  const placed = (guides: any[] = []) =>
+    JSON.stringify(guides.map((g) => canonicalObject(AlignmentGuide, g, (o) => delete o.uuid)));
+  const styleGuides = placed(style.guidelines);
+  const styleIds = new Set(style.guidelines.map((g: any) => g.uuid?.string));
+  const seenIds = new Set<string>();
   const fail = (what: string, slide?: number) =>
     new StyleError("verifyFailed", slide === undefined ? { what } : { what, slide: String(slide + 1) });
 
@@ -521,8 +635,19 @@ function verify(original: RawDoc, after: Uint8Array, plan: SlidePlan[]): void {
     if (key(cue) !== key(was[i].cue)) throw fail(restyled ? "slideActions" : "untouchedSlide", i);
     if (!restyled) return;
     const slide = slideOf(cue);
-    if (JSON.stringify(textsOf(slide, true)) !== JSON.stringify(plan[i].texts)) {
+    const boxes = wordBoxes(slide, true);
+    if (JSON.stringify(boxes.map((b) => b.words)) !== JSON.stringify(plan[i].texts)) {
       throw fail("words", i);
+    }
+    // Each box with words is the box that held them before, by identity too.
+    const ids = (list: { wrapper: any }[]) => JSON.stringify(list.map((b) => b.wrapper.element?.uuid?.string));
+    if (ids(boxes) !== ids(wordBoxes(slideOf(was[i].cue)))) throw fail("boxIdentity", i);
+    const guides = slide.template_guidelines ?? [];
+    if (placed(guides) !== styleGuides) throw fail("guides", i);
+    for (const g of guides) {
+      const id = g.uuid?.string;
+      if (!id || styleIds.has(id) || seenIds.has(id)) throw fail("guides", i);
+      seenIds.add(id);
     }
     // Text can read back right from a document whose groups no longer close.
     for (const wrapper of slide.base_slide.elements.filter(isTextElement)) {
