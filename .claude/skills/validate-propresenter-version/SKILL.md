@@ -1,47 +1,50 @@
 ---
 name: validate-propresenter-version
-description: Check the core library against a specific ProPresenter release by opening real files in the app itself. Use when asked to validate, verify or test against a new (or older) ProPresenter version, to run the round-trip checks in ProPresenter, or to compare what ProPresenter shows with what the parser reports.
+description: Check the core library against a specific ProPresenter release by opening real files in the app itself. Use when asked to validate, verify or test against a new (or older) ProPresenter version, or to compare what ProPresenter shows with what the parser reports.
 ---
 
 # Validating the core against a ProPresenter version
 
-The test suite proves a file survives decoding and re-encoding. It cannot
-prove that ProPresenter shows what the parser says it shows, or that
-ProPresenter accepts what the core writes. This check covers both, by opening
-real files in the app. The first run, against 20.0.1, found two parser bugs
-the suite had passed for months. Its findings are in the table in
+The test suite proves a file round-trips. This check proves ProPresenter
+shows what the parser reports, and accepts what the core writes. Why that
+matters, and what earlier runs found, is in
 [CONTRIBUTING.md](../../../CONTRIBUTING.md#checked-against-propresenter).
 
-Read AGENTS.md first. Its rules about real libraries apply throughout, and
-everything below assumes them.
+AGENTS.md's rules on real libraries and on writing ProPresenter files apply
+throughout. Read them first.
 
 ## 1. Agree the scope with the user
 
-Ask which version, and which machine's data. Then confirm:
+Ask which version, and which machine's data. Then agree:
 
 - **The apps you may control.** Normally ProPresenter only. Use computer use
   with nothing else granted.
 - **What must not change.** Typically a sample library and a sample playlist.
-  Never modify those, not even to test.
 - **Whether you may delete anything.** For example, a few media-bin entries
   to test an export. Get the number agreed.
+- **Where the backup goes.** A folder the user can find later, e.g.
+  `~/Documents/ProPresenter-backup-<date>`. Not your scratchpad, which goes
+  away with the session.
 
 ## 2. Get the right build
 
-Renewed Vision keeps every macOS build online at
+Renewed Vision serves macOS builds at
 `https://renewedvision.com/downloads/propresenter/mac/ProPresenter_<version>_<build>.zip`.
-Build numbers are in the history of the Homebrew cask:
+The Homebrew cask's history has the build number for each version, and each
+bump commit is titled `propresenter <version>`:
 
 ```bash
-for s in $(gh api "repos/Homebrew/homebrew-cask/commits?path=Casks/p/propresenter.rb&per_page=100" --jq '.[].sha'); do
-  gh api "repos/Homebrew/homebrew-cask/contents/Casks/p/propresenter.rb?ref=$s" --jq .content | base64 -d | grep -E 'version "'
-done | sed 's/^ *//' | sort -u -V
+V=20.0.1
+sha=$(gh api --paginate "repos/Homebrew/homebrew-cask/commits?path=Casks/p/propresenter.rb&per_page=100" \
+  --jq ".[] | select(.commit.message | startswith(\"propresenter $V\n\") or . == \"propresenter $V\") | .sha" | head -1)
+gh api "repos/Homebrew/homebrew-cask/contents/Casks/p/propresenter.rb?ref=$sha" --jq .content | base64 -d | grep "version \"$V,"
 ```
 
-Every ProPresenter version shares one bundle identifier, so two installs on
-one account share settings and the data folder. To keep a second version
-alongside the user's, give it a separate macOS user account with its own copy
-of the data. Never point an older version at data a newer one has saved.
+If the download is gone, ask the user for the installer.
+
+Every version shares one bundle identifier, so a second version needs its own
+macOS user account and its own copy of the data. Never point an older version
+at data a newer one has saved.
 
 Read the release notes (renewedvision.com/propresenter/release-notes) for
 anything touching files, the library, playlists, the media bin, themes,
@@ -51,24 +54,23 @@ arrangements or workspaces. Report those to the user before you start.
 
 The data folder is `applicationShowDirectory` in
 `defaults read com.renewedvision.propresenter`, normally
-`~/Documents/ProPresenter`. Copy everything except `Media` into your
-scratchpad:
+`~/Documents/ProPresenter`. Back up the folders this procedure writes to, and
+check the copy:
 
 ```bash
-B=<scratchpad>/pp-backup
-cd ~/Documents/ProPresenter && cp -Rp Libraries Playlists Themes Configuration Presets "$B"/
-for d in Libraries Playlists Themes Configuration Presets; do diff -rq "$d" "$B/$d"; done
+B=~/Documents/ProPresenter-backup-<date>   # as agreed in step 1
+cd ~/Documents/ProPresenter && mkdir -p "$B" && cp -Rp Libraries Playlists Configuration "$B"/
+for d in Libraries Playlists Configuration; do diff -rq "$d" "$B/$d"; done
 ```
 
-Media is gigabytes and nothing here touches it. Check the copy before going
-on, and tell the user where it is.
+Leave `Media` out. It is gigabytes, and nothing here touches it.
 
 ## 4. Run the suite against the installation
 
-```bash
-PP_LIBRARY_DIR=~/Documents/ProPresenter/Libraries \
-PP_MEDIA_FILE=~/Documents/ProPresenter/Playlists/Media npm test
-```
+Point `PP_LIBRARY_DIR` and `PP_MEDIA_FILE` at the installation's `Libraries`
+and `Playlists/Media`, as
+[CONTRIBUTING.md](../../../CONTRIBUTING.md#testing-against-real-files)
+describes, and run `npm test`.
 
 A test that fails here but passes in CI is a finding, not noise. It can also
 be a test that assumes something about real data. Find out which before
@@ -81,8 +83,9 @@ a title slide, macros and accented text. The MCP server's `read_presentation`
 and `read_media_bin` give the parser's view. A short `npx tsx` script against
 `packages/core/src/lib` works just as well.
 
-- **Slide numbers.** Do they match `slidesInOrder()`? ProPresenter numbers
-  slides in group order, not in the order they are stored.
+- **Slide numbers.** Do they match `slidesInOrder()` in `presentation.ts`?
+  ProPresenter numbers slides in group order, not in the order they are
+  stored.
 - **Text and groups.** Are each slide's text and group names as shown? Use
   the slide grid's text view to read them at full size.
 - **Media kinds.** Are the media bin's videos, images and audio counted the
@@ -91,20 +94,24 @@ and `read_media_bin` give the parser's view. A short `npx tsx` script against
 
 ## 6. Round-trip what the core writes
 
-Each of these goes into the installation as a **new file** with its own
-document uuid and name, such as `Song (Garage style).pro`. Never write over an
-existing `.pro`. Open each one in ProPresenter and check it.
+Write every test file first, then check them all in one ProPresenter
+session. Each one is a **new** file, with its own document uuid and a name
+such as `Song (Garage style).pro`. The functions are in
+`packages/core/src/lib`.
 
-- **Fixer.** Run `planFixes`/`applyFixes` on a copy. The lines should read as
-  promised, and the slide numbers in the plan should match the app's.
-- **Restyle.** Run `applyStyle` with a theme from `themeStyles()` and with
-  another song's slide from `presentationStyle()`. The title slide and macros
-  should be unchanged.
-- **Media Bin export.** Remove the agreed entry with `applyOperations`. The
-  bin should open without it.
+- **Fixer.** Use `planFixes`/`applyFixes` (`fixes.ts`). They write in place
+  by design, under the conditions in AGENTS.md, so point them at a copy, never
+  at the user's file. The lines should read as promised, and the plan's slide
+  numbers should match the app's.
+- **Restyle.** Use `applyStyle` (`style.ts`), once with a theme from
+  `themeStyles()` and once with another song's slide from
+  `presentationStyle()`. The title slide and macros should be unchanged.
+- **Media Bin export.** Remove the agreed entry with `applyOperations`
+  (`operations.ts`). The bin should open without it.
 - **Playlist.** Build one with `presentationEntry`, `headerEntry` and
-  `mediaEntry`, then reorder it, insert into it and rename it. It should open
-  with every entry found, and every other playlist should be unchanged.
+  `mediaEntry` (`playlists.ts`), then reorder it, insert into it and rename
+  it. It should open with every entry found, and every other playlist should
+  be unchanged.
 
 To check a core feature against ProPresenter's own, make two copies of the
 same file:
@@ -116,59 +123,57 @@ same file:
    - the elements, their uuids and `info`;
    - the text attributes and the RTF;
    - everything outside `base_slide`.
-4. Run the fidelity gate on ProPresenter's copy as well. A `lossy` verdict
-   there means ProPresenter wrote a field the schema lacks.
+4. Run the export safety gate (CONTRIBUTING.md) on ProPresenter's copy as
+   well.
+
+### Replacing the playlist files
 
 ProPresenter keeps `Playlists/Library` and `Playlists/Media` in memory and
-writes them when it quits. To replace either one:
+writes them when it quits. To replace them:
 
-1. Quit ProPresenter and confirm the quit dialog.
-2. Check the file still matches the backup.
-3. Copy yours in.
-4. Relaunch.
-5. After the relaunch, check ProPresenter did not rewrite it.
+1. Quit ProPresenter, and confirm the quit dialog.
+2. Check both files still match the backup.
+3. Copy in both replacements together.
+4. Relaunch once.
+5. Check ProPresenter did not rewrite them.
 
 ## 7. Driving ProPresenter
 
-- **Background control first.** The `app_*` tools work while the window is
-  visible, and they reach the menu bar through `app_menu`. Under Stage
-  Manager, a window that is not in front captures as a thumbnail. Ask for
-  full-screen control then, and release it when done.
-- **Right-click menus need full-screen control.** The Themes menu on a slide
-  is one, and background control cannot open it.
+- **Never trigger a slide.** Clicking a slide in Show mode sends it to the
+  output. Switch to Edit mode before selecting slides.
+- **Background first.** The `app_*` tools work while the window is visible,
+  and reach the menu bar through `app_menu`. Ask for full-screen control once,
+  when something needs it, and keep it for the session. Release it at the
+  end. Things that need it:
+  - right-click menus such as a slide's Themes menu;
+  - the launch sheet;
+  - a window that Stage Manager shows only as a thumbnail.
+- **The launch sheet.** "Activate ProPresenter" appears at every launch.
+  "Skip for Now" dismisses it and signs into nothing.
 - **Several monitors.** Full-screen screenshots and clicks go to one monitor,
   which may not be ProPresenter's. The screenshot result names the monitor it
-  captured and lists the others. Use `switch_display` to move to
-  ProPresenter's monitor before clicking. Otherwise the clicks land on another
-  screen's menu bar or desktop.
-- **Stage Manager's strip.** It catches clicks near the screen's left edge. If
-  clicks there do nothing, move ProPresenter's window away from the edge.
-- **The launch prompt.** An "Activate ProPresenter" sheet appears at every
-  launch. "Skip for Now" dismisses it and signs into nothing. It needs
-  full-screen control.
+  captured and lists the others. Run `switch_display` once at the start to
+  move to ProPresenter's.
+- **Stage Manager's strip.** It catches clicks near the screen's left edge.
+  If clicks there do nothing, move the window away from the edge.
 - **Library rows.** Clicking a row's name can start a rename. Click the row's
   icon instead, and press Escape if a text cursor appears.
 - **The library filter.** It only takes typing when it already has focus.
-- **Slides.** Clicking a slide in Show mode sends it to the output. Switch to
-  Edit mode before selecting slides, and never trigger one.
-- **Locked screen.** If the Mac is locked, a full-screen approval times out.
-  Stop and ask the user to unlock it rather than retrying.
-- **When a step will not drive.** If one UI step keeps failing, ask the user to
-  do just that step, and to say when it is done. Then confirm from the file's
-  modification time that ProPresenter saved before you read it. The check
-  depends on the file, not on who clicked.
+- **A locked screen.** A full-screen approval times out. Ask the user to
+  unlock it rather than retrying.
+- **A step that will not drive.** Ask the user to do just that step, and to
+  say when it is done. Then confirm from the file's modification time that
+  ProPresenter saved before you read it.
 
 ## 8. Restore and record
 
 1. Quit ProPresenter.
 2. Restore everything that differs from the backup, including
    `Libraries/LibraryData`, ProPresenter's own index.
-3. Move your test copies to `~/.Trash`.
+3. Move your test copies to `~/.Trash`, unless the user wants them kept for
+   the next version.
 4. Relaunch, and confirm `diff -rq` against the backup is clean.
 
-Unless the user wants the test files kept, for example to check them again in
-the next version.
-
 Add a row to the table in CONTRIBUTING.md: the version, the date, what was
-checked, and what turned up. Fix any parser bugs you found with tests, using
-synthetic fixtures and real files only through the environment variables.
+checked, and what turned up. Fix any parser bugs you found with tests that
+follow AGENTS.md.

@@ -178,28 +178,20 @@ having left every untouched box alone.
 
 ## Checked against ProPresenter
 
-The suite proves a file survives decoding and re-encoding. It cannot prove
-that ProPresenter shows what the parser says it shows, or that it accepts what
-the core writes. That takes opening real files in the app.
+The suite proves a file round-trips. It cannot prove that ProPresenter shows
+what the parser reports, or accepts what the core writes. That takes opening
+real files in the app. The first such check found two bugs the suite had
+passed for months.
 
-The first such check found two bugs the suite had passed for months. Slides
-were numbered in storage order, and a whole media bin was read as audio.
-
-[`.claude/skills/validate-propresenter-version`](.claude/skills/validate-propresenter-version/SKILL.md)
-is the procedure. Coding agents load it when asked to validate a version, and
-it reads just as well for a person. It covers:
-- getting any build;
-- backing up first;
-- what to compare;
-- driving the app;
-- restoring afterwards.
-
-Add a row here each time it is run:
+The procedure is a project skill,
+[`.claude/skills/validate-propresenter-version`](.claude/skills/validate-propresenter-version/SKILL.md).
+Coding agents load it when asked to validate a version, and it reads as well
+for a person. Each run adds a row here:
 
 | ProPresenter | Date | Checked | Found |
 | --- | --- | --- | --- |
-| 21.4.2 | before 2026-10 | Fidelity gate over a real library | Every file `identical` |
-| 20.0.1 (macOS) | 2026-10-24 | Suite against an installation. In the app: slide numbering and text, media-bin kinds, a fixer run, three restyles, a Media Bin export and a built playlist | Slides stored out of display order (fixed in #23). Every media-bin action typed as audio, while the elements said video or image (fixed in #23). Every file `identical` |
+| 21.4.2 | unknown | Export safety gate over a real library; not opened in the app | Every file `identical` |
+| 20.0.1 (macOS) | 2026-10-24 | The full procedure | Slides were numbered in storage order, not display order. A media bin's actions were all typed as audio. Both fixed in #23. Every file `identical` |
 
 ## Things that will bite you
 
