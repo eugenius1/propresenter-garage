@@ -39,7 +39,7 @@ published, so this uses the reverse-engineered definitions from
 (MIT), vendored in `proto/`.
 
 `npm run protos:update [ref]` re-vendors from upstream and records the exact
-commit in [`proto/PROVENANCE.json`](proto/PROVENANCE.json), which the build
+commit in [`packages/core/proto/PROVENANCE.json`](packages/core/proto/PROVENANCE.json), which the build
 threads into the interface — the footer names the commit, so a reported
 problem can be tied to an exact set of definitions. The update prints
 an added/removed summary, and the resulting diff is reviewable before you
@@ -129,7 +129,7 @@ result is one of:
 | `lossy` | Decoded content differs. Something is uncovered by the schema; writing this file back could corrupt it. |
 
 Real files from ProPresenter 20.0.1 and 21.4.2 verify as `identical` (see
-[Checked against ProPresenter](#checked-against-propresenter)): the strongest
+[docs/propresenter-versions.md](docs/propresenter-versions.md)): the strongest
 result the gate gives, and the evidence that a write path is viable at all. Any write path must refuse to touch a file rated
 `lossy`, and must check the file in front of it rather than trusting that the
 corpus checked out once — `checkTypeFidelity()` takes the message type, so a
@@ -183,16 +183,16 @@ what the parser reports, or accepts what the core writes. That takes opening
 real files in the app. The first such check found two bugs the suite had
 passed for months.
 
-The procedure is a project skill,
-[`.claude/skills/validate-propresenter-version`](.claude/skills/validate-propresenter-version/SKILL.md).
-Coding agents load it when asked to validate a version, and it reads as well
-for a person. Each run adds a row here:
+The procedure is the
+[`validate-propresenter-version`](.agents/skills/validate-propresenter-version/SKILL.md)
+skill. Coding agents load it when asked to validate a version, and it reads
+as well for a person. Skills live in `.agents/skills`, a home not tied to one tool,
+and `.claude/skills` is a symlink to it so that Claude Code finds them too.
+Add new skills under `.agents/skills`.
 
-| ProPresenter | Date | Checked | Found |
-| --- | --- | --- | --- |
-| 21.4.2 | 2026-09-11 | Export safety gate over a real library; not opened in the app | Every file `identical` |
-| 20.0.1 (macOS) | 2026-10-24 | The full procedure | Slides were numbered in storage order, not display order. A media bin's actions were all typed as audio. Both fixed in #23. Every file `identical` |
-| 20.0.1 (macOS) | 2026-10-27 | `applyStyle` against ProPresenter's own Themes menu, field by field, on one song | The words box keeps the slide's element uuid. A theme's guides go to `template_guidelines`. The words carry an `original_font` range. All three now matched in #36 |
+What each version was checked for, and what turned up, is in
+[docs/propresenter-versions.md](docs/propresenter-versions.md). Each run adds
+its own entry there.
 
 ## Things that will bite you
 

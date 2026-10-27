@@ -7,8 +7,9 @@ description: Check the core library against a specific ProPresenter release by o
 
 The test suite proves a file round-trips. This check proves ProPresenter
 shows what the parser reports, and accepts what the core writes. Why that
-matters, and what earlier runs found, is in
-[CONTRIBUTING.md](../../../CONTRIBUTING.md#checked-against-propresenter).
+matters is in [CONTRIBUTING.md](../../../CONTRIBUTING.md#checked-against-propresenter),
+and what earlier runs found is in
+[docs/propresenter-versions.md](../../../docs/propresenter-versions.md).
 
 AGENTS.md's rules on real libraries and on writing ProPresenter files apply
 throughout. Read them first.
@@ -39,20 +40,6 @@ building one. The names follow no single pattern:
 - **Windows can differ from macOS.** It may have its own patch release and
   build, e.g. 21.4.2 on Windows against 21.4 on macOS.
 - **Gaps.** A few old versions have no download for one platform.
-
-Homebrew's `propresenter` cask only installs the current release, plus fixed
-older builds for old macOS versions. Its git history has every macOS build
-number from 7.13.2 on, should the page be down:
-
-```bash
-gh api --paginate "repos/Homebrew/homebrew-cask/commits?path=Casks/p/propresenter.rb&per_page=100" \
-  --jq '.[] | select(.commit.message | test("^propresenter [0-9]")) | "\(.sha) \(.commit.message | split("\n")[0] | sub("^propresenter ";""))"' |
-  head -10 | while read sha v; do
-    b=$(gh api "repos/Homebrew/homebrew-cask/contents/Casks/p/propresenter.rb?ref=$sha" --jq .content |
-      base64 -d | grep -oE "version \"$v,[0-9]+\"" | head -1 | sed -E 's/.*,([0-9]+)"/\1/')
-    echo "$v $b https://renewedvision.com/downloads/propresenter/mac/ProPresenter_${v}_${b}.zip"
-  done
-```
 
 If the download is gone, ask the user for the installer.
 
@@ -226,7 +213,9 @@ writes them when it quits. To replace them:
    the next version.
 4. Relaunch, and confirm `diff -rq` against the backup is clean.
 
-Add a row to the table in CONTRIBUTING.md: the version, the date, what was
+Add an entry to
+[docs/propresenter-versions.md](../../../docs/propresenter-versions.md) under
+the version's heading, adding the heading if it is new: the date, what was
 checked, and what turned up. Fix any parser bugs you found with tests that
 follow AGENTS.md.
 
