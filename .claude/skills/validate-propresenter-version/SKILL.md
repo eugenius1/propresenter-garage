@@ -28,19 +28,21 @@ Ask which version, and which machine's data. Then agree:
 
 ## 2. Get the right build
 
-Renewed Vision serves macOS builds at
-`https://renewedvision.com/downloads/propresenter/mac/ProPresenter_<version>_<build>.zip`.
-The Homebrew cask's history has the build number for each version, and each
-bump commit is titled `propresenter <version>`:
+Renewed Vision's download page,
+https://renewedvision.com/propresenter/download, lists every version back to
+7.0 for both platforms, with links. Take the link from the page rather than
+building one. The names follow no single pattern:
 
-```bash
-V=20.0.1
-sha=$(gh api --paginate "repos/Homebrew/homebrew-cask/commits?path=Casks/p/propresenter.rb&per_page=100" \
-  --jq ".[] | select(.commit.message | startswith(\"propresenter $V\n\") or . == \"propresenter $V\") | .sha" | head -1)
-gh api "repos/Homebrew/homebrew-cask/contents/Casks/p/propresenter.rb?ref=$sha" --jq .content | base64 -d | grep "version \"$V,"
-```
+- **macOS:** `mac/ProPresenter_<version>_<build>.zip`.
+- **Windows:** `win/ProPresenter_<version>_<build>-Setup.exe` from 7.12 on,
+  and `win/ProPresenter7.<x>.<y>_<build>-Setup.exe` before that.
+- **Windows can differ from macOS.** It may have its own patch release and
+  build, e.g. 21.4.2 on Windows against 21.4 on macOS.
+- **Gaps.** A few old versions have no download for one platform.
 
-To list the latest versions instead, with each one's build and download:
+Homebrew's `propresenter` cask only installs the current release, plus fixed
+older builds for old macOS versions. Its git history has every macOS build
+number from 7.13.2 on, should the page be down:
 
 ```bash
 gh api --paginate "repos/Homebrew/homebrew-cask/commits?path=Casks/p/propresenter.rb&per_page=100" \
@@ -54,9 +56,12 @@ gh api --paginate "repos/Homebrew/homebrew-cask/commits?path=Casks/p/propresente
 
 If the download is gone, ask the user for the installer.
 
-Every version shares one bundle identifier, so a second version needs its own
-macOS user account and its own copy of the data. Never point an older version
-at data a newer one has saved.
+On macOS, every version shares one bundle identifier, so a second version
+needs its own macOS user account and its own copy of the data. On Windows,
+the installer most likely replaces the version already there, so plan on a
+separate machine or virtual machine. That has not been tried yet; record what
+works. On either platform, never point an older version at data a newer one
+has saved.
 
 Read the release notes (renewedvision.com/propresenter/release-notes) for
 anything touching files, the library, playlists, the media bin, themes,
@@ -94,9 +99,18 @@ changing anything.
 ## 5. Read what ProPresenter shows
 
 Compare the parser with the app on a few files. Choose songs with sections,
-a title slide, macros and accented text. The MCP server's `read_presentation`
-and `read_media_bin` give the parser's view. A short `npx tsx` script against
-`packages/core/src/lib` works just as well.
+a title slide, macros and accented text.
+
+For the parser's view, use the project's MCP server when it is connected
+(see `packages/mcp/README.md`). It needs no script:
+
+- `read_presentation` numbers slides as ProPresenter does;
+- `read_media_bin` reads the media bin;
+- `check_presentations` runs the checks.
+
+It has no tool yet for presentation playlists, themes, the dry-run plans
+(`planStyle`, `planFixes`) or anything that writes. Use a short `npx tsx`
+script against `packages/core/src/lib` for those.
 
 - **Slide numbers.** Do they match `slidesInOrder()` in `presentation.ts`?
   ProPresenter numbers slides in group order, not in the order they are
