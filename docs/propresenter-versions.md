@@ -8,7 +8,9 @@ version first.
 
 ## 21.4.2
 
-**2026-09-11, platform not recorded.** Export safety gate over a real library; not opened in the app.
+**2026-09-11, Windows.** Export safety gate over a real library; not opened
+in the app. The date is when the result was recorded; the run itself was
+not dated.
 
 - Every file `identical`.
 
