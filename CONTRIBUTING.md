@@ -128,8 +128,9 @@ result is one of:
 | `equivalent` | Bytes differ, decoded content does not — the original was encoded non-canonically. Nothing would be lost. |
 | `lossy` | Decoded content differs. Something is uncovered by the schema; writing this file back could corrupt it. |
 
-Real ProPresenter 21.4.2 files verify as `identical`, which is what makes a
-write path viable at all. Any write path must refuse to touch a file rated
+Real files from ProPresenter 20.0.1 and 21.4.2 verify as `identical` (see
+[Checked against ProPresenter](#checked-against-propresenter)), which is what
+makes a write path viable at all. Any write path must refuse to touch a file rated
 `lossy`, and must check the file in front of it rather than trusting that the
 corpus checked out once — `checkTypeFidelity()` takes the message type, so a
 presentation goes through the same gate as a playlist.
@@ -174,6 +175,31 @@ minutes where the work itself takes seconds.
 `packages/core/src/lib/__tests__/fixes.test.ts` then runs the real thing: every findable
 problem in every file fixed, read back, and checked both for being gone and for
 having left every untouched box alone.
+
+## Checked against ProPresenter
+
+The suite proves a file survives decoding and re-encoding. It cannot prove
+that ProPresenter shows what the parser says it shows, or that it accepts what
+the core writes. That takes opening real files in the app.
+
+The first such check found two bugs the suite had passed for months. Slides
+were numbered in storage order, and a whole media bin was read as audio.
+
+[`.claude/skills/validate-propresenter-version`](.claude/skills/validate-propresenter-version/SKILL.md)
+is the procedure. Coding agents load it when asked to validate a version, and
+it reads just as well for a person. It covers:
+- getting any build;
+- backing up first;
+- what to compare;
+- driving the app;
+- restoring afterwards.
+
+Add a row here each time it is run:
+
+| ProPresenter | Date | Checked | Found |
+| --- | --- | --- | --- |
+| 21.4.2 | before 2026-10 | Fidelity gate over a real library | Every file `identical` |
+| 20.0.1 (macOS) | 2026-10-24 | Suite against an installation. In the app: slide numbering and text, media-bin kinds, a fixer run, three restyles, a Media Bin export and a built playlist | Slides stored out of display order (fixed in #23). Every media-bin action typed as audio, while the elements said video or image (fixed in #23). Every file `identical` |
 
 ## Things that will bite you
 
