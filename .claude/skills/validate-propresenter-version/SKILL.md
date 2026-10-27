@@ -40,6 +40,18 @@ sha=$(gh api --paginate "repos/Homebrew/homebrew-cask/commits?path=Casks/p/propr
 gh api "repos/Homebrew/homebrew-cask/contents/Casks/p/propresenter.rb?ref=$sha" --jq .content | base64 -d | grep "version \"$V,"
 ```
 
+To list the latest versions instead, with each one's build and download:
+
+```bash
+gh api --paginate "repos/Homebrew/homebrew-cask/commits?path=Casks/p/propresenter.rb&per_page=100" \
+  --jq '.[] | select(.commit.message | test("^propresenter [0-9]")) | "\(.sha) \(.commit.message | split("\n")[0] | sub("^propresenter ";""))"' |
+  head -10 | while read sha v; do
+    b=$(gh api "repos/Homebrew/homebrew-cask/contents/Casks/p/propresenter.rb?ref=$sha" --jq .content |
+      base64 -d | grep -oE "version \"$v,[0-9]+\"" | head -1 | sed -E 's/.*,([0-9]+)"/\1/')
+    echo "$v $b https://renewedvision.com/downloads/propresenter/mac/ProPresenter_${v}_${b}.zip"
+  done
+```
+
 If the download is gone, ask the user for the installer.
 
 Every version shares one bundle identifier, so a second version needs its own
@@ -172,13 +184,15 @@ writes them when it quits. To replace them:
   - right-click menus such as a slide's Themes menu;
   - the launch sheet;
   - a window that Stage Manager shows only as a thumbnail.
-- **The launch sheet.** "Activate ProPresenter" appears at every launch.
-  "Skip for Now" dismisses it and signs into nothing.
+- **The launch sheet.** On an installation that is not activated,
+  "Activate ProPresenter" appears at every launch. "Skip for Now" dismisses it
+  and signs into nothing.
 - **Several monitors.** Full-screen screenshots and clicks go to one monitor,
   which may not be ProPresenter's. The screenshot result names the monitor it
   captured and lists the others. Run `switch_display` once at the start to
   move to ProPresenter's.
-- **Stage Manager's strip.** It catches clicks near the screen's left edge.
+- **Stage Manager's strip (macOS).** It catches clicks near the screen's left
+  edge.
   If clicks there do nothing, move the window away from the edge.
 - **Library rows.** Clicking a row's name can start a rename. Click the row's
   icon instead, and press Escape if a text cursor appears.
@@ -201,3 +215,17 @@ writes them when it quits. To replace them:
 Add a row to the table in CONTRIBUTING.md: the version, the date, what was
 checked, and what turned up. Fix any parser bugs you found with tests that
 follow AGENTS.md.
+
+## Keep this skill current
+
+Improve this file as part of the run whenever it was wrong, incomplete or
+slower than it needed to be. In particular:
+
+- **ProPresenter behaving differently by version.** A new prompt, a moved
+  menu, a different save behaviour, a new data-folder layout. Name the
+  version it applies to, so an older run is not misled.
+- **New core functionality.** Anything that writes or builds a file needs a
+  round-trip in step 6, and anything that reads one needs a comparison in
+  step 5.
+- **Lessons from driving the app.** Anything that cost time to work out, and
+  whether it is specific to macOS or Windows.
