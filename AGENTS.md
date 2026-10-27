@@ -34,7 +34,7 @@ explaining the reasoning and what went wrong — not a changelog line.
 ## Never commit somebody's ProPresenter library
 
 Real `.pro` files, media-bin playlists and media folders are personal data and
-stay out of the repository. `packages/web/public/__dev-*` is gitignored for
+stay out of the repository. `apps/web/public/__dev-*` is gitignored for
 exactly this; put development copies there and nowhere else. If you add
 fixtures for a manual check, delete them before committing.
 
@@ -67,4 +67,4 @@ that keeps fewer of them, and do not quietly drop one from this one:
    saying anything else is not written.
 
 `applyFixes()` in `packages/core/src/lib/fixes.ts` enforces 1 and 4 and cannot
-be bypassed; 2 and 3 live in `packages/web/src/tools/Presentations.tsx`.
+be bypassed; 2 and 3 live in `apps/web/src/tools/Presentations.tsx`.

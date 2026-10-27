@@ -31,7 +31,7 @@ fs.writeFileSync(path.join(stage, "manifest.json"), JSON.stringify({ ...manifest
 fs.copyFileSync(server, path.join(stage, manifest.server.entry_point));
 fs.copyFileSync("LICENSE", path.join(stage, "LICENSE"));
 // The app's icon, so the extension looks like the same product.
-fs.copyFileSync("../web/public/icon-512.png", path.join(stage, manifest.icon));
+fs.copyFileSync("../../apps/web/public/icon-512.png", path.join(stage, manifest.icon));
 
 if (!(await packExtension({ extensionPath: stage, outputPath: output, silent: false }))) process.exit(1);
 console.log(`pack-mcpb -> ${output}`);

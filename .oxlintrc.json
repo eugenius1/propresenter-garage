@@ -17,7 +17,7 @@
   "overrides": [
     {
       "files": [
-        "packages/web/src/i18n/provider.tsx"
+        "apps/web/src/i18n/provider.tsx"
       ],
       "rules": {
         "react/only-export-components": "off"

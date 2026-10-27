@@ -1,7 +1,8 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import fsp from "node:fs/promises";
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { syntheticMediaFile, syntheticTextPresentation, SYNTHETIC } from "@propresenter-garage/core/lib/__tests__/synthetic";
@@ -11,7 +12,7 @@ import { applyOperations } from "@propresenter-garage/core/lib/operations";
 import { decodePlaylistsDocument, headerEntry, mediaEntry, presentationEntry } from "@propresenter-garage/core/lib/playlists";
 import { decodePresentation, encodePresentation, slidesInOrder } from "@propresenter-garage/core/lib/presentation";
 import { syntheticPresentationFile } from "@propresenter-garage/core/lib/__tests__/synthetic";
-import { openRoots, readFoundFile, resolveInRoots } from "../library";
+import { findPresentations, openRoots, readFoundFile, readLibraryFile, resolveInRoots } from "../library";
 import { createServer } from "../server";
 import { auditMediaBin } from "../tools";
 
@@ -36,6 +37,36 @@ async function connect(roots: string[]) {
   return { client, call };
 }
 
+/**
+ * What this machine lets the fixtures do, probed once before any test is
+ * collected so a test can skip itself. Root reads a file whatever its mode,
+ * and Windows has no unreadable mode at all; Windows also refuses to make a
+ * symlink without a privilege most accounts lack. A fixture the machine cannot
+ * make is left out rather than made and quietly not doing its job.
+ */
+const can = (() => {
+  const probe = fs.mkdtempSync(path.join(os.tmpdir(), "pp-mcp-probe-"));
+  const file = path.join(probe, "probe");
+  fs.writeFileSync(file, "");
+  fs.chmodSync(file, 0o000);
+  let lock = true;
+  try {
+    fs.readFileSync(file);
+    lock = false;
+  } catch {
+    // Refused, as wanted.
+  }
+  fs.chmodSync(file, 0o644);
+  let symlink = true;
+  try {
+    fs.symlinkSync(file, path.join(probe, "link"));
+  } catch {
+    symlink = false;
+  }
+  fs.rmSync(probe, { recursive: true, force: true });
+  return { lock, symlink };
+})();
+
 let tmp: string;
 let library: string;
 let client: Client;
@@ -56,20 +87,22 @@ beforeAll(async () => {
   const Presentation = messageType("rv.data.Presentation");
   fs.writeFileSync(path.join(songs, "Clean.pro"), Presentation.encode(Presentation.fromObject({ name: "Clean" })).finish());
   // One the walk finds but cannot open.
-  fs.writeFileSync(path.join(songs, "Locked.pro"), syntheticTextPresentation("Locked"));
-  fs.chmodSync(path.join(songs, "Locked.pro"), 0o000);
+  if (can.lock) {
+    fs.writeFileSync(path.join(songs, "Locked.pro"), syntheticTextPresentation("Locked"));
+    fs.chmodSync(path.join(songs, "Locked.pro"), 0o000);
+  }
   fs.writeFileSync(path.join(library, "Playlists", "Media"), syntheticMediaFile());
 
   // Outside the library, and a link inside it pointing there.
   fs.writeFileSync(path.join(tmp, "secret.txt"), "not yours");
-  fs.symlinkSync(path.join(tmp, "secret.txt"), path.join(songs, "escape.pro"));
+  if (can.symlink) fs.symlinkSync(path.join(tmp, "secret.txt"), path.join(songs, "escape.pro"));
 
   ({ client, call } = await connect([library]));
 });
 
 afterAll(async () => {
   await client?.close();
-  fs.chmodSync(path.join(library, "Libraries", "Default", "Locked.pro"), 0o644);
+  if (can.lock) fs.chmodSync(path.join(library, "Libraries", "Default", "Locked.pro"), 0o644);
   fs.rmSync(tmp, { recursive: true, force: true });
 });
 
@@ -136,7 +169,7 @@ describe("read_presentation", () => {
     expect(result.text).toMatch(/ChordPro/);
   });
 
-  it("refuses a symlink that leads out of the library", async () => {
+  it.skipIf(!can.symlink)("refuses a symlink that leads out of the library", async () => {
     const result = await call("read_presentation", { path: "Libraries/Default/escape.pro" });
     expect(result.isError).toBe(true);
     expect(result.text).toMatch(/Outside/);
@@ -159,7 +192,9 @@ describe("search_text", () => {
     const result = (await call("search_text", { query: "TIDY" })).json();
     expect(result.matches).toHaveLength(2);
     expect(result.matches[0]).toMatchObject({ slideIndex: 0, boxIndex: 0, lineIndex: 0, text: "A tidy line" });
-    expect(result.unreadable.map((p: string) => path.basename(p))).toEqual(["Chords.pro", "Locked.pro"]);
+    expect(result.unreadable.map((p: string) => path.basename(p))).toEqual(
+      can.lock ? ["Chords.pro", "Locked.pro"] : ["Chords.pro"]
+    );
   });
 
   it("stops at the limit and says so", async () => {
@@ -168,8 +203,8 @@ describe("search_text", () => {
     expect(result.truncated).toBe(true);
     // Counts the files it got through, up to the one holding the match it
     // stopped at -- here the last, after the chord chart, the clean file and
-    // the locked one.
-    expect(result.filesSearched).toBe(5);
+    // the locked one, where this machine can lock one.
+    expect(result.filesSearched).toBe(can.lock ? 5 : 4);
   });
 
   it("refuses a file passed as the folder rather than finding nothing", async () => {
@@ -203,7 +238,7 @@ describe("check_presentations", () => {
     );
     expect(byName["Checked Song.pro"].issues.length).toBeGreaterThan(0);
     expect(byName["Chords.pro"].error).toMatch(/ChordPro/);
-    expect(byName["Locked.pro"].error).toMatch(/Could not read/);
+    if (can.lock) expect(byName["Locked.pro"].error).toMatch(/Could not read/);
     expect(byName["Clean.pro"]).toBeUndefined();
   });
 
@@ -250,7 +285,7 @@ describe("openRoots", () => {
 });
 
 describe("resolveInRoots", () => {
-  it("tries a relative path against every root, not just the first", async () => {
+  it.skipIf(!can.symlink)("tries a relative path against every root, not just the first", async () => {
     const first = path.join(tmp, "first");
     fs.mkdirSync(first, { recursive: true });
     fs.symlinkSync(tmp, path.join(first, "Libraries"));
@@ -269,7 +304,7 @@ describe("resolveInRoots", () => {
 });
 
 describe("readFoundFile", () => {
-  it("refuses a symlink rather than following it", async () => {
+  it.skipIf(!can.symlink)("refuses a symlink rather than following it", async () => {
     await expect(readFoundFile(path.join(library, "Libraries", "Default", "escape.pro"))).rejects.toThrow(
       /Could not read/
     );
@@ -277,6 +312,92 @@ describe("readFoundFile", () => {
 
   it("refuses a folder", async () => {
     await expect(readFoundFile(library)).rejects.toThrow(/Not a file|Could not read/);
+  });
+});
+
+describe.skipIf(!can.symlink)("a folder swapped for a symlink mid-read", () => {
+  // A real race cannot be timed in a test, so each one steps in through a spy
+  // at the moment the code has to catch: after a path was found, before it is
+  // used.
+  let root: string;
+  let inner: string;
+  let outside: string;
+
+  const swap = () => {
+    fs.renameSync(inner, `${inner}-moved`);
+    fs.symlinkSync(outside, inner);
+  };
+  const unswap = () => {
+    fs.rmSync(inner);
+    fs.renameSync(`${inner}-moved`, inner);
+  };
+
+  beforeAll(() => {
+    const base = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "pp-mcp-swap-")));
+    root = path.join(base, "library");
+    inner = path.join(root, "Inner");
+    outside = path.join(base, "outside");
+    fs.mkdirSync(inner, { recursive: true });
+    fs.mkdirSync(outside);
+    fs.writeFileSync(path.join(inner, "Song.pro"), "inside");
+    fs.writeFileSync(path.join(outside, "Song.pro"), "outside");
+    fs.writeFileSync(path.join(outside, "Leak.pro"), "outside");
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    if (fs.lstatSync(inner).isSymbolicLink()) unswap();
+  });
+
+  afterAll(() => fs.rmSync(path.dirname(root), { recursive: true, force: true }));
+
+  it("does not list a queued folder that has become a symlink", async () => {
+    const readdir = fsp.readdir;
+    vi.spyOn(fsp, "readdir").mockImplementation((async (dir: string, options: never) => {
+      const entries = await readdir(dir, options);
+      if (dir === root) swap();
+      return entries;
+    }) as typeof fsp.readdir);
+
+    const { files } = await findPresentations([root]);
+    expect(files).toEqual([]);
+  });
+
+  it("refuses a file whose folder became a symlink before it was opened", async () => {
+    const open = fsp.open;
+    vi.spyOn(fsp, "open").mockImplementation(async (...args: Parameters<typeof fsp.open>) => {
+      swap();
+      return open(...args);
+    });
+
+    await expect(readLibraryFile([root], "Inner/Song.pro")).rejects.toThrow(/reached through a symlink/);
+  });
+
+  it("refuses a file whose folder was a symlink only while it was opened", async () => {
+    const open = fsp.open;
+    vi.spyOn(fsp, "open").mockImplementation(async (...args: Parameters<typeof fsp.open>) => {
+      swap();
+      const handle = await open(...args);
+      unswap();
+      return handle;
+    });
+
+    await expect(readLibraryFile([root], "Inner/Song.pro")).rejects.toThrow(/changed while being opened/);
+  });
+
+  it("reads the same file when nothing moves", async () => {
+    const { bytes } = await readLibraryFile([root], "Inner/Song.pro");
+    expect(new TextDecoder().decode(bytes)).toBe("inside");
+  });
+});
+
+describe("findPresentations", () => {
+  it("stops at the folder cap even with no presentation found", async () => {
+    // The library itself, capped at one folder: the root is listed, and the
+    // folders it queued are not.
+    const { files, truncated } = await findPresentations([library], 1);
+    expect(files).toEqual([]);
+    expect(truncated).toBe(true);
   });
 });
 
@@ -521,7 +642,7 @@ describe("playlists and themes", () => {
     expect(unreadable).toEqual([expect.objectContaining({ path: path.join(show, "Themes", "Broken", "Theme") })]);
   });
 
-  it("does not list themes a symlinked Themes folder leads out to", async () => {
+  it.skipIf(!can.symlink)("does not list themes a symlinked Themes folder leads out to", async () => {
     const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "pp-mcp-linked-")));
     fs.symlinkSync(path.join(show, "Themes"), path.join(root, "Themes"));
     const linked = await connect([root]);
