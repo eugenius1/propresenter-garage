@@ -1,10 +1,30 @@
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { examine } from "@propresenter-garage/core/lib/fixes";
 import { isPresentationFile } from "@propresenter-garage/core/lib/folder";
 import { auditLibrary } from "@propresenter-garage/core/lib/audit";
-import { DecodeError, type Fidelity } from "@propresenter-garage/core/lib/decode";
+import { checkFidelity, DecodeError, enumLabel, type Fidelity } from "@propresenter-garage/core/lib/decode";
 import { loadMediaBytes } from "@propresenter-garage/core/lib/loadFile";
-import { itemLabel, itemPath, type MediaItem } from "@propresenter-garage/core/lib/model";
+import {
+  applicationInfo,
+  itemLabel,
+  itemPath,
+  LOCAL_ROOT,
+  rawChildren,
+  rawItems,
+  type MediaItem,
+} from "@propresenter-garage/core/lib/model";
+import { decodePlaylistsDocument } from "@propresenter-garage/core/lib/playlists";
+import {
+  planStyle,
+  presentationStyle,
+  StyleError,
+  styleSlots,
+  themeStyles,
+  type SkipReason,
+  type SlideStyle,
+  type StyleOptions,
+} from "@propresenter-garage/core/lib/style";
 import {
   checkPresentationFidelity,
   hasText,
@@ -21,7 +41,9 @@ import { fold } from "@propresenter-garage/core/lib/search";
 import { createI18n } from "@propresenter-garage/core/i18n/core";
 import {
   findMediaBin,
+  findPlaylists,
   findPresentations,
+  findThemes,
   isFile,
   LibraryError,
   readFoundFile,
@@ -401,20 +423,44 @@ export async function checkPresentations(
   return result;
 }
 
-async function loadMediaBin(roots: readonly string[], file: string | undefined) {
-  const target = file ?? (await findMediaBin(roots));
-  if (!target) {
-    throw new LibraryError("No media bin found. Pass the path of the `Media` file inside ProPresenter's `Playlists` folder.");
-  }
+/**
+ * A playlist document of the show folder, found where ProPresenter keeps it
+ * unless the caller names one, and decoded.
+ *
+ * `bytes` is handed back as well, for the fidelity check that is made on the
+ * file as it was read, and `target`, the path before symlinks were resolved.
+ */
+async function loadPlaylistFile<T>(
+  roots: readonly string[],
+  file: string | undefined,
+  find: (roots: readonly string[]) => Promise<string | undefined>,
+  missing: string,
+  what: string,
+  decode: (name: string, bytes: Uint8Array) => T
+) {
+  const target = file ?? (await find(roots));
+  if (!target) throw new LibraryError(missing);
   const { path: real, bytes } = await readLibraryFile(roots, target);
   try {
-    return { path: real, loaded: loadMediaBytes(path.basename(real), bytes) };
+    return { path: real, target, bytes, decoded: decode(path.basename(real), bytes) };
   } catch (e) {
     if (e instanceof DecodeError) {
-      throw new LibraryError(`${target}: not a ProPresenter media bin (${e.code}).`);
+      throw new LibraryError(`${target}: not ${what} (${e.code}).`);
     }
     throw e;
   }
+}
+
+async function loadMediaBin(roots: readonly string[], file: string | undefined) {
+  const { path: real, decoded } = await loadPlaylistFile(
+    roots,
+    file,
+    findMediaBin,
+    "No media bin found. Pass the path of the `Media` file inside ProPresenter's `Playlists` folder.",
+    "a ProPresenter media bin",
+    loadMediaBytes
+  );
+  return { path: real, loaded: decoded };
 }
 
 function compactItem(item: MediaItem) {
@@ -475,5 +521,281 @@ export async function auditMediaBin(roots: readonly string[], file?: string) {
     absolutePathRoots: audit.absolutePathRoots,
     hiddenItems: audit.hiddenItems.map(located),
     nameMismatches: audit.nameMismatches.map((m) => ({ ...located(m.item), filename: m.filename })),
+  };
+}
+
+/** One entry of a presentation playlist, cut down to what says what it plays. */
+export interface PlaylistEntry {
+  kind: "presentation" | "header" | "media" | "cue" | "placeholder" | "planningCenter" | "other";
+  name: string;
+  /** Absolute where the entry says where it is; else as stored. */
+  file?: string;
+  /** The arrangement a presentation entry plays, when it names one. */
+  arrangement?: string;
+}
+
+/**
+ * The path a URL's `absolute_string` names: a Mac's file URL decoded, a
+ * Windows path as it is. Nothing for a URL that does not parse, so the
+ * stored relative path is used instead.
+ */
+function absolutePathOf(url: any): string | undefined {
+  const absolute: string | undefined = url?.absolute_string || undefined;
+  if (!absolute?.startsWith("file:")) return absolute;
+  try {
+    return fileURLToPath(absolute);
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * One entry, its file made a path `read_presentation` can open.
+ *
+ * A path relative to the show folder is joined to it when that folder is
+ * known. Any other entry, or one read from a playlists file whose show folder
+ * is not, gives the absolute path ProPresenter recorded beside it: a path
+ * relative to Documents, say, would otherwise be looked up under the library
+ * folders and miss, or find another file of the same name.
+ */
+function playlistEntry(item: any, showFolder: string | undefined): PlaylistEntry {
+  const name: string = item.name ?? "";
+  const fileOf = (url: any): string | undefined => {
+    const local = url?.local;
+    if (showFolder && local?.path && enumLabel(LOCAL_ROOT, local.root) === "SHOW") {
+      return path.join(showFolder, local.path);
+    }
+    return absolutePathOf(url) ?? (local?.path || undefined);
+  };
+  if (item.presentation) {
+    return {
+      kind: "presentation",
+      name,
+      file: fileOf(item.presentation.document_path),
+      arrangement: item.presentation.arrangement_name || undefined,
+    };
+  }
+  if (item.header) return { kind: "header", name };
+  if (item.cue) {
+    const url = item.cue.actions?.find((a: any) => a.media)?.media?.element?.url;
+    return url ? { kind: "media", name, file: fileOf(url) } : { kind: "cue", name };
+  }
+  if (item.placeholder) return { kind: "placeholder", name };
+  if (item.planning_center) return { kind: "planningCenter", name };
+  return { kind: "other", name };
+}
+
+/** Every playlist under `node`, folders flattened into ` / ` paths as the media bin's are. */
+function playlistTree(
+  node: any,
+  showFolder: string | undefined,
+  ancestry: string[],
+  out: { path: string; items: PlaylistEntry[] }[]
+) {
+  for (const child of rawChildren(node)) {
+    const trail = [...ancestry, child.name ?? ""];
+    // A folder holds playlists, not entries; an empty playlist is still listed.
+    if (rawChildren(child).length === 0 || rawItems(child).length > 0) {
+      out.push({ path: trail.join(" / "), items: rawItems(child).map((item) => playlistEntry(item, showFolder)) });
+    }
+    playlistTree(child, showFolder, trail, out);
+  }
+  return out;
+}
+
+/**
+ * ProPresenter's presentation playlists: the services built from songs,
+ * headers and media, as opposed to the media bin.
+ *
+ * ProPresenter stores a presentation entry's file relative to its own folder,
+ * the one holding `Playlists/Library`. That is resolved here, so `file` can be
+ * handed straight back to `read_presentation` wherever the server was pointed:
+ * at the ProPresenter folder, or at the folder above it.
+ *
+ * The show folder is known when the file was found where ProPresenter keeps
+ * it, or a file the caller named sits in a `Playlists` folder. A copy kept
+ * anywhere else says nothing about where the show folder is, and its entries
+ * give the absolute paths ProPresenter recorded instead.
+ */
+export async function readPlaylists(roots: readonly string[], file?: string) {
+  const { path: real, target, bytes, decoded } = await loadPlaylistFile(
+    roots,
+    file,
+    findPlaylists,
+    "No presentation playlists found. Pass the path of the `Library` file inside ProPresenter's `Playlists` folder.",
+    "ProPresenter's presentation playlists",
+    (_name, bytes) => decodePlaylistsDocument(bytes)
+  );
+  // Found, `target` is `<show folder>/Playlists/Library` as built from a root.
+  const showFolder =
+    file === undefined
+      ? path.dirname(path.dirname(target))
+      : path.basename(path.dirname(real)) === "Playlists"
+        ? path.dirname(path.dirname(real))
+        : undefined;
+  return {
+    path: real,
+    ...applicationInfo(decoded.application_info),
+    fidelity: checkFidelity(bytes).fidelity,
+    playlists: playlistTree(decoded.root_node, showFolder, [], []),
+  };
+}
+
+/** A `StyleError` in words a model can act on; anything else is not ours to explain. */
+function styleProblem(e: unknown, source: string): unknown {
+  if (!(e instanceof StyleError)) return e;
+  switch (e.code) {
+    case "lossy":
+      return new LibraryError(`${source}: would not survive being written back, so its look is not copied.`);
+    case "noSuchSlide":
+      return new LibraryError(`${source} has no slide ${e.params.slide} (slideIndex ${Number(e.params.slide) - 1}).`);
+    case "noTextBox":
+      return new LibraryError(`The style "${e.params.style}" has no text box to put words in.`);
+    default:
+      return new LibraryError(`${source}: ${e.message}`);
+  }
+}
+
+/** A theme's styles, or why they cannot be read, as a `LibraryError` naming `source`. */
+function readThemeStyles(bytes: Uint8Array, source: string): SlideStyle[] {
+  try {
+    return themeStyles(bytes);
+  } catch (e) {
+    if (e instanceof StyleError) throw styleProblem(e, source);
+    throw new LibraryError(`${source}: not a ProPresenter theme (${(e as Error).message}).`);
+  }
+}
+
+/**
+ * The slide styles each theme offers, in the theme's own order.
+ *
+ * A theme that cannot be read is named with why rather than left out, so an
+ * absent theme is never mistaken for one that is not there.
+ */
+export async function listThemes(roots: readonly string[]) {
+  const themes: { name: string; path: string; styles: { styleIndex: number; name: string; textBoxes: number }[] }[] = [];
+  const unreadable: { path: string; reason: string }[] = [];
+  for (const { name, file } of await findThemes(roots)) {
+    try {
+      const styles = readThemeStyles((await readFoundFile(file)).bytes, name);
+      themes.push({
+        name,
+        path: file,
+        styles: styles.map((style, styleIndex) => ({ styleIndex, name: style.name, textBoxes: styleSlots(style) })),
+      });
+    } catch (e) {
+      unreadable.push({ path: file, reason: (e as Error).message });
+    }
+  }
+  return { themes, unreadable };
+}
+
+export interface StyleSource {
+  /** A theme's name, as `list_themes` gives it, or the path of its `Theme` file. */
+  theme?: string;
+  /** A presentation whose slide's look is copied. */
+  fromPresentation?: string;
+  /** With `theme`: the style's name or `styleIndex`. With `fromPresentation`: the slide's `slideIndex`. */
+  style?: string | number;
+}
+
+async function loadThemeStyle(roots: readonly string[], theme: string, style: string | number | undefined) {
+  const wanted = fold(theme);
+  const named = (await findThemes(roots)).find((t) => fold(t.name) === wanted);
+  let bytes: Uint8Array;
+  try {
+    ({ bytes } = await readLibraryFile(roots, named?.file ?? theme));
+  } catch (e) {
+    if (named || !(e instanceof LibraryError)) throw e;
+    throw new LibraryError(`No theme named "${theme}". \`list_themes\` lists the themes there are.`);
+  }
+
+  const styles = readThemeStyles(bytes, theme);
+  const names = styles.map((s, i) => `${i}: ${s.name}`).join(", ");
+  if (style === undefined) {
+    if (styles.length === 1) return styles[0];
+    throw new LibraryError(`Theme "${theme}" has ${styles.length} styles; pass \`style\` as a name or styleIndex: ${names}.`);
+  }
+  const found = typeof style === "number" ? styles[style] : styles.find((s) => fold(s.name) === fold(style));
+  if (!found) throw new LibraryError(`No style ${JSON.stringify(style)} in theme "${theme}". It has: ${names}.`);
+  return found;
+}
+
+async function loadStyle(roots: readonly string[], { theme, fromPresentation, style }: StyleSource): Promise<SlideStyle> {
+  if (!theme === !fromPresentation) throw new LibraryError("Give exactly one of `theme` and `fromPresentation`.");
+  if (theme) return loadThemeStyle(roots, theme, style);
+
+  if (typeof style !== "number") {
+    throw new LibraryError("With `fromPresentation`, `style` is the slideIndex of the slide to copy, as read_presentation gives it.");
+  }
+  const { bytes } = await readLibraryFile(roots, fromPresentation!);
+  open(fromPresentation!, bytes);
+  try {
+    return presentationStyle(bytes, style);
+  } catch (e) {
+    throw styleProblem(e, fromPresentation!);
+  }
+}
+
+export interface StylePreview {
+  path: string;
+  style: string;
+  /** Whether the presentation would survive being written back. Applying is refused when it would not. */
+  fidelity: Fidelity;
+  restyled: number;
+  leftAlone: number;
+  slides: {
+    slideIndex: number;
+    label: string;
+    group?: string;
+    macros?: string[];
+    /** Why the slide would be left alone, when it would. */
+    skip?: SkipReason;
+    /**
+     * The text each of the style's boxes would carry afterwards, filled in
+     * order. No `boxIndex`: the boxes are the style's, not the slide's own.
+     */
+    textBoxes: { lines: string[] }[];
+  }[];
+}
+
+/**
+ * What giving a presentation's slides another slide's look would do, without
+ * doing it: which slides would change, which would be left alone and why, and
+ * the text each would carry.
+ *
+ * The plan `applyStyle` itself follows and then checks its result against, so
+ * the preview and a later write cannot disagree. There is no write here: that
+ * would be a fifth write path, and AGENTS.md says what one has to keep.
+ */
+export async function previewStyle(
+  roots: readonly string[],
+  { path: file, theme, fromPresentation, style, ...options }: StyleSource & StyleOptions & { path: string }
+): Promise<StylePreview> {
+  const { path: real, bytes } = await readLibraryFile(roots, file);
+  const { raw } = open(file, bytes);
+  const slideStyle = await loadStyle(roots, { theme, fromPresentation, style });
+
+  let plan;
+  try {
+    plan = planStyle(raw, slideStyle, options);
+  } catch (e) {
+    throw styleProblem(e, file);
+  }
+  const restyled = plan.filter((slide) => !slide.skip).length;
+  return {
+    path: real,
+    style: slideStyle.name,
+    fidelity: checkPresentationFidelity(bytes).fidelity,
+    restyled,
+    leftAlone: plan.length - restyled,
+    slides: plan.map((slide) => ({
+      slideIndex: slide.slideIndex,
+      label: slide.cueName,
+      group: slide.groupName,
+      macros: slide.macros.length ? slide.macros : undefined,
+      skip: slide.skip,
+      textBoxes: slide.textBoxes.map((lines) => ({ lines })),
+    })),
   };
 }

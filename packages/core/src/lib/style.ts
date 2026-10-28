@@ -172,12 +172,12 @@ export interface SlidePlan {
   /** Why it is left alone, when it is. */
   skip?: SkipReason;
   /**
-   * The words of each box that holds any, in order.
+   * The lines of each box that holds any text, in order.
    *
    * What the slide will say afterwards, line for line -- and what it is
    * checked against once it has been rebuilt.
    */
-  texts: string[][];
+  textBoxes: string[][];
 }
 
 /** The macros a cue triggers, by name. */
@@ -215,7 +215,7 @@ function isTextElement(wrapper: any): boolean {
  * centred two lines by adding a blank one above them would drag that blank
  * into a style that centres by itself. A blank between two lines is kept.
  */
-function wordsOf(wrapper: any): string[] {
+function linesOf(wrapper: any): string[] {
   const lines = extractLines(decodeRtf(wrapper.element.text.rtf_data)).map((l) => l.text);
   const [first, last] = shownBounds(lines);
   return lines.slice(first, last + 1);
@@ -224,23 +224,23 @@ function wordsOf(wrapper: any): string[] {
 const hasRtf = (wrapper: any) => ArrayBuffer.isView(wrapper.element?.text?.rtf_data);
 
 /**
- * The words on a slide, box by box.
+ * The lines on a slide, box by box.
  *
  * Read from any box with text, marked as a text element or not, so that no
  * words are left behind. A restyled slide is read back through the style's
  * own text elements only, since that is where they were put: a theme's shape
  * can carry decorative text of its own that is not anybody's lyrics.
  */
-function textsOf(slide: any, textElementsOnly = false): string[][] {
-  return wordBoxes(slide, textElementsOnly).map((box) => box.words);
+function textBoxesOf(slide: any, textElementsOnly = false): string[][] {
+  return boxesWithText(slide, textElementsOnly).map((box) => box.lines);
 }
 
-/** The boxes {@link textsOf} reads, with the element each one came from. */
-function wordBoxes(slide: any, textElementsOnly = false): { wrapper: any; words: string[] }[] {
+/** The boxes {@link textBoxesOf} reads, with the element each one came from. */
+function boxesWithText(slide: any, textElementsOnly = false): { wrapper: any; lines: string[] }[] {
   return (slide.base_slide?.elements ?? [])
     .filter(textElementsOnly ? isTextElement : hasRtf)
-    .map((wrapper: any) => ({ wrapper, words: wordsOf(wrapper) }))
-    .filter((box: { words: string[] }) => box.words.length > 0);
+    .map((wrapper: any) => ({ wrapper, lines: linesOf(wrapper) }))
+    .filter((box: { lines: string[] }) => box.lines.length > 0);
 }
 
 /**
@@ -267,11 +267,12 @@ function otherElements(slide: any): number {
   return elements.filter((w: any) => {
     if (!hasRtf(w)) return true;
     const marked = (w.info ?? 0) !== 0;
-    return !themed && marked && !isTextElement(w) && wordsOf(w).length === 0;
+    return !themed && marked && !isTextElement(w) && linesOf(w).length === 0;
   }).length;
 }
 
-function styleSlots(style: SlideStyle): number {
+/** How many text boxes a style has to put words in. */
+export function styleSlots(style: SlideStyle): number {
   return (style.baseSlide.elements ?? []).filter(isTextElement).length;
 }
 
@@ -289,7 +290,7 @@ export function planStyle(doc: RawDoc, style: SlideStyle, options: StyleOptions 
 
   return slides.map(({ cue, groupName }, slideIndex) => {
     const slide = slideOf(cue);
-    const texts = slide ? textsOf(slide) : [];
+    const textBoxes = slide ? textBoxesOf(slide) : [];
     const names = macros[slideIndex];
 
     let skip: SkipReason | undefined;
@@ -302,9 +303,9 @@ export function planStyle(doc: RawDoc, style: SlideStyle, options: StyleOptions 
     else if (!options.replaceOtherElements && otherElements(slide) > 0) skip = "otherElements";
     // Words with nowhere to go would be lost, which is the one thing this
     // must never do.
-    else if (texts.length > slots) skip = "moreTextThanStyle";
+    else if (textBoxes.length > slots) skip = "moreTextThanStyle";
 
-    return { slideIndex, cueName: cue.name ?? "", groupName, macros: names, skip, texts };
+    return { slideIndex, cueName: cue.name ?? "", groupName, macros: names, skip, textBoxes };
   });
 }
 
@@ -527,7 +528,7 @@ function restyle(target: any, style: PreparedStyle): void {
   copy.uuid = target.base_slide?.uuid;
   // The slide's own guides are the slide's; the style's arrive as the theme's.
   copy.guidelines = target.base_slide?.guidelines ?? [];
-  const sources = wordBoxes(target);
+  const sources = boxesWithText(target);
 
   const renamed = new Map<string, string>();
   (copy.elements ?? []).forEach((wrapper: any, i: number) => {
@@ -541,12 +542,12 @@ function restyle(target: any, style: PreparedStyle): void {
     }
     if (!box) return;
 
-    const words = source?.words ?? [];
-    element.text.rtf_data = encodeRtf(restyleRtf(box.rtf, words));
+    const lines = source?.lines ?? [];
+    element.text.rtf_data = encodeRtf(restyleRtf(box.rtf, lines));
     const attributes = element.text.attributes;
     if (attributes) {
-      attributes.custom_attributes = box.verdict ? stretchAttribute(box.verdict, words) : [];
-      if (box.font && words.length > 0) attributes.custom_attributes.push(originalFont(box.font, words));
+      attributes.custom_attributes = box.verdict ? stretchAttribute(box.verdict, lines) : [];
+      if (box.font && lines.length > 0) attributes.custom_attributes.push(originalFont(box.font, lines));
     }
   });
   remapUuids(copy.elements, renamed);
@@ -635,13 +636,13 @@ function verify(original: RawDoc, after: Uint8Array, plan: SlidePlan[], style: P
     if (key(cue) !== key(was[i].cue)) throw fail(restyled ? "slideActions" : "untouchedSlide", i);
     if (!restyled) return;
     const slide = slideOf(cue);
-    const boxes = wordBoxes(slide, true);
-    if (JSON.stringify(boxes.map((b) => b.words)) !== JSON.stringify(plan[i].texts)) {
+    const boxes = boxesWithText(slide, true);
+    if (JSON.stringify(boxes.map((b) => b.lines)) !== JSON.stringify(plan[i].textBoxes)) {
       throw fail("words", i);
     }
     // Each box with words is the box that held them before, by identity too.
     const ids = (list: { wrapper: any }[]) => JSON.stringify(list.map((b) => b.wrapper.element?.uuid?.string));
-    if (ids(boxes) !== ids(wordBoxes(slideOf(was[i].cue)))) throw fail("boxIdentity", i);
+    if (ids(boxes) !== ids(boxesWithText(slideOf(was[i].cue)))) throw fail("boxIdentity", i);
     const guides = slide.template_guidelines ?? [];
     if (placed(guides) !== styleGuides) throw fail("guides", i);
     for (const g of guides) {

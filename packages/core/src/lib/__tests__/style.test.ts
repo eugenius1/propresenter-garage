@@ -83,8 +83,8 @@ function songWithMacros(names: (string | undefined)[]): Uint8Array {
   return encodePresentation(doc);
 }
 
-/** Each box's words, without the blank padding above and below -- as planned. */
-const textsAfter = (bytes: Uint8Array) =>
+/** Each box's lines, without the blank padding above and below -- as planned. */
+const textBoxesAfter = (bytes: Uint8Array) =>
   readPresentation(decodePresentation(bytes))
     .textBoxes.map((b) => {
       const lines = b.lines.map((l) => l.text);
@@ -162,8 +162,8 @@ describe("applying a style to a presentation", () => {
     const { bytes, plan } = applyStyle(before, styleSlide());
 
     expect(plan.every((p) => !p.skip)).toBe(true);
-    expect(textsAfter(bytes)).toEqual(
-      plan.flatMap((p) => p.texts)
+    expect(textBoxesAfter(bytes)).toEqual(
+      plan.flatMap((p) => p.textBoxes)
     );
     const slide = baseSlides(bytes)[0];
     // The target slide keeps its own identity; its elements are the style's.
@@ -179,7 +179,7 @@ describe("applying a style to a presentation", () => {
     const { bytes, plan } = applyStyle(before, styleSlide());
     const slides = baseSlides(bytes);
     const was = baseSlides(before);
-    const withWords = plan.filter((p) => p.texts.length > 0).map((p) => p.slideIndex);
+    const withWords = plan.filter((p) => p.textBoxes.length > 0).map((p) => p.slideIndex);
     expect(withWords.length).toBeGreaterThan(0);
     for (const i of withWords) {
       expect(slides[i].elements[0].element.uuid.string).toBe(was[i].elements[0].element.uuid.string);
@@ -268,7 +268,7 @@ describe("applying a style to a presentation", () => {
     const once = applyStyle(syntheticTextPresentation(), style);
     const twice = applyStyle(once.bytes, style);
     expect(twice.plan.map((p) => p.skip)).toEqual(once.plan.map((p) => p.skip));
-    expect(textsAfter(twice.bytes)).toEqual(textsAfter(once.bytes));
+    expect(textBoxesAfter(twice.bytes)).toEqual(textBoxesAfter(once.bytes));
     expect(baseSlides(twice.bytes)[0].elements).toHaveLength(2);
   });
 
