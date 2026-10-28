@@ -22,10 +22,10 @@ clean checkout would fail to build.
 
 ## Before every push
 
-Strongly recommended: run `/simplify` (or your tool's equivalent clean-up
-pass) over the branch's changes, using Claude Sonnet or a model of similar
-strength, then commit its fixes and re-run the pre-commit check above. It
-catches duplication, dead code and needless complexity that the checks don't.
+Strongly recommended: run `/simplify` (or an equivalent clean-up pass) over
+the branch's changes, using Claude Sonnet or a model of similar strength, then
+commit its fixes and re-run the pre-commit check above. It catches
+duplication, dead code and needless complexity that the checks don't.
 
 ## Attribution
 
