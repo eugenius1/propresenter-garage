@@ -6,7 +6,10 @@ import {
   auditMediaBin,
   checkPresentations,
   listPresentations,
+  listThemes,
+  previewStyle,
   readMediaBin,
+  readPlaylists,
   readPresentationFile,
   searchText,
 } from "./tools";
@@ -177,6 +180,79 @@ export function createServer(roots: readonly string[]): McpServer {
       annotations: READ_ONLY,
     },
     ({ path: file }) => answer(() => auditMediaBin(roots, file))
+  );
+
+  server.registerTool(
+    "read_playlists",
+    {
+      title: "Read the presentation playlists",
+      description:
+        "Read ProPresenter's presentation playlists (the services built from songs, headers and media, as " +
+        "opposed to the media bin): every playlist and its entries in order. A presentation or media entry's " +
+        "`file` is an absolute path wherever one can be worked out, and a presentation's can be " +
+        "passed to read_presentation; `arrangement` is the arrangement it plays, when it names one.",
+      inputSchema: {
+        path: z
+          .string()
+          .optional()
+          .describe("The presentation playlists file. Defaults to Playlists/Library in the library folder."),
+      },
+      annotations: READ_ONLY,
+    },
+    ({ path: file }) => answer(() => readPlaylists(roots, file))
+  );
+
+  server.registerTool(
+    "list_themes",
+    {
+      title: "List themes",
+      description:
+        "List ProPresenter's themes and the slide styles each offers, in the theme's own order, with how " +
+        "many text boxes each style has. A theme that cannot be read is listed under `unreadable` with why.",
+      inputSchema: {},
+      annotations: READ_ONLY,
+    },
+    () => answer(() => listThemes(roots))
+  );
+
+  server.registerTool(
+    "preview_style",
+    {
+      title: "Preview applying a style",
+      description:
+        "Preview giving a presentation's slides the look of a theme's slide style or of another " +
+        "presentation's slide, as ProPresenter's 'apply theme slide' does, without changing anything: " +
+        "nothing is written. For each slide: whether it would be restyled, and the lines each text box would " +
+        "carry afterwards; or `skip`, why it would be left alone. `listed`: in skipSlides. `macro`: " +
+        "triggers a macro in skipMacros. `distinctMacro`: carries a different macro from most slides, " +
+        "usually a title slide. `otherElements`: holds an image or shape restyling would remove (set " +
+        "replaceOtherElements to include it). `moreTextThanStyle`: has more text boxes than the style. " +
+        "`notASlide`: not a slide. `fidelity` 'lossy' means applying would be refused.",
+      inputSchema: {
+        path: z.string().describe("The presentation to restyle."),
+        theme: z.string().optional().describe("Take the style from this theme, by name as list_themes gives it."),
+        fromPresentation: z.string().optional().describe("Or take it from a slide of this presentation."),
+        style: z
+          .union([z.string(), z.number().int().min(0)])
+          .optional()
+          .describe(
+            "With theme: the style's name or styleIndex (optional when the theme has one). With " +
+              "fromPresentation: the slideIndex of the slide to copy, as read_presentation gives it."
+          ),
+        skipSlides: z.array(z.number().int().min(0)).optional().describe("slideIndexes to leave alone."),
+        skipMacros: z.array(z.string()).optional().describe("Leave alone any slide triggering one of these macros."),
+        skipDistinctMacro: z
+          .boolean()
+          .optional()
+          .describe("Leave alone slides carrying a different macro from most (default true)."),
+        replaceOtherElements: z
+          .boolean()
+          .optional()
+          .describe("Restyle slides holding images or shapes too, which removes them (default false)."),
+      },
+      annotations: READ_ONLY,
+    },
+    (args) => answer(() => previewStyle(roots, args))
   );
 
   return server;

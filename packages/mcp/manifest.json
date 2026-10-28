@@ -3,8 +3,8 @@
   "manifest_version": "0.3",
   "name": "propresenter-garage",
   "display_name": "ProPresenter Garage",
-  "description": "Read a ProPresenter 7 library: search slide text, read presentations, run text checks and audit the media bin. Read-only.",
-  "long_description": "Reads ProPresenter 7 files from disk, through the same decoding and checks as the ProPresenter Garage browser app. List and search presentations, read their slides line by line, run the Presentations text checks, and read or audit the media bin. It never writes a file, and it reads nothing outside the folders you choose.",
+  "description": "Read a ProPresenter 7 library: search slide text, read presentations and playlists, run text checks, audit the media bin and preview themes. Read-only.",
+  "long_description": "Reads ProPresenter 7 files from disk, through the same decoding and checks as the ProPresenter Garage browser app. List and search presentations, read their slides line by line, run the Presentations text checks, read or audit the media bin, read the presentation playlists, and list themes and preview giving a presentation one of their looks. It never writes a file, and it reads nothing outside the folders you choose.",
   "author": {
     "name": "Eusebius Ngemera",
     "url": "https://github.com/eugenius1"
@@ -41,7 +41,10 @@
     { "name": "search_text", "description": "Find a phrase in the slide text of every presentation." },
     { "name": "check_presentations", "description": "Run the Presentations text checks on a file, a folder or every library." },
     { "name": "read_media_bin", "description": "Read every playlist in the media bin and the items in it." },
-    { "name": "audit_media_bin", "description": "Find duplicates, empty playlists, hidden items and other media bin problems." }
+    { "name": "audit_media_bin", "description": "Find duplicates, empty playlists, hidden items and other media bin problems." },
+    { "name": "read_playlists", "description": "Read the presentation playlists: every service and the songs, headers and media in it." },
+    { "name": "list_themes", "description": "List the themes and the slide styles each offers." },
+    { "name": "preview_style", "description": "Preview giving a presentation the look of a theme slide or another slide, without changing it." }
   ],
   "compatibility": {
     "platforms": ["darwin", "win32", "linux"],

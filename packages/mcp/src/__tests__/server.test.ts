@@ -1,12 +1,18 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import fsp from "node:fs/promises";
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { syntheticMediaFile, syntheticTextPresentation, SYNTHETIC } from "@propresenter-garage/core/lib/__tests__/synthetic";
-import { messageType } from "@propresenter-garage/core/lib/decode";
-import { openRoots, readFoundFile, resolveInRoots } from "../library";
+import { encodeDocument, messageType } from "@propresenter-garage/core/lib/decode";
+import { decodeMediaDocument, rawItems, walkNodes } from "@propresenter-garage/core/lib/model";
+import { applyOperations } from "@propresenter-garage/core/lib/operations";
+import { decodePlaylistsDocument, headerEntry, mediaEntry, presentationEntry } from "@propresenter-garage/core/lib/playlists";
+import { decodePresentation, encodePresentation, slidesInOrder } from "@propresenter-garage/core/lib/presentation";
+import { syntheticPresentationFile } from "@propresenter-garage/core/lib/__tests__/synthetic";
+import { findPresentations, openRoots, readFoundFile, readLibraryFile, resolveInRoots } from "../library";
 import { createServer } from "../server";
 import { auditMediaBin } from "../tools";
 
@@ -31,6 +37,36 @@ async function connect(roots: string[]) {
   return { client, call };
 }
 
+/**
+ * What this machine lets the fixtures do, probed once before any test is
+ * collected so a test can skip itself. Root reads a file whatever its mode,
+ * and Windows has no unreadable mode at all; Windows also refuses to make a
+ * symlink without a privilege most accounts lack. A fixture the machine cannot
+ * make is left out rather than made and quietly not doing its job.
+ */
+const can = (() => {
+  const probe = fs.mkdtempSync(path.join(os.tmpdir(), "pp-mcp-probe-"));
+  const file = path.join(probe, "probe");
+  fs.writeFileSync(file, "");
+  fs.chmodSync(file, 0o000);
+  let lock = true;
+  try {
+    fs.readFileSync(file);
+    lock = false;
+  } catch {
+    // Refused, as wanted.
+  }
+  fs.chmodSync(file, 0o644);
+  let symlink = true;
+  try {
+    fs.symlinkSync(file, path.join(probe, "link"));
+  } catch {
+    symlink = false;
+  }
+  fs.rmSync(probe, { recursive: true, force: true });
+  return { lock, symlink };
+})();
+
 let tmp: string;
 let library: string;
 let client: Client;
@@ -51,20 +87,22 @@ beforeAll(async () => {
   const Presentation = messageType("rv.data.Presentation");
   fs.writeFileSync(path.join(songs, "Clean.pro"), Presentation.encode(Presentation.fromObject({ name: "Clean" })).finish());
   // One the walk finds but cannot open.
-  fs.writeFileSync(path.join(songs, "Locked.pro"), syntheticTextPresentation("Locked"));
-  fs.chmodSync(path.join(songs, "Locked.pro"), 0o000);
+  if (can.lock) {
+    fs.writeFileSync(path.join(songs, "Locked.pro"), syntheticTextPresentation("Locked"));
+    fs.chmodSync(path.join(songs, "Locked.pro"), 0o000);
+  }
   fs.writeFileSync(path.join(library, "Playlists", "Media"), syntheticMediaFile());
 
   // Outside the library, and a link inside it pointing there.
   fs.writeFileSync(path.join(tmp, "secret.txt"), "not yours");
-  fs.symlinkSync(path.join(tmp, "secret.txt"), path.join(songs, "escape.pro"));
+  if (can.symlink) fs.symlinkSync(path.join(tmp, "secret.txt"), path.join(songs, "escape.pro"));
 
   ({ client, call } = await connect([library]));
 });
 
 afterAll(async () => {
   await client?.close();
-  fs.chmodSync(path.join(library, "Libraries", "Default", "Locked.pro"), 0o644);
+  if (can.lock) fs.chmodSync(path.join(library, "Libraries", "Default", "Locked.pro"), 0o644);
   fs.rmSync(tmp, { recursive: true, force: true });
 });
 
@@ -75,7 +113,10 @@ describe("the tools offered", () => {
       "audit_media_bin",
       "check_presentations",
       "list_presentations",
+      "list_themes",
+      "preview_style",
       "read_media_bin",
+      "read_playlists",
       "read_presentation",
       "search_text",
     ]);
@@ -128,7 +169,7 @@ describe("read_presentation", () => {
     expect(result.text).toMatch(/ChordPro/);
   });
 
-  it("refuses a symlink that leads out of the library", async () => {
+  it.skipIf(!can.symlink)("refuses a symlink that leads out of the library", async () => {
     const result = await call("read_presentation", { path: "Libraries/Default/escape.pro" });
     expect(result.isError).toBe(true);
     expect(result.text).toMatch(/Outside/);
@@ -151,7 +192,9 @@ describe("search_text", () => {
     const result = (await call("search_text", { query: "TIDY" })).json();
     expect(result.matches).toHaveLength(2);
     expect(result.matches[0]).toMatchObject({ slideIndex: 0, boxIndex: 0, lineIndex: 0, text: "A tidy line" });
-    expect(result.unreadable.map((p: string) => path.basename(p))).toEqual(["Chords.pro", "Locked.pro"]);
+    expect(result.unreadable.map((p: string) => path.basename(p))).toEqual(
+      can.lock ? ["Chords.pro", "Locked.pro"] : ["Chords.pro"]
+    );
   });
 
   it("stops at the limit and says so", async () => {
@@ -160,8 +203,8 @@ describe("search_text", () => {
     expect(result.truncated).toBe(true);
     // Counts the files it got through, up to the one holding the match it
     // stopped at -- here the last, after the chord chart, the clean file and
-    // the locked one.
-    expect(result.filesSearched).toBe(5);
+    // the locked one, where this machine can lock one.
+    expect(result.filesSearched).toBe(can.lock ? 5 : 4);
   });
 
   it("refuses a file passed as the folder rather than finding nothing", async () => {
@@ -195,7 +238,7 @@ describe("check_presentations", () => {
     );
     expect(byName["Checked Song.pro"].issues.length).toBeGreaterThan(0);
     expect(byName["Chords.pro"].error).toMatch(/ChordPro/);
-    expect(byName["Locked.pro"].error).toMatch(/Could not read/);
+    if (can.lock) expect(byName["Locked.pro"].error).toMatch(/Could not read/);
     expect(byName["Clean.pro"]).toBeUndefined();
   });
 
@@ -242,7 +285,7 @@ describe("openRoots", () => {
 });
 
 describe("resolveInRoots", () => {
-  it("tries a relative path against every root, not just the first", async () => {
+  it.skipIf(!can.symlink)("tries a relative path against every root, not just the first", async () => {
     const first = path.join(tmp, "first");
     fs.mkdirSync(first, { recursive: true });
     fs.symlinkSync(tmp, path.join(first, "Libraries"));
@@ -261,7 +304,7 @@ describe("resolveInRoots", () => {
 });
 
 describe("readFoundFile", () => {
-  it("refuses a symlink rather than following it", async () => {
+  it.skipIf(!can.symlink)("refuses a symlink rather than following it", async () => {
     await expect(readFoundFile(path.join(library, "Libraries", "Default", "escape.pro"))).rejects.toThrow(
       /Could not read/
     );
@@ -269,6 +312,92 @@ describe("readFoundFile", () => {
 
   it("refuses a folder", async () => {
     await expect(readFoundFile(library)).rejects.toThrow(/Not a file|Could not read/);
+  });
+});
+
+describe.skipIf(!can.symlink)("a folder swapped for a symlink mid-read", () => {
+  // A real race cannot be timed in a test, so each one steps in through a spy
+  // at the moment the code has to catch: after a path was found, before it is
+  // used.
+  let root: string;
+  let inner: string;
+  let outside: string;
+
+  const swap = () => {
+    fs.renameSync(inner, `${inner}-moved`);
+    fs.symlinkSync(outside, inner);
+  };
+  const unswap = () => {
+    fs.rmSync(inner);
+    fs.renameSync(`${inner}-moved`, inner);
+  };
+
+  beforeAll(() => {
+    const base = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "pp-mcp-swap-")));
+    root = path.join(base, "library");
+    inner = path.join(root, "Inner");
+    outside = path.join(base, "outside");
+    fs.mkdirSync(inner, { recursive: true });
+    fs.mkdirSync(outside);
+    fs.writeFileSync(path.join(inner, "Song.pro"), "inside");
+    fs.writeFileSync(path.join(outside, "Song.pro"), "outside");
+    fs.writeFileSync(path.join(outside, "Leak.pro"), "outside");
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    if (fs.lstatSync(inner).isSymbolicLink()) unswap();
+  });
+
+  afterAll(() => fs.rmSync(path.dirname(root), { recursive: true, force: true }));
+
+  it("does not list a queued folder that has become a symlink", async () => {
+    const readdir = fsp.readdir;
+    vi.spyOn(fsp, "readdir").mockImplementation((async (dir: string, options: never) => {
+      const entries = await readdir(dir, options);
+      if (dir === root) swap();
+      return entries;
+    }) as typeof fsp.readdir);
+
+    const { files } = await findPresentations([root]);
+    expect(files).toEqual([]);
+  });
+
+  it("refuses a file whose folder became a symlink before it was opened", async () => {
+    const open = fsp.open;
+    vi.spyOn(fsp, "open").mockImplementation(async (...args: Parameters<typeof fsp.open>) => {
+      swap();
+      return open(...args);
+    });
+
+    await expect(readLibraryFile([root], "Inner/Song.pro")).rejects.toThrow(/reached through a symlink/);
+  });
+
+  it("refuses a file whose folder was a symlink only while it was opened", async () => {
+    const open = fsp.open;
+    vi.spyOn(fsp, "open").mockImplementation(async (...args: Parameters<typeof fsp.open>) => {
+      swap();
+      const handle = await open(...args);
+      unswap();
+      return handle;
+    });
+
+    await expect(readLibraryFile([root], "Inner/Song.pro")).rejects.toThrow(/changed while being opened/);
+  });
+
+  it("reads the same file when nothing moves", async () => {
+    const { bytes } = await readLibraryFile([root], "Inner/Song.pro");
+    expect(new TextDecoder().decode(bytes)).toBe("inside");
+  });
+});
+
+describe("findPresentations", () => {
+  it("stops at the folder cap even with no presentation found", async () => {
+    // The library itself, capped at one folder: the root is listed, and the
+    // folders it queued are not.
+    const { files, truncated } = await findPresentations([library], 1);
+    expect(files).toEqual([]);
+    expect(truncated).toBe(true);
   });
 });
 
@@ -388,5 +517,230 @@ describe("what a presentation records about itself", () => {
     for (const name of ["list_presentations", "read_presentation"]) {
       expect(about(name)).toMatch(/No creation date/);
     }
+  });
+});
+
+describe("playlists and themes", () => {
+  // A ProPresenter folder of its own, so the counts the tests above assert stay put.
+  let show: string;
+  let server: Awaited<ReturnType<typeof connect>>;
+  const json = async (name: string, args: Record<string, unknown> = {}) => (await server.call(name, args)).json();
+  const song = () => path.join(show, "Libraries", "Default", "Checked Song.pro");
+
+  /** A theme slide whose one text box is set in bold, centred, over a shape. */
+  const lyricsSlide = {
+    elements: [
+      {
+        info: 3,
+        element: {
+          uuid: { string: "THEME-LYRICS" },
+          name: "Lyrics",
+          text: {
+            rtf_data: new TextEncoder().encode(
+              "{\\rtf1\\ansi\\ansicpg1252\\cocoartf2709\n{\\fonttbl\\f0\\fswiss\\fcharset0 Helvetica-Bold;}\n" +
+                "\\pard\\qc\\partightenfactor0\n\n\\f0\\b\\fs200 \\cf2 Style words}"
+            ),
+          },
+        },
+      },
+      { info: 1, element: { uuid: { string: "THEME-SHAPE" }, name: "Shape" } },
+    ],
+  };
+
+  beforeAll(async () => {
+    show = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "pp-mcp-show-")));
+    fs.mkdirSync(path.join(show, "Libraries", "Default"), { recursive: true });
+    fs.mkdirSync(path.join(show, "Playlists"));
+    fs.writeFileSync(song(), syntheticTextPresentation());
+    fs.writeFileSync(path.join(show, "Playlists", "Media"), syntheticMediaFile());
+
+    // A presentation whose second slide's box is marked as a text element, so it can lend its look.
+    const styled = decodePresentation(syntheticTextPresentation("Styled")) as any;
+    slidesInOrder(styled)[1].cue.actions[0].slide.presentation.base_slide.elements[0].info = 3;
+    fs.writeFileSync(path.join(show, "Libraries", "Default", "Styled.pro"), encodePresentation(styled));
+
+    // A service: a header, the song, and a background from the media bin.
+    const playlists = decodePlaylistsDocument(syntheticPresentationFile()) as any;
+    const sunday = playlists.root_node.playlists.playlists[0].uuid.string;
+    const background = walkNodes((decodeMediaDocument(syntheticMediaFile()) as any).root_node).flatMap(rawItems)[0];
+    const location = { root: show, platform: "PLATFORM_MACOS" as const };
+    const service = applyOperations(playlists, [
+      { kind: "insertItem", playlistUuid: sunday, itemName: "Chants", entry: headerEntry("Chants") },
+      {
+        kind: "insertItem",
+        playlistUuid: sunday,
+        itemName: "Checked Song",
+        entry: presentationEntry({ path: "Libraries/Default/Checked Song.pro", location }),
+      },
+      { kind: "insertItem", playlistUuid: sunday, itemName: "Fond", entry: mediaEntry(background) },
+    ]);
+    fs.writeFileSync(path.join(show, "Playlists", "Library"), encodeDocument(service));
+
+    const Theme = messageType("rv.data.Template.Document");
+    fs.mkdirSync(path.join(show, "Themes", "White"), { recursive: true });
+    fs.writeFileSync(
+      path.join(show, "Themes", "White", "Theme"),
+      Theme.encode(
+        Theme.fromObject({
+          slides: [
+            { name: "Lyrics", base_slide: lyricsSlide },
+            { name: "Blank", base_slide: { elements: [] } },
+          ],
+        })
+      ).finish()
+    );
+    fs.mkdirSync(path.join(show, "Themes", "Broken"), { recursive: true });
+    fs.writeFileSync(path.join(show, "Themes", "Broken", "Theme"), "not a theme");
+
+    server = await connect([show]);
+  });
+
+  afterAll(async () => {
+    await server?.client.close();
+    fs.rmSync(show, { recursive: true, force: true });
+  });
+
+  it("reads a service from Playlists/Library, entries in order", async () => {
+    const result = await json("read_playlists");
+    expect(result.path).toBe(path.join(show, "Playlists", "Library"));
+    expect(result.playlists).toEqual([
+      {
+        path: "Sunday",
+        items: [
+          { kind: "header", name: "Chants" },
+          { kind: "presentation", name: "Checked Song", file: song() },
+          // A media entry is the media bin's cue, under the bin's own name.
+          { kind: "media", name: "Rose Gradient", file: path.join(show, "Media", "Assets", "rose-gradient.jpg") },
+        ],
+      },
+    ]);
+  });
+
+  it("hands out a presentation's file in a form read_presentation takes back", async () => {
+    const entry = (await json("read_playlists")).playlists[0].items[1];
+    expect((await json("read_presentation", { path: entry.file })).name).toBe("Checked Song");
+  });
+
+  it("gives the recorded absolute path for a copy kept outside Playlists", async () => {
+    const copy = path.join(show, "Backups", "2026", "Library");
+    fs.mkdirSync(path.dirname(copy), { recursive: true });
+    fs.copyFileSync(path.join(show, "Playlists", "Library"), copy);
+    try {
+      const entry = (await json("read_playlists", { path: copy })).playlists[0].items[1];
+      // From the entry's absolute_string, not two folders up from the copy.
+      expect(entry.file).toBe(song());
+    } finally {
+      fs.rmSync(path.join(show, "Backups"), { recursive: true, force: true });
+    }
+  });
+
+  it("gives the recorded absolute path for an entry relative to another root", async () => {
+    const PlaylistItem = messageType("rv.data.PlaylistItem");
+    const location = { root: show, platform: "PLATFORM_MACOS" as const };
+    const recorded = presentationEntry({ path: "Libraries/Default/Checked Song.pro", location });
+    const entry = PlaylistItem.toObject(recorded, { enums: String }) as any;
+    entry.presentation.document_path.local = { root: "ROOT_USER_DOCUMENTS", path: "Elsewhere/Checked Song.pro" };
+    const playlists = decodePlaylistsDocument(syntheticPresentationFile()) as any;
+    const service = applyOperations(playlists, [
+      {
+        kind: "insertItem",
+        playlistUuid: playlists.root_node.playlists.playlists[0].uuid.string,
+        itemName: "Checked Song",
+        entry: PlaylistItem.fromObject(entry),
+      },
+    ]);
+    const file = path.join(show, "Playlists", "Documents Library");
+    fs.writeFileSync(file, encodeDocument(service));
+    try {
+      const items = (await json("read_playlists", { path: file })).playlists[0].items;
+      expect(items.find((i: any) => i.kind === "presentation").file).toBe(song());
+    } finally {
+      fs.rmSync(file);
+    }
+  });
+
+  it("hands out the same file when the server is pointed at the folder above", async () => {
+    const above = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "pp-mcp-above-")));
+    fs.renameSync(show, path.join(above, "ProPresenter"));
+    const outer = await connect([above]);
+    try {
+      const entry = (await outer.call("read_playlists", {})).json().playlists[0].items[1];
+      expect(entry.file).toBe(path.join(above, "ProPresenter", "Libraries", "Default", "Checked Song.pro"));
+      expect((await outer.call("read_presentation", { path: entry.file })).json().name).toBe("Checked Song");
+    } finally {
+      await outer.client.close();
+      fs.renameSync(path.join(above, "ProPresenter"), show);
+      fs.rmSync(above, { recursive: true, force: true });
+    }
+  });
+
+  it("refuses the media bin passed as the presentation playlists", async () => {
+    const result = await server.call("read_playlists", { path: "Playlists/Media" });
+    expect(result.isError).toBe(true);
+    expect(result.text).toMatch(/not ProPresenter's presentation playlists/);
+  });
+
+  it("lists each theme's styles, and names one it cannot read", async () => {
+    const { themes, unreadable } = await json("list_themes");
+    expect(themes).toEqual([
+      {
+        name: "White",
+        path: path.join(show, "Themes", "White", "Theme"),
+        styles: [
+          { styleIndex: 0, name: "Lyrics", textBoxes: 1 },
+          { styleIndex: 1, name: "Blank", textBoxes: 0 },
+        ],
+      },
+    ]);
+    expect(unreadable).toEqual([expect.objectContaining({ path: path.join(show, "Themes", "Broken", "Theme") })]);
+  });
+
+  it.skipIf(!can.symlink)("does not list themes a symlinked Themes folder leads out to", async () => {
+    const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "pp-mcp-linked-")));
+    fs.symlinkSync(path.join(show, "Themes"), path.join(root, "Themes"));
+    const linked = await connect([root]);
+    try {
+      expect((await linked.call("list_themes", {})).json()).toEqual({ themes: [], unreadable: [] });
+    } finally {
+      await linked.client.close();
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("previews a theme style slide by slide, and writes nothing", async () => {
+    const before = fs.readFileSync(song());
+    const preview = await json("preview_style", { path: song(), theme: "white", style: "Lyrics" });
+
+    expect(preview).toMatchObject({ style: "Lyrics", fidelity: expect.stringMatching(/identical|equivalent/) });
+    expect(preview.restyled + preview.leftAlone).toBe(preview.slides.length);
+    expect(preview.slides.find((s: any) => s.label === "Leading").textBoxes).toEqual([{ lines: ["Fine here", " leading space"] }]);
+    expect(fs.readFileSync(song())).toEqual(before);
+  });
+
+  it("leaves alone the slides it is told to, and says why", async () => {
+    const preview = await json("preview_style", { path: song(), theme: "White", style: 0, skipSlides: [1] });
+    expect(preview.slides[1].skip).toBe("listed");
+    expect(preview.slides[0].skip).toBeUndefined();
+  });
+
+  it("takes a style from another presentation's slide, numbered as read_presentation numbers it", async () => {
+    const preview = await json("preview_style", { path: song(), fromPresentation: "Libraries/Default/Styled.pro", style: 1 });
+    expect(preview.style).toBe("Styled 2");
+    expect(preview.restyled).toBeGreaterThan(0);
+  });
+
+  it("says what is wrong with a style it cannot use", async () => {
+    const error = async (args: Record<string, unknown>) => {
+      const result = await server.call("preview_style", { path: song(), ...args });
+      expect(result.isError).toBe(true);
+      return result.text;
+    };
+    expect(await error({ theme: "White" })).toMatch(/2 styles.*0: Lyrics, 1: Blank/);
+    expect(await error({ theme: "White", style: "Chorus" })).toMatch(/No style "Chorus".*0: Lyrics/);
+    expect(await error({ theme: "White", style: "Blank" })).toMatch(/has no text box/);
+    expect(await error({ theme: "Navy" })).toMatch(/No theme named "Navy"/);
+    expect(await error({ theme: "Broken" })).toMatch(/not a ProPresenter theme/);
+    expect(await error({ theme: "White", fromPresentation: "Libraries/Default/Styled.pro" })).toMatch(/exactly one/);
+    expect(await error({ fromPresentation: "Libraries/Default/Styled.pro", style: 99 })).toMatch(/no slide 100/);
   });
 });

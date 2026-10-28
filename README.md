@@ -57,7 +57,9 @@ result as a new file.
 A [Model Context Protocol](https://modelcontextprotocol.io) server that lets an
 assistant such as Claude read your library from disk: list and search
 presentations, read their slides line by line, run the Presentations checks,
-and read or audit the media bin. It is **read-only** — it cannot change a file.
+read or audit the media bin, read the presentation playlists, and preview
+giving a presentation a theme's look. It is **read-only** — it cannot change a
+file.
 
 It also reads what each presentation records about itself: when ProPresenter
 last edited it and last showed it, its category, notes, CCLI details, key and
