@@ -20,6 +20,14 @@ Codegen, lint, both typechecks, and the full suite. It is the same gate CI
 runs, and it includes the codegen step, so it also catches the case where a
 clean checkout would fail to build.
 
+## Before every push
+
+Unless the change is trivial, strongly recommended: run `/code-review --fix`
+(or an equivalent review-and-fix pass) over the branch's changes, using Claude
+Sonnet or a model of similar strength, then commit its fixes and re-run the
+pre-commit check above. It catches bugs, duplication, dead code and needless
+complexity that the checks don't.
+
 ## Attribution
 
 End every commit message with:
