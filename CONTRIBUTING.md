@@ -353,8 +353,11 @@ merged there.
   that writes in place is the presentation fixer, under the four conditions
   set out in [AGENTS.md](AGENTS.md).
 - **Never commit a real ProPresenter library.** Real `.pro` files, media-bin
-  playlists and media folders are somebody's personal data. `apps/web/public/__dev-*` is
-  gitignored for exactly this; development copies go there and nowhere else.
+  playlists and media folders are somebody's personal data. `private/` at
+  the root is gitignored for exactly this; development copies go there, in
+  any shape. Anything named `__dev-*`, anywhere, is ignored too, as a
+  backstop. Fixtures added anywhere else for a manual check are deleted
+  before committing.
 - **Commit messages are prose.** Explain the reasoning and what went wrong, not
   a changelog line.
 

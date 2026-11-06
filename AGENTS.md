@@ -16,9 +16,7 @@ vitest. No server, no backend, nothing uploaded.
 npm run check
 ```
 
-Codegen, lint, both typechecks, and the full suite. It is the same gate CI
-runs, and it includes the codegen step, so it also catches the case where a
-clean checkout would fail to build.
+The gate CI runs; what it covers is in [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Before every push
 
@@ -42,12 +40,9 @@ explaining the reasoning and what went wrong — not a changelog line.
 ## Never commit somebody's ProPresenter library
 
 Real `.pro` files, media-bin playlists and media folders are personal data and
-stay out of the repository. `apps/web/public/__dev-*` is gitignored for
-exactly this; put development copies there and nowhere else. If you add
-fixtures for a manual check, delete them before committing.
-
-Tests that need real files read them from `PP_MEDIA_FILE` and `PP_LIBRARY_DIR`
-and skip cleanly when absent, so CI stays green without them.
+stay out of the repository. Where development copies go instead, and how
+tests reach real files, is under *Conventions* and *Testing against real
+files* in [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Never write over an original ProPresenter file unguarded
 
