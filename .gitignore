@@ -8,9 +8,13 @@ dev-dist
 packages/core/src/generated/
 
 # Real ProPresenter files are somebody's actual media library. Never commit one.
-# The pattern is deliberately broad: it used to name one filename, which left
-# every other scratch copy dropped in here unprotected.
-apps/web/public/__dev-*
+# private/ at the root is the place for them: put anything in it. It is
+# anchored so a source folder called private/ elsewhere is not swallowed.
+# __dev-* is unanchored and a backstop for a copy dropped anywhere else; it
+# used to be tied to apps/web/public/, which left a scratch library at the
+# root, or next to the MCP server, unprotected.
+/private/
+__dev-*
 
 # Written by `npm run coverage` and by the suite in CI.
 coverage/
