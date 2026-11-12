@@ -26,6 +26,7 @@ import { syntheticPresentationFile } from "@propresenter-garage/core/lib/__tests
 import { findPresentations, openRoots, readFoundFile, readLibraryFile, resolveInRoots } from "@propresenter-garage/node/library";
 import { parseArgs } from "../args";
 import { createServer, type ServerOptions } from "../server";
+import { applyPlan, planSlideEdits, PlanStore } from "../edits";
 import { auditMediaBin } from "../tools";
 
 /**
@@ -906,6 +907,21 @@ describe("editing slide text", () => {
     expect(a).toMatchObject({ written: true });
     expect(b).toMatchObject({ written: false, reason: "stale" });
     expect(lines()[0]).toEqual(["From the first plan", "And another"]);
+  });
+
+  it("writes nothing for a confirmed plan whose call was cancelled while it waited its turn", async () => {
+    const before = fs.readFileSync(file);
+    const roots = await openRoots([path.join(dir, "ProPresenter")]);
+    const store = new PlanStore();
+    const { planId } = await planSlideEdits(roots, store, [
+      { path: file, boxIndex: 0, lineIndex: 0, text: "Queued, then cancelled" },
+    ]);
+    const plan = store.take(planId)!;
+    const controller = new AbortController();
+    controller.abort();
+    await expect(applyPlan(roots, plan, new Set([1]), backups, controller.signal)).rejects.toThrow(/cancelled/);
+    expect(fs.readFileSync(file)).toEqual(before);
+    expect(fs.existsSync(backups)).toBe(false);
   });
 
   it("leaves alone a file that changed after the plan was made", async () => {

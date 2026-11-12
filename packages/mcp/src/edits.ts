@@ -248,19 +248,29 @@ export function applyPlan(
   roots: readonly string[],
   plan: Plan,
   ticked: ReadonlySet<number>,
-  backupDir: string
+  backupDir: string,
+  signal?: AbortSignal
 ): Promise<Omit<ApplyResult, "answer">> {
-  const run = applying.then(() => applyPlanNow(roots, plan, ticked, backupDir));
+  const run = applying.then(() => applyPlanNow(roots, plan, ticked, backupDir, signal));
   applying = run.catch(() => undefined);
   return run;
+}
+
+/** The client gave up on the call; nothing may be written behind its back. */
+function stopIfCancelled(signal?: AbortSignal): void {
+  if (signal?.aborted) throw new LibraryError("The call was cancelled before anything was written, so nothing was.");
 }
 
 async function applyPlanNow(
   roots: readonly string[],
   plan: Plan,
   ticked: ReadonlySet<number>,
-  backupDir: string
+  backupDir: string,
+  signal?: AbortSignal
 ): Promise<Omit<ApplyResult, "answer">> {
+  // Checked when this run's turn comes, not only when it joined the queue: a
+  // client can give up while an earlier apply is still writing.
+  stopIfCancelled(signal);
   const planned = new Map(plan.files.map((file) => [file.path, file]));
   const originals = new Map<string, Uint8Array>();
   const fixed = await fixFiles(
@@ -291,6 +301,8 @@ async function applyPlanNow(
 
   let backupFolder: string | undefined;
   if (replacements.length > 0) {
+    // And once more at the last moment before anything on disk changes.
+    stopIfCancelled(signal);
     const run = await replaceWithBackup(roots, await openBackupDir(backupDir, roots), replacements);
     backupFolder = run.backupFolder;
     const byPath = new Map(run.outcomes.map((outcome) => [outcome.path, outcome]));

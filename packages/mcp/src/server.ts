@@ -366,7 +366,7 @@ function registerEditTools(server: McpServer, roots: readonly string[], backupDi
             .filter(([, value]) => value === true)
             .map(([key]) => Number(key.replace(/^line/, "")))
         );
-        return { answer: "accept", ...(await applyPlan(roots, plan, ticked, backupDir)) };
+        return { answer: "accept", ...(await applyPlan(roots, plan, ticked, backupDir, signal)) };
       })
   );
 }
