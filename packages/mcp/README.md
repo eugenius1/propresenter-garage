@@ -1,7 +1,7 @@
 # propresenter-garage-mcp
 
 An [MCP](https://modelcontextprotocol.io) server that lets an AI assistant
-read a ProPresenter 7 library from disk. Part of
+read a ProPresenter 7 library from disk, and edit its slide text. Part of
 [ProPresenter Garage](https://github.com/eugenius1/propresenter-garage).
 
 - List and search presentations, and read their slides line by line
@@ -13,9 +13,13 @@ read a ProPresenter 7 library from disk. Part of
   media in it
 - List the themes, and preview giving a presentation the look of a theme slide
   or of another presentation's slide, slide by slide
+- Edit slide text line by line: you confirm every line in your app before
+  anything is written, and each file is backed up outside your library first
 
-It is **read-only**: it never writes a file, and it reads nothing outside the
-folders you give it.
+It reads and writes nothing outside the folders you give it. Editing needs a
+client that supports MCP elicitation; with one that does not, nothing is
+written. `--read-only` turns editing off entirely, and `--backup-dir=<folder>`
+chooses where backups go.
 
 ## Use
 

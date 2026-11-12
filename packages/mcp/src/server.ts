@@ -1,7 +1,9 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { version } from "../package.json";
-import { LibraryError } from "./library";
+import { LibraryError } from "@propresenter-garage/node/library";
+import { defaultBackupDir } from "@propresenter-garage/node/write";
+import { applyPlan, confirmationRequest, MAX_PLAN_LINES, planSlideEdits, PlanStore, type ApplyResult } from "./edits";
 import {
   auditMediaBin,
   checkPresentations,
@@ -15,15 +17,24 @@ import {
 } from "./tools";
 
 /**
- * An MCP server that reads a ProPresenter 7 library from disk. Started by
- * `main.ts`; built separately so tests can drive it over an in-memory pipe.
+ * An MCP server that reads, and edits the slide text of, a ProPresenter 7
+ * library on disk. Started by `main.ts`; built separately so tests can drive
+ * it over an in-memory pipe.
  *
- * Read-only. ProPresenter's own network API can show and trigger slides but
- * cannot edit them; this reads the files instead, through the same decoding
- * and checks the browser app uses.
+ * ProPresenter's own network API can show and trigger slides but cannot edit
+ * them; this works on the files instead, through the same decoding, checks
+ * and write path the browser app uses. Started with `readOnly`, the two
+ * editing tools are not offered at all, so a model never sees them.
  */
 
 const READ_ONLY = { readOnlyHint: true, openWorldHint: false } as const;
+
+export interface ServerOptions {
+  /** Offer no tool that writes. */
+  readOnly?: boolean;
+  /** Where backups go before a file is changed. Defaults to `defaultBackupDir()`. */
+  backupDir?: string;
+}
 
 /**
  * Said in the tool descriptions, not only here, so a model asked "when was
@@ -54,13 +65,17 @@ async function answer(run: () => Promise<unknown>) {
   }
 }
 
-export function createServer(roots: readonly string[]): McpServer {
+export function createServer(roots: readonly string[], options: ServerOptions = {}): McpServer {
   const server = new McpServer(
     { name: "propresenter-garage", version },
     {
       instructions:
         `Reads ProPresenter 7 files under: ${roots.join(", ")}. ` +
-        "Paths may be absolute or relative to those folders. Nothing is written.",
+        "Paths may be absolute or relative to those folders. " +
+        (options.readOnly
+          ? "Nothing is written."
+          : "Slide text can be edited with plan_slide_edits then apply_slide_edits; the person is asked to " +
+            "confirm every line before anything is written, and each file is backed up first."),
     }
   );
 
@@ -255,5 +270,85 @@ export function createServer(roots: readonly string[]): McpServer {
     (args) => answer(() => previewStyle(roots, args))
   );
 
+  if (!options.readOnly) registerEditTools(server, roots, options.backupDir ?? defaultBackupDir());
+
   return server;
+}
+
+/**
+ * The two tools that edit. Kept apart so a read-only server never registers
+ * them, and so the person's answer is fetched here -- by the server, from the
+ * client -- where the model cannot supply it.
+ */
+function registerEditTools(server: McpServer, roots: readonly string[], backupDir: string): void {
+  const plans = new PlanStore();
+
+  server.registerTool(
+    "plan_slide_edits",
+    {
+      title: "Plan slide text edits",
+      description:
+        "Work out changes to the text of slides, writing nothing. Each edit names a line by the `path`, " +
+        "`boxIndex` and `lineIndex` read_presentation or search_text gave it, and the whole text the line " +
+        "should read afterwards, or null to remove the line. Only what differs is touched, so formatting " +
+        "elsewhere on the line is kept. Returns a `planId` and every line as it is and as it would read. " +
+        "If any edit cannot be made, nothing is planned and the error says which. " +
+        "Then call apply_slide_edits with the planId: the person is asked there, by their app, to confirm.",
+      inputSchema: {
+        edits: z
+          .array(
+            z.object({
+              path: z.string().describe("The .pro file."),
+              boxIndex: z.number().int().min(0),
+              lineIndex: z.number().int().min(0),
+              text: z
+                .string()
+                .nullable()
+                .describe("The line's whole new text, on one line; null removes the line."),
+            })
+          )
+          .min(1)
+          .max(MAX_PLAN_LINES),
+      },
+      annotations: READ_ONLY,
+    },
+    ({ edits }) => answer(() => planSlideEdits(roots, plans, edits))
+  );
+
+  server.registerTool(
+    "apply_slide_edits",
+    {
+      title: "Apply planned slide edits",
+      description:
+        "Apply a plan from plan_slide_edits, once the person confirms it. Their app shows them every line " +
+        "as it is and as it would read, and they can untick any; only ticked lines are written. Each file is " +
+        "backed up outside the library first, checked, and read back once written; a file that changed " +
+        "since the plan was made is left alone. A plan is used once, whatever the answer. Needs an MCP " +
+        "client that can ask its user a question (elicitation); with one that cannot, nothing is written.",
+      inputSchema: { planId: z.string().describe("The planId plan_slide_edits returned.") },
+      annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false },
+    },
+    ({ planId }) =>
+      answer(async (): Promise<ApplyResult> => {
+        const plan = plans.take(planId);
+        if (!plan) throw new LibraryError("No such plan, or it was already used or has expired. Plan the edits again.");
+
+        if (!server.server.getClientCapabilities()?.elicitation) {
+          throw new LibraryError(
+            "This MCP client cannot ask its user to confirm a change, so nothing was written. Edit in a client " +
+              "that supports elicitation, or with the ProPresenter Garage web app."
+          );
+        }
+        const reply = await server.server.elicitInput(confirmationRequest(plan, backupDir));
+        if (reply.action !== "accept") return { answer: reply.action, files: [] };
+
+        // Only a line the person left ticked counts; one their client did not send back does not.
+        const ticked = new Set(
+          Object.entries(reply.content ?? {})
+            .filter(([, value]) => value === true)
+            .map(([key]) => Number(key.replace(/^line/, "")))
+        );
+        return { answer: "accept", ...(await applyPlan(roots, plan, ticked, backupDir)) };
+      })
+  );
 }

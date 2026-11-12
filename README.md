@@ -58,8 +58,21 @@ A [Model Context Protocol](https://modelcontextprotocol.io) server that lets an
 assistant such as Claude read your library from disk: list and search
 presentations, read their slides line by line, run the Presentations checks,
 read or audit the media bin, read the presentation playlists, and preview
-giving a presentation a theme's look. It is **read-only** — it cannot change a
-file.
+giving a presentation a theme's look. It can also **edit slide text**: ask
+it to fix a typo or reword a line, and before anything is written your app
+shows you every line as it is and as it would read, with a tick box for each.
+Every file is backed up outside your library first, and the result is read
+back before it is kept. Started with `--read-only` (or the extension's *Read
+only* setting), it never changes a file and does not even offer the editing
+tools.
+
+Editing needs a client that can ask you a question mid-task (MCP
+*elicitation*); with one that cannot, nothing is written. Close a song in
+ProPresenter before editing it: ProPresenter may save its own copy over the
+change. Backups go to `~/Library/Application Support/ProPresenter
+Garage/Backups` on macOS and `%APPDATA%\ProPresenter Garage\Backups` on
+Windows, one dated folder per change; `--backup-dir=<folder>` puts them
+elsewhere, and restoring is copying a file back.
 
 It also reads what each presentation records about itself: when ProPresenter
 last edited it and last showed it, its category, notes, CCLI details, key and
@@ -101,8 +114,8 @@ npm ci && npm run mcp:pack
    lines ending in a full stop?"* or *"Find the presentation with the lyric
    'how great thou art'."*
 
-To change the folders later, find ProPresenter Garage under **Settings →
-Extensions**. The extension is unsigned, so Claude Desktop says so when
+To change the folders, or to make it read-only, find ProPresenter Garage under
+**Settings → Extensions**. The extension is unsigned, so Claude Desktop says so when
 installing it.
 
 #### Claude Code and other MCP clients
@@ -118,7 +131,8 @@ claude mcp add propresenter -- npx -y propresenter-garage-mcp ~/Documents/ProPre
 
 Other clients take the same command and arguments in their MCP settings:
 command `npx`, arguments `-y propresenter-garage-mcp` followed by your folders.
-Pass one or more folders; with none, it reads `~/Documents/ProPresenter`.
+Pass one or more folders; with none, it reads `~/Documents/ProPresenter`. Add
+`--read-only` to turn editing off.
 
 To run it from a checkout instead:
 
@@ -162,8 +176,9 @@ cannot express: a French operator on an English-configured booth machine.
 Working: the **Presentations** checker and its fixes, and the **Media Bin**
 tool — diff, audit, browse, reorganise and export — with the fidelity gate
 behind everything written, English and French, and light, dark or system
-appearance. Also the read-only **MCP server**; editing through it would have to
-keep all four write guards in [AGENTS.md](AGENTS.md), so it is not offered yet.
+appearance. Also the **MCP server**, which reads everything the app does and
+edits slide text line by line under the same four write guards in
+[AGENTS.md](AGENTS.md).
 
 ## Contributing
 

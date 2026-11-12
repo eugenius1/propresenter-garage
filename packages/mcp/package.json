@@ -1,7 +1,7 @@
 {
   "name": "propresenter-garage-mcp",
   "version": "0.0.0",
-  "description": "An MCP server that lets an AI assistant read a ProPresenter 7 library from disk: search and read presentations, run text checks, audit the media bin. Read-only.",
+  "description": "An MCP server that lets an AI assistant read a ProPresenter 7 library from disk: search and read presentations, run text checks, audit the media bin, and edit slide text with a confirmation and a backup for every change.",
   "license": "GPL-3.0-or-later",
   "type": "module",
   "keywords": [
@@ -34,6 +34,7 @@
   },
   "devDependencies": {
     "@propresenter-garage/core": "*",
+    "@propresenter-garage/node": "*",
     "@anthropic-ai/mcpb": "^2.1.2",
     "@modelcontextprotocol/sdk": "^1.32.1",
     "zod": "^4.6.7"

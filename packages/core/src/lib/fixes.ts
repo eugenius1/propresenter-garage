@@ -21,6 +21,7 @@ import {
   applyEdits,
   cutsToEdits,
   lineEdit,
+  replaceLineText,
   type RtfLine,
   type SourceEdit,
   type TextCut,
@@ -192,6 +193,84 @@ export function planFixes(doc: PresentationDoc, issues: readonly TextIssue[]): L
   }
 
   // Back into reading order, which is the order the findings were listed in.
+  return fixes.sort((a, b) => a.boxIndex - b.boxIndex || a.lineIndex - b.lineIndex);
+}
+
+/** One line as somebody wants it to read, by the address `readPresentation` gives it. */
+export interface LineChange {
+  boxIndex: number;
+  lineIndex: number;
+  /** What the line should read, on one line; null removes the line. */
+  text: string | null;
+}
+
+/**
+ * Why a requested change could not be planned.
+ *
+ * - `noSuchLine`: the file has no such box or line.
+ * - `duplicate`: two changes name the same line.
+ * - `unchanged`: the line already reads that.
+ * - `unsupported`: the text cannot sit on one line (a line break, a control
+ *   character), or the change cannot be spliced safely -- removing the last
+ *   line of a box, which has no break to take with it.
+ */
+export type EditRefusal = "noSuchLine" | "duplicate" | "unchanged" | "unsupported";
+
+export class EditError extends Error {
+  readonly reason: EditRefusal;
+  readonly change: LineChange;
+
+  constructor(reason: EditRefusal, change: LineChange) {
+    super(`${reason} at box ${change.boxIndex}, line ${change.lineIndex}`);
+    this.name = "EditError";
+    this.reason = reason;
+    this.change = change;
+  }
+}
+
+/**
+ * Plan line changes asked for in words rather than found by a check.
+ *
+ * The result is the same `LineFix` the checks produce, so it goes through the
+ * same `applyFixes` -- the same fidelity gate, the same staleness check and
+ * the same read-back of every line in the file. There is one write path, and
+ * this is a second way into it rather than a second path. It carries no
+ * `kinds`: nothing was found, somebody asked.
+ *
+ * All or nothing: one change that cannot be planned refuses the lot, since a
+ * half-applied set of edits to a song is worse than none.
+ */
+export function planLineEdits(doc: PresentationDoc, changes: readonly LineChange[]): LineFix[] {
+  const boxes = new Map(doc.textBoxes.map((box) => [box.boxIndex, box]));
+  const seen = new Set<string>();
+  const fixes: LineFix[] = [];
+
+  for (const change of changes) {
+    const box = boxes.get(change.boxIndex);
+    const line = box?.lines[change.lineIndex];
+    if (!box || !line) throw new EditError("noSuchLine", change);
+    if (seen.has(fixKey(change))) throw new EditError("duplicate", change);
+    seen.add(fixKey(change));
+    if (change.text === line.text) throw new EditError("unchanged", change);
+
+    const edits =
+      change.text === null ? lineEdit(box.rtf, line) : replaceLineText(box.rtf, line, change.text);
+    if (edits === null) throw new EditError("unsupported", change);
+
+    fixes.push({
+      boxIndex: box.boxIndex,
+      lineIndex: line.index,
+      slideIndex: box.slideIndex,
+      cueName: box.cueName,
+      groupName: box.groupName,
+      kinds: [],
+      before: line.text,
+      after: change.text,
+      edits,
+      source: box.rtf,
+    });
+  }
+
   return fixes.sort((a, b) => a.boxIndex - b.boxIndex || a.lineIndex - b.lineIndex);
 }
 
