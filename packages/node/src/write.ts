@@ -55,17 +55,27 @@ export function defaultBackupDir(): string {
  * see is one it can edit.
  */
 export async function openBackupDir(dir: string, roots: readonly string[]): Promise<string> {
+  const refuseInside = (real: string) => {
+    if (roots.some((root) => root === real || isInside(root, real))) {
+      throw new LibraryError(`The backup folder ${real} is inside a library folder. Choose one outside them with --backup-dir.`);
+    }
+  };
+  // Checked before anything is created, so a refused folder is not left
+  // behind in the library: the nearest folder that exists, resolved, with
+  // the rest of the path on top.
+  let existing = path.resolve(dir);
+  while (!(await fs.stat(existing).catch(() => undefined)) && path.dirname(existing) !== existing) {
+    existing = path.dirname(existing);
+  }
+  refuseInside(path.join(await fs.realpath(existing), path.relative(existing, path.resolve(dir))));
+
   try {
     await fs.mkdir(dir, { recursive: true });
   } catch (e) {
     throw new LibraryError(`Could not create the backup folder ${dir}: ${(e as NodeJS.ErrnoException).code ?? e}`);
   }
   const real = await fs.realpath(dir);
-  if (roots.some((root) => root === real || isInside(root, real))) {
-    throw new LibraryError(
-      `The backup folder ${real} is inside a library folder. Choose one outside them with --backup-dir.`
-    );
-  }
+  refuseInside(real);
   return real;
 }
 
@@ -122,8 +132,12 @@ async function runFolder(backupDir: string, now: Date): Promise<string> {
 
 /** Where in the backup a file goes: its root's name, then its path within that root, so a restore is a copy back. */
 function backupPath(folder: string, roots: readonly string[], file: string): string {
-  const root = roots.find((r) => isInside(r, file))!;
-  return path.join(folder, path.basename(root), path.relative(root, file));
+  const index = roots.findIndex((r) => isInside(r, file));
+  const root = roots[index];
+  // Two roots with one name would otherwise share a folder, and their files collide.
+  const name = path.basename(root);
+  const shared = roots.filter((r) => path.basename(r) === name).length > 1;
+  return path.join(folder, shared ? `${name} (${index + 1})` : name, path.relative(root, file));
 }
 
 /** Write a new file, refusing to follow or replace anything already there, and flush it. */
@@ -208,7 +222,9 @@ async function replaceOne(roots: readonly string[], r: Replacement): Promise<Pic
     await writeNew(temp, r.updated, mode & 0o777);
     await fs.rename(temp, r.path);
   } catch (e) {
-    await fs.rm(temp, { force: true });
+    // Best effort: a throw here would abandon the run, and with it the record
+    // of the files already written.
+    await fs.rm(temp, { force: true }).catch(() => undefined);
     return { written: false, reason: "writeFailed", detail: errorDetail(e) };
   }
 

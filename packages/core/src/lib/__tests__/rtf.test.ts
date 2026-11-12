@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import { extractLines, extractText } from "../rtf";
 import { rtfWithHeader as rtf } from "./synthetic";
 
-
 describe("control words are syntax, not text", () => {
   it("does not mistake a control word's terminating space for a leading space", () => {
     // The bug this parser exists to avoid: in `\cb2 Hello` the space after the

@@ -568,6 +568,17 @@ export function unicodeSkipAt(rtf: string, index: number): number {
   return skip;
 }
 
+/** Whether a UTF-16 code unit is a control character other than a tab, which cannot sit on one line of a slide. */
+function isLineControl(code: number): boolean {
+  return (code < 0x20 && code !== 0x09) || code === 0x7f;
+}
+
+/** Whether text holds a line break or another control character, so it cannot sit on one line. */
+export function hasLineControl(text: string): boolean {
+  for (let i = 0; i < text.length; i++) if (isLineControl(text.charCodeAt(i))) return true;
+  return false;
+}
+
 /**
  * Plain text as RTF a slide will read back exactly, or null for text that
  * cannot sit on one line: a line break, or any other control character.
@@ -590,7 +601,7 @@ export function encodeRtfText(text: string, skip: number): string | null {
     const code = text.charCodeAt(i);
     if (ch === "\\" || ch === "{" || ch === "}") out += "\\" + ch;
     else if (ch === "\t") out += "\\tab ";
-    else if (code < 0x20 || code === 0x7f) return null;
+    else if (isLineControl(code)) return null;
     else if (code < 0x7f) out += ch;
     // UTF-16 code units, so a character past the BMP is a surrogate pair of
     // escapes, which is how RTF spells one; signed, since \u takes a 16-bit

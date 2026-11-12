@@ -1,5 +1,7 @@
 import { randomUUID } from "node:crypto";
+import path from "node:path";
 import { createI18n } from "@propresenter-garage/core/i18n/core";
+import { isPresentationFile } from "@propresenter-garage/core/lib/folder";
 import {
   EditError,
   FixError,
@@ -97,7 +99,6 @@ export interface RequestedEdit extends LineChange {
   path: string;
 }
 
-
 /** The app's own sentences for why a file was left alone, so the two surfaces never describe one file differently. */
 const { t } = createI18n("en");
 const refusals = t.tools.presentations.refusals;
@@ -114,10 +115,20 @@ export async function planSlideEdits(
 
   // By the file each edit resolves to, so two spellings of one path are one
   // file, and each file is read once however many of its lines change.
+  const resolved = new Map<string, string>();
   const byFile = new Map<string, LineChange[]>();
   for (const { path: p, ...change } of edits) {
-    const real = await resolveInRoots(roots, p);
-    byFile.set(real, [...(byFile.get(real) ?? []), change]);
+    let real = resolved.get(p);
+    if (real === undefined) {
+      real = await resolveInRoots(roots, p);
+      // Only a presentation: a playlist, media bin or theme in the same
+      // folders is not something this path was built to write.
+      if (!isPresentationFile(path.basename(real))) throw new LibraryError(`Not a presentation (.pro) file: ${p}`);
+      resolved.set(p, real);
+    }
+    const changes = byFile.get(real);
+    if (changes) changes.push(change);
+    else byFile.set(real, [change]);
   }
 
   let n = 0;
@@ -204,7 +215,6 @@ export interface ApplyResult {
     detail?: string;
   }[];
 }
-
 
 /**
  * Apply what the person left ticked.

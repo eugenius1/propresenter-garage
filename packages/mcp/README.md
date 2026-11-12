@@ -16,7 +16,8 @@ read a ProPresenter 7 library from disk, and edit its slide text. Part of
 - Edit slide text line by line: you confirm every line in your app before
   anything is written, and each file is backed up outside your library first
 
-It reads and writes nothing outside the folders you give it. Editing needs a
+It reads nothing outside the folders you give it, and writes outside them only
+the backups it makes before changing a file. Editing needs a
 client that supports MCP elicitation; with one that does not, nothing is
 written. `--read-only` turns editing off entirely, and `--backup-dir=<folder>`
 chooses where backups go.

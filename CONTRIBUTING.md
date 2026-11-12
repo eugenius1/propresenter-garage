@@ -434,7 +434,7 @@ it exists. Its `vite.config.ts` bundles it into one self-contained file,
 points at it and there are no runtime dependencies, so `npx` starts it with
 nothing to install. npm packs only what is inside the package, so
 `packages/mcp/LICENSE` is a committed copy of the root licence, which the same
-test holds equal. `It touches the disk only through `packages/node`.
+test holds equal. It touches the disk only through `packages/node`.
 In `library.ts` there, every path a tool is given is resolved with `realpath`
 before it is compared with the configured folders, and nothing opens a file
 for writing; `write.ts` is the only code that does, and `edits.ts` in the

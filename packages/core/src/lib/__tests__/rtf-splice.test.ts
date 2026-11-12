@@ -12,7 +12,6 @@ import { decodePresentation, readPresentation } from "../presentation";
 import { hasRealLibrary, libraryFiles, readLibraryFile } from "./corpus";
 import { rtfWithHeader as rtf, syntheticTextPresentation } from "./synthetic";
 
-
 /**
  * The invariants an offset has to satisfy to be worth splicing on.
  *

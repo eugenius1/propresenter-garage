@@ -26,8 +26,6 @@ function plan(bytes: Uint8Array, kinds: TextIssueKind[] = ALL) {
   return planFixes(doc, issues);
 }
 
-
-
 /** One text box holding one line, written as RTF and read back. */
 function docOf(body: string) {
   const rtf = `{\\rtf0\\ansi\\uc1\\pard\\f0\\fs100\\cb3 ${body}}`;

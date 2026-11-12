@@ -899,6 +899,14 @@ describe("editing slide text", () => {
     expect(result.isError).toBe(true);
   });
 
+  it("refuses to plan a file that is not a presentation", async () => {
+    const playlist = path.join(dir, "ProPresenter", "Libraries", "Default", "Notes.txt");
+    fs.writeFileSync(playlist, "not a song");
+    const result = await edit("plan_slide_edits", { edits: [{ path: playlist, boxIndex: 0, lineIndex: 0, text: "x" }] });
+    expect(result.isError).toBe(true);
+    expect(result.text).toMatch(/Not a presentation/);
+  });
+
   it("writes nothing through a client that cannot ask its user", async () => {
     // The shared client declares no elicitation: no person to confirm.
     const shared = path.join(library, "Libraries", "Default", "Checked Song.pro");

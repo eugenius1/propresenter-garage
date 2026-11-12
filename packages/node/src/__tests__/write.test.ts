@@ -50,6 +50,22 @@ describe("replaceWithBackup", () => {
     expect(path.relative(run.backupFolder!, backup)).toBe(path.join("ProPresenter", "Libraries", "Default", "Amazing Grace.pro"));
   });
 
+  it("keeps apart two library folders that share a name", async () => {
+    const other = path.join(tmp, "Elsewhere", "ProPresenter");
+    fs.mkdirSync(path.join(other, "Libraries", "Default"), { recursive: true });
+    const both = await openRoots([library, other]);
+    const a = song("Song.pro", "a");
+    const b = path.join(other, "Libraries", "Default", "Song.pro");
+    fs.writeFileSync(b, "b");
+
+    const run = await replaceWithBackup(both, await openBackupDir(backups, both), [
+      replacement(a, "a2"),
+      replacement(b, "b2"),
+    ]);
+    expect(run.outcomes.map((o) => o.written)).toEqual([true, true]);
+    expect(run.outcomes.map((o) => fs.readFileSync(o.backup!, "utf8"))).toEqual(["a", "b"]);
+  });
+
   it("leaves no temporary file beside the original", async () => {
     const file = song("Song.pro", "before");
     await replaceWithBackup(roots, await openBackupDir(backups, roots), [replacement(file, "after")]);
@@ -114,5 +130,7 @@ describe("openBackupDir", () => {
 
   it("refuses a folder inside a library, where backups would show up as songs", async () => {
     await expect(openBackupDir(path.join(library, "Backups"), roots)).rejects.toThrow(/inside a library folder/);
+    // Refused before it was made, so nothing is left behind in the library.
+    expect(fs.existsSync(path.join(library, "Backups"))).toBe(false);
   });
 });

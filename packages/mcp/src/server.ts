@@ -29,6 +29,9 @@ import {
 
 const READ_ONLY = { readOnlyHint: true, openWorldHint: false } as const;
 
+/** How long a person has to read and answer the confirmation: as long as a plan lives. */
+const CONFIRM_TIMEOUT_MS = 60 * 60 * 1000;
+
 export interface ServerOptions {
   /** Offer no tool that writes. */
   readOnly?: boolean;
@@ -333,13 +336,22 @@ function registerEditTools(server: McpServer, roots: readonly string[], backupDi
         const plan = plans.take(planId);
         if (!plan) throw new LibraryError("No such plan, or it was already used or has expired. Plan the edits again.");
 
-        if (!server.server.getClientCapabilities()?.elicitation) {
+        // A form, specifically: a client offering only URL elicitation cannot show tick boxes.
+        if (!server.server.getClientCapabilities()?.elicitation?.form) {
           throw new LibraryError(
             "This MCP client cannot ask its user to confirm a change, so nothing was written. Edit in a client " +
               "that supports elicitation, or with the ProPresenter Garage web app."
           );
         }
-        const reply = await server.server.elicitInput(confirmationRequest(plan, backupDir));
+        let reply;
+        try {
+          // The SDK's default is a minute, which is not long enough to read a song's worth of lines.
+          reply = await server.server.elicitInput(confirmationRequest(plan, backupDir), { timeout: CONFIRM_TIMEOUT_MS });
+        } catch (e) {
+          throw new LibraryError(
+            `No answer came back from the confirmation (${(e as Error).message}), so nothing was written. Plan the edits again.`
+          );
+        }
         if (reply.action !== "accept") return { answer: reply.action, files: [] };
 
         // Only a line the person left ticked counts; one their client did not send back does not.

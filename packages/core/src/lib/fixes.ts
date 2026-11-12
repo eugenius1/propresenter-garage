@@ -21,6 +21,7 @@ import {
   applyEdits,
   cutsToEdits,
   extractLines,
+  hasLineControl,
   lineEdit,
   replaceLineText,
   type RtfLine,
@@ -224,15 +225,6 @@ export interface LineChange {
  */
 export type EditRefusal = "noSuchLine" | "duplicate" | "unchanged" | "notOneLine" | "lastLine" | "unsupported";
 
-/** Whether text holds a control character other than a tab, which a slide shows as a gap. */
-function hasControl(text: string): boolean {
-  for (let i = 0; i < text.length; i++) {
-    const code = text.charCodeAt(i);
-    if ((code < 0x20 && code !== 0x09) || code === 0x7f) return true;
-  }
-  return false;
-}
-
 export class EditError extends Error {
   readonly reason: EditRefusal;
   readonly change: LineChange;
@@ -274,7 +266,7 @@ export function planLineEdits(doc: PresentationDoc, changes: readonly LineChange
     if (seen.has(key)) throw new EditError("duplicate", change);
     seen.add(key);
     if (change.text === line.text) throw new EditError("unchanged", change);
-    if (change.text !== null && hasControl(change.text)) throw new EditError("notOneLine", change);
+    if (change.text !== null && hasLineControl(change.text)) throw new EditError("notOneLine", change);
 
     const edits =
       change.text === null ? lineEdit(box.rtf, line) : replaceLineText(box.rtf, line, change.text);
