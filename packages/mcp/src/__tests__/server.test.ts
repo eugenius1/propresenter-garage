@@ -895,6 +895,19 @@ describe("editing slide text", () => {
     expect(fs.readFileSync(file)).toEqual(before);
   });
 
+  it("applies two plans for one song one after the other, so the second is refused rather than landing over the first", async () => {
+    const first = await plan([{ boxIndex: 0, lineIndex: 0, text: "From the first plan" }]);
+    const second = await plan([{ boxIndex: 0, lineIndex: 1, text: "From the second plan" }]);
+    const results = await Promise.all([
+      edit("apply_slide_edits", { planId: first.planId }),
+      edit("apply_slide_edits", { planId: second.planId }),
+    ]);
+    const [a, b] = results.map((r) => r.json().files[0]);
+    expect(a).toMatchObject({ written: true });
+    expect(b).toMatchObject({ written: false, reason: "stale" });
+    expect(lines()[0]).toEqual(["From the first plan", "And another"]);
+  });
+
   it("leaves alone a file that changed after the plan was made", async () => {
     const { planId } = await plan([{ boxIndex: 0, lineIndex: 0, text: "Mine" }]);
     fs.writeFileSync(file, syntheticTextPresentation("Saved by ProPresenter meanwhile"));

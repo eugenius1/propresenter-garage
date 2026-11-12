@@ -71,6 +71,12 @@ export async function openBackupDir(dir: string, roots: readonly string[]): Prom
 
   try {
     await fs.mkdir(dir, { recursive: true, mode: PRIVATE_DIR });
+    // Every folder just made, and the one it was made in, flushed so their
+    // entries survive a power cut: a backup in a folder that vanishes with
+    // it is no backup. Deepest first, up to the folder that already existed.
+    for (let made = path.resolve(dir); made !== existing; made = path.dirname(made)) {
+      await syncDir(path.dirname(made));
+    }
   } catch (e) {
     throw new LibraryError(`Could not create the backup folder ${dir}: ${(e as NodeJS.ErrnoException).code ?? e}`);
   }
