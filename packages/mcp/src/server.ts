@@ -331,7 +331,7 @@ function registerEditTools(server: McpServer, roots: readonly string[], backupDi
       inputSchema: { planId: z.string().describe("The planId plan_slide_edits returned.") },
       annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false },
     },
-    ({ planId }) =>
+    ({ planId }, { signal }) =>
       answer(async (): Promise<ApplyResult> => {
         const plan = plans.take(planId);
         if (!plan) throw new LibraryError("No such plan, or it was already used or has expired. Plan the edits again.");
@@ -346,13 +346,19 @@ function registerEditTools(server: McpServer, roots: readonly string[], backupDi
         let reply;
         try {
           // The SDK's default is a minute, which is not long enough to read a song's worth of lines.
-          reply = await server.server.elicitInput(confirmationRequest(plan, backupDir), { timeout: CONFIRM_TIMEOUT_MS });
+          // The call's own signal too: a client that gives up on the tool call
+          // must not have the file changed behind it by a late answer.
+          reply = await server.server.elicitInput(confirmationRequest(plan, backupDir), {
+            timeout: CONFIRM_TIMEOUT_MS,
+            signal,
+          });
         } catch (e) {
           throw new LibraryError(
             `No answer came back from the confirmation (${(e as Error).message}), so nothing was written. Plan the edits again.`
           );
         }
         if (reply.action !== "accept") return { answer: reply.action, files: [] };
+        if (signal.aborted) throw new LibraryError("The call was cancelled before the answer came back, so nothing was written.");
 
         // Only a line the person left ticked counts; one their client did not send back does not.
         const ticked = new Set(

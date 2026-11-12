@@ -180,7 +180,15 @@ export async function planSlideEdits(
 export function confirmationRequest(plan: Plan, backupDir: string) {
   const properties: Record<string, { type: "boolean"; title: string; description: string; default: boolean }> = {};
   for (const file of plan.files) for (const { fix, n } of file.lines) {
-    const where = [`slide ${fix.slideIndex + 1}`, fix.groupName].filter(Boolean).join(", ");
+    // Box and line too: a slide can hold the same line twice, and a person
+    // choosing one of them has to be able to tell which.
+    const where = [
+      `slide ${fix.slideIndex + 1}`,
+      fix.groupName,
+      `text box ${fix.boxIndex + 1}, line ${fix.lineIndex + 1}`,
+    ]
+      .filter(Boolean)
+      .join(", ");
     properties[`line${n}`] = {
       type: "boolean",
       title: `${n}. ${file.name} (${where})`,
@@ -225,7 +233,29 @@ export interface ApplyResult {
  * line live. Only files that pass are handed to `replaceWithBackup`, which
  * backs them all up before writing any.
  */
-export async function applyPlan(
+/** The apply in progress, if any; the next waits for it. */
+let applying: Promise<unknown> = Promise.resolve();
+
+/**
+ * Apply what the person left ticked, one plan at a time.
+ *
+ * Two plans for the same song, confirmed at once, would otherwise both read
+ * the same original and both pass the check before either renamed: the
+ * second would land over the first, and both would report success. In
+ * series, the second finds the file changed and is refused as stale.
+ */
+export function applyPlan(
+  roots: readonly string[],
+  plan: Plan,
+  ticked: ReadonlySet<number>,
+  backupDir: string
+): Promise<Omit<ApplyResult, "answer">> {
+  const run = applying.then(() => applyPlanNow(roots, plan, ticked, backupDir));
+  applying = run.catch(() => undefined);
+  return run;
+}
+
+async function applyPlanNow(
   roots: readonly string[],
   plan: Plan,
   ticked: ReadonlySet<number>,

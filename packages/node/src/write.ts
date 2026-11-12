@@ -70,7 +70,7 @@ export async function openBackupDir(dir: string, roots: readonly string[]): Prom
   refuseInside(path.join(await fs.realpath(existing), path.relative(existing, path.resolve(dir))));
 
   try {
-    await fs.mkdir(dir, { recursive: true });
+    await fs.mkdir(dir, { recursive: true, mode: PRIVATE_DIR });
   } catch (e) {
     throw new LibraryError(`Could not create the backup folder ${dir}: ${(e as NodeJS.ErrnoException).code ?? e}`);
   }
@@ -122,7 +122,7 @@ async function runFolder(backupDir: string, now: Date): Promise<string> {
   for (let n = 1; ; n++) {
     const candidate = path.join(backupDir, n === 1 ? stamp : `${stamp} (${n})`);
     try {
-      await fs.mkdir(candidate);
+      await fs.mkdir(candidate, { mode: PRIVATE_DIR });
       return candidate;
     } catch (e) {
       if ((e as NodeJS.ErrnoException).code !== "EEXIST") throw e;
@@ -140,12 +140,17 @@ function backupPath(folder: string, roots: readonly string[], file: string): str
   return path.join(folder, shared ? `${name} (${index + 1})` : name, path.relative(root, file));
 }
 
-/** Write a new file, refusing to follow or replace anything already there, and flush it. */
-async function writeNew(file: string, bytes: Uint8Array, mode = 0o644): Promise<void> {
+/**
+ * Write a new file, refusing to follow or replace anything already there, and
+ * flush it. The mode is set outright rather than left to `open`, which the
+ * umask would narrow: a replacement must keep the original's group-write.
+ */
+async function writeNew(file: string, bytes: Uint8Array, mode: number): Promise<void> {
   const flags = fsConstants.O_WRONLY | fsConstants.O_CREAT | fsConstants.O_EXCL | (fsConstants.O_NOFOLLOW ?? 0);
   const handle = await fs.open(file, flags, mode);
   try {
     await handle.writeFile(bytes);
+    await handle.chmod(mode);
     await handle.sync();
   } finally {
     await handle.close();
@@ -153,6 +158,25 @@ async function writeNew(file: string, bytes: Uint8Array, mode = 0o644): Promise<
 }
 
 const same = (a: Uint8Array, b: Uint8Array) => Buffer.compare(a, b) === 0;
+
+/**
+ * Flush a folder's entries, so a file just created or renamed in it survives
+ * a power cut and not only its contents. Windows cannot open a folder for
+ * this and journals its entries anyway, so there it is skipped.
+ */
+async function syncDir(dir: string): Promise<void> {
+  if (process.platform === "win32") return;
+  const handle = await fs.open(dir, "r");
+  try {
+    await handle.sync();
+  } finally {
+    await handle.close();
+  }
+}
+
+/** Backups hold somebody's songs: readable by them alone, whatever the folder above allows. */
+const PRIVATE_FILE = 0o600;
+const PRIVATE_DIR = 0o700;
 
 const errorDetail = (e: unknown) => (e as NodeJS.ErrnoException).code ?? (e as Error).message;
 
@@ -188,11 +212,20 @@ export async function replaceWithBackup(
     backupFolder = await runFolder(backupDir, now);
     for (const r of replacements) {
       const copy = backupPath(backupFolder, roots, r.path);
-      await fs.mkdir(path.dirname(copy), { recursive: true });
-      await writeNew(copy, r.original);
+      await fs.mkdir(path.dirname(copy), { recursive: true, mode: PRIVATE_DIR });
+      await writeNew(copy, r.original, PRIVATE_FILE);
       if (!same(await fs.readFile(copy), r.original)) throw new Error(`${copy} did not read back`);
       backups.push(copy);
     }
+    // Every folder from each copy up to the backup folder itself, deepest
+    // first, so no copy's entry is lost to a crash once its original changes.
+    const dirs = new Set<string>();
+    for (const copy of backups) {
+      for (let dir = path.dirname(copy); isInside(backupDir, dir) || dir === backupDir; dir = path.dirname(dir)) {
+        dirs.add(dir);
+      }
+    }
+    for (const dir of [...dirs].sort((a, b) => b.length - a.length)) await syncDir(dir);
   } catch (e) {
     const detail = errorDetail(e);
     return {
@@ -227,6 +260,10 @@ async function replaceOne(roots: readonly string[], r: Replacement): Promise<Pic
     await fs.rm(temp, { force: true }).catch(() => undefined);
     return { written: false, reason: "writeFailed", detail: errorDetail(e) };
   }
+
+  // Best effort: the file is already replaced, and a folder that will not
+  // flush does not make it any less so.
+  await syncDir(dir).catch(() => undefined);
 
   try {
     if (same((await readFoundFile(r.path)).bytes, r.updated)) return { written: true };

@@ -843,6 +843,7 @@ describe("editing slide text", () => {
     const { message, requestedSchema } = form(asked[0]);
     expect(message).toContain(backups);
     expect(requestedSchema.properties.line1.description).toBe("“A tidy line” → “A tidier line”");
+    expect((requestedSchema.properties.line1 as { title?: string }).title).toMatch(/text box 1, line 1/);
 
     expect(result).toMatchObject({ answer: "accept", files: [{ written: true, lines: 2 }] });
     expect(lines()[0]).toEqual(["A tidier line", "And another"]);
@@ -871,6 +872,26 @@ describe("editing slide text", () => {
     reply = () => ({ action: "accept", content: { line1: true } });
     const again = await edit("apply_slide_edits", { planId });
     expect(again.isError).toBe(true);
+    expect(fs.readFileSync(file)).toEqual(before);
+  });
+
+  it("writes nothing when the client gives up on the call before the person answers", async () => {
+    const before = fs.readFileSync(file);
+    const { planId } = await plan([{ boxIndex: 0, lineIndex: 0, text: "Too late" }]);
+    const controller = new AbortController();
+    let answer!: () => void;
+    const answered = new Promise<void>((resolve) => (answer = resolve));
+    reply = () => {
+      // The person is still reading when the client cancels; they accept after.
+      controller.abort();
+      return answered.then(() => ({ action: "accept" as const, content: { line1: true } }));
+    };
+    const call = editor.callTool({ name: "apply_slide_edits", arguments: { planId } }, undefined, {
+      signal: controller.signal,
+    });
+    await expect(call).rejects.toThrow();
+    answer();
+    await new Promise((resolve) => setTimeout(resolve, 50));
     expect(fs.readFileSync(file)).toEqual(before);
   });
 

@@ -66,6 +66,16 @@ describe("replaceWithBackup", () => {
     expect(run.outcomes.map((o) => fs.readFileSync(o.backup!, "utf8"))).toEqual(["a", "b"]);
   });
 
+  it("keeps backups private, and the replacement's mode as the original's", async () => {
+    if (process.platform === "win32") return;
+    const file = song("Shared.pro", "before");
+    fs.chmodSync(file, 0o664);
+    const run = await replaceWithBackup(roots, await openBackupDir(backups, roots), [replacement(file, "after")]);
+    expect(fs.statSync(file).mode & 0o777).toBe(0o664);
+    expect(fs.statSync(run.outcomes[0].backup!).mode & 0o777).toBe(0o600);
+    expect(fs.statSync(run.backupFolder!).mode & 0o777).toBe(0o700);
+  });
+
   it("leaves no temporary file beside the original", async () => {
     const file = song("Song.pro", "before");
     await replaceWithBackup(roots, await openBackupDir(backups, roots), [replacement(file, "after")]);

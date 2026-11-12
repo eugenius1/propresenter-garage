@@ -494,9 +494,11 @@ export function applyEdits(rtf: string, edits: readonly SourceEdit[]): string {
       cursor = at;
     } else if (open && edit.start <= open.end) {
       open.end = Math.max(open.end, edit.end);
-    } else {
+    } else if (edit.end > cursor) {
+      // A removal partly behind the cursor -- inside one already written out,
+      // with an insertion between -- takes only what is still ahead of it.
       flush();
-      open = { ...edit };
+      open = { ...edit, start: Math.max(edit.start, cursor) };
     }
   }
 
@@ -673,7 +675,11 @@ export function replaceLineText(rtf: string, line: RtfLine, after: string): Sour
 
   // The new text goes where the removal begins, or where it would be typed.
   const at = edits.length > 0 ? Math.min(...edits.map((e) => e.start)) : insertionPoint(rtf, line, start);
-  const encoded = encodeRtfText(inserted, unicodeSkipAt(rtf, at));
+  // A \ucN no real writer uses -- negative, or large enough to make the
+  // fallback run a denial of service -- is a document this does not write into.
+  const skip = unicodeSkipAt(rtf, at);
+  if (skip < 0 || skip > 8) return null;
+  const encoded = encodeRtfText(inserted, skip);
   if (encoded === null) return null;
 
   // A delimiter the removal would have put back belongs before the new text,

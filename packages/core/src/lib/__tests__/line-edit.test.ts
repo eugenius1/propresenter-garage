@@ -59,6 +59,17 @@ const TRICKY = [
 /** What gets typed: plain, accented, reserved by RTF, a tab, a digit, past the BMP. */
 const INSERTS = ["x", "é", "{", "}", "\\", "\t", "5", " ", "😀", "-1", "Ω ok"];
 
+describe("applying edits", () => {
+  it("never writes out again what a removal already took, with an insertion inside it", () => {
+    const edits = [
+      { start: 1, end: 6 },
+      { start: 3, end: 3, insert: "X" },
+      { start: 4, end: 5 },
+    ];
+    expect(applyEdits("abcdefg", edits)).toBe("aXg");
+  });
+});
+
 describe("encoding plain text", () => {
   it("escapes what RTF reserves and spells a tab as a control word", () => {
     expect(encodeRtfText("a{b}c\\d\te", 1)).toBe("a\\{b\\}c\\\\d\\tab e");
@@ -120,6 +131,11 @@ describe("replacing a line's text", () => {
   it("writes into a blank line between two others", () => {
     const source = rtf("\\cb3 Above\\par\\pard\\li0\\qc\\fs200\\par\\pard\\cb3 Below");
     expect(edit(source, 1, "Middle")).toEqual(["Above", "Middle", "Below"]);
+  });
+
+  it("refuses a document whose \\uc no writer would use, rather than writing a vast fallback", () => {
+    const source = rtf("\\cb3 x", "\\uc100000000");
+    expect(replaceLineText(source, extractLines(source)[0], "é")).toBeNull();
   });
 
   it("asks for nothing when the line already reads that", () => {
