@@ -76,13 +76,15 @@ export async function openBackupDir(dir: string, roots: readonly string[]): Prom
     // with it is no backup. The whole chain every time, not only what this
     // call made -- a start that made the folders and then failed to flush
     // them leaves them existing for the next, which must flush them still.
-    // Strict for what was made now; best effort above, where an unreadable
-    // ancestor is someone else's and has long been on disk.
+    // Strict for every folder this user owns, which is every folder this
+    // server could have made, on this start or an earlier one. Best effort
+    // for the rest -- `/Users`, `/` -- which are another account's, have long
+    // been on disk, and on macOS may sit on a read-only system volume.
+    const me = process.getuid?.();
     for (let child = path.resolve(dir); path.dirname(child) !== child; child = path.dirname(child)) {
-      const parent = path.dirname(child);
-      const made = child !== existing && isInside(existing, child);
-      if (made) await syncDir(parent);
-      else await syncDir(parent).catch(() => undefined);
+      const mine = me === undefined || (await fs.stat(child)).uid === me;
+      if (mine) await syncDir(path.dirname(child));
+      else await syncDir(path.dirname(child)).catch(() => undefined);
     }
   } catch (e) {
     throw new LibraryError(`Could not create the backup folder ${dir}: ${(e as NodeJS.ErrnoException).code ?? e}`);
