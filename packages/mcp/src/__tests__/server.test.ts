@@ -775,7 +775,7 @@ describe("editing slide text", () => {
   let file: string;
   let backups: string;
   /** What the person answers when asked; set per test. */
-  let reply: (request: ElicitRequest) => ElicitResult;
+  let reply: (request: ElicitRequest) => ElicitResult | Promise<ElicitResult>;
   let asked: ElicitRequest[];
   let edit: Awaited<ReturnType<typeof connect>>["call"];
   let editor: Client;
