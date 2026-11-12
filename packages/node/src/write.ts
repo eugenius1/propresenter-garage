@@ -71,11 +71,18 @@ export async function openBackupDir(dir: string, roots: readonly string[]): Prom
 
   try {
     await fs.mkdir(dir, { recursive: true, mode: PRIVATE_DIR });
-    // Every folder just made, and the one it was made in, flushed so their
-    // entries survive a power cut: a backup in a folder that vanishes with
-    // it is no backup. Deepest first, up to the folder that already existed.
-    for (let made = path.resolve(dir); made !== existing; made = path.dirname(made)) {
-      await syncDir(path.dirname(made));
+    // Every folder's entry in its parent flushed, all the way up, so the
+    // backup folder survives a power cut: a backup in a folder that vanishes
+    // with it is no backup. The whole chain every time, not only what this
+    // call made -- a start that made the folders and then failed to flush
+    // them leaves them existing for the next, which must flush them still.
+    // Strict for what was made now; best effort above, where an unreadable
+    // ancestor is someone else's and has long been on disk.
+    for (let child = path.resolve(dir); path.dirname(child) !== child; child = path.dirname(child)) {
+      const parent = path.dirname(child);
+      const made = child !== existing && isInside(existing, child);
+      if (made) await syncDir(parent);
+      else await syncDir(parent).catch(() => undefined);
     }
   } catch (e) {
     throw new LibraryError(`Could not create the backup folder ${dir}: ${(e as NodeJS.ErrnoException).code ?? e}`);
