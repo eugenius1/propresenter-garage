@@ -10,7 +10,7 @@ import {
   unicodeSkipAt,
 } from "../rtf";
 import { hasRealLibrary, libraryFiles, readLibraryFile } from "./corpus";
-import { syntheticTextPresentation } from "./synthetic";
+import { rtfWithHeader as rtf, syntheticTextPresentation, textLines } from "./synthetic";
 
 /**
  * Writing new text into a line, rather than only cutting characters out.
@@ -22,16 +22,6 @@ import { syntheticTextPresentation } from "./synthetic";
  * where there is one.
  */
 
-/** A minimal document with the header ProPresenter actually writes. */
-function rtf(body: string, uc = "\\uc1"): string {
-  return (
-    "{\\rtf0\\ansi\\ansicpg1252{\\fonttbl\\f0\\fnil ArialMT;}" +
-    "{\\colortbl;\\red0\\green0\\blue0;}" +
-    `${uc}\\pard\\f0\\fs100` +
-    body +
-    "}"
-  );
-}
 
 /** Make one line read `after` and return every line's text. */
 function edit(source: string, lineIndex: number, after: string): string[] {
@@ -169,17 +159,16 @@ describe("replacing a line's text", () => {
         for (const after of tries) {
           if (after === text) continue;
           const edits = replaceLineText(source, line, after);
-          // Emptying a bare last line is the one honest refusal: it would
-          // read back as no line at all.
           if (edits === null) {
-            if (after !== "" || line.breakStart !== undefined) {
-              failures.push(`line ${index} refused ${JSON.stringify(after)}`);
-            }
+            failures.push(`line ${index} refused ${JSON.stringify(after)}`);
             continue;
           }
           const got = extractLines(applyEdits(source, edits)).map((l) => l.text);
           const want = expected(source, index, after);
-          if (got.length !== want.length || got.some((t, i) => t !== want[i])) {
+          // Emptying a bare last line is the one honest mismatch: it reads back
+          // as no line at all, which planLineEdits refuses by reading it back.
+          const vanished = after === "" && line.breakStart === undefined && got.length === want.length - 1;
+          if (!vanished && (got.length !== want.length || got.some((t, i) => t !== want[i]))) {
             failures.push(`line ${index} → ${JSON.stringify(after)}: got ${JSON.stringify(got)}`);
           }
           if (failures.length >= 5) break;
@@ -193,7 +182,6 @@ describe("replacing a line's text", () => {
 describe("planning line edits on a presentation", () => {
   const bytes = () => syntheticTextPresentation();
   const doc = () => readPresentation(decodePresentation(bytes()));
-  const linesOf = (b: Uint8Array) => readPresentation(decodePresentation(b)).textBoxes.map((x) => x.lines.map((l) => l.text));
 
   it("writes several lines across boxes and reads back exactly that", () => {
     const changes: LineChange[] = [
@@ -203,11 +191,11 @@ describe("planning line edits on a presentation", () => {
       { boxIndex: 3, lineIndex: 1, text: null },
     ];
     const fixes = planLineEdits(doc(), changes);
-    const want = linesOf(bytes());
+    const want = textLines(bytes());
     want[0] = ["A tidier line", "And one more"];
     want[5] = ["Filled placeholder"];
     want[3] = ["Above", "Below"];
-    expect(linesOf(applyFixes(bytes(), fixes))).toEqual(want);
+    expect(textLines(applyFixes(bytes(), fixes))).toEqual(want);
   });
 
   it("describes each change as the fixer does, so it can be shown before it is made", () => {
@@ -228,15 +216,44 @@ describe("planning line edits on a presentation", () => {
     expect(refuse([{ boxIndex: 99, lineIndex: 0, text: "x" }])).toBe("noSuchLine");
     expect(refuse([{ boxIndex: 0, lineIndex: 9, text: "x" }])).toBe("noSuchLine");
     expect(refuse([{ boxIndex: 0, lineIndex: 0, text: "A tidy line" }])).toBe("unchanged");
-    expect(refuse([{ boxIndex: 0, lineIndex: 0, text: "two\nlines" }])).toBe("unsupported");
+    expect(refuse([{ boxIndex: 0, lineIndex: 0, text: "two\nlines" }])).toBe("notOneLine");
     // The last line of a box has no break to take with it.
-    expect(refuse([{ boxIndex: 0, lineIndex: 1, text: null }])).toBe("unsupported");
+    expect(refuse([{ boxIndex: 0, lineIndex: 1, text: null }])).toBe("lastLine");
     expect(
       refuse([
         { boxIndex: 0, lineIndex: 0, text: "a" },
         { boxIndex: 0, lineIndex: 0, text: "b" },
       ])
     ).toBe("duplicate");
+  });
+
+  it("refuses at plan time a set that would not read back as asked", () => {
+    // Removing a line whose break ends in a control word, and writing at the
+    // start of the next, each put back a delimiter space: composed, the new
+    // line would gain a leading space. Caught before anybody is asked.
+    const rtf = "{\\rtf1 \\cf0 abc\\cf2\\par\\u233 ?xyz}";
+    const one = { name: "x", slideCount: 1, textBoxes: [{ boxIndex: 0, slideIndex: 0, cueName: "1", lines: extractLines(rtf), rtf }] };
+    try {
+      planLineEdits(one, [
+        { boxIndex: 0, lineIndex: 0, text: null },
+        { boxIndex: 0, lineIndex: 1, text: "Néxyz" },
+      ]);
+      expect.unreachable();
+    } catch (e) {
+      expect((e as EditError).reason).toBe("unsupported");
+    }
+  });
+
+  it("refuses at plan time to empty a last line that would then not be read as a line", () => {
+    const rtf = "{\\rtf1 one\\line two}";
+    const one = { name: "x", slideCount: 1, textBoxes: [{ boxIndex: 0, slideIndex: 0, cueName: "1", lines: extractLines(rtf), rtf }] };
+    expect(() => planLineEdits(one, [{ boxIndex: 0, lineIndex: 1, text: "" }])).toThrow(EditError);
+  });
+
+  it("refuses to write into a box that is not an RTF document", () => {
+    const rtf = "";
+    const lines = extractLines(rtf);
+    expect(replaceLineText(rtf, lines[0], "hi")).toBeNull();
   });
 
   it("is refused as stale against a file that changed since it was planned", () => {

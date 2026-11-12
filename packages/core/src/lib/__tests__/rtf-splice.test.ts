@@ -10,19 +10,8 @@ import {
 } from "../rtf";
 import { decodePresentation, readPresentation } from "../presentation";
 import { hasRealLibrary, libraryFiles, readLibraryFile } from "./corpus";
-import { syntheticTextPresentation } from "./synthetic";
+import { rtfWithHeader as rtf, syntheticTextPresentation } from "./synthetic";
 
-/** A minimal document with the header ProPresenter actually writes. */
-function rtf(body: string): string {
-  return (
-    "{\\rtf0\\ansi\\ansicpg1252{\\fonttbl\\f0\\fnil ArialMT;}" +
-    "{\\colortbl;\\red0\\green0\\blue0;}" +
-    "{\\*\\expandedcolortbl;\\csgenericrgb\\c0\\c0\\c0\\c100000;}" +
-    "{\\*\\listtable}{\\*\\listoverridetable}\\uc1\\pard\\f0\\fs100" +
-    body +
-    "}"
-  );
-}
 
 /**
  * The invariants an offset has to satisfy to be worth splicing on.

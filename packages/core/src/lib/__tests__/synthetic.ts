@@ -1,5 +1,6 @@
 import protobuf from "protobufjs";
 import descriptor from "../../generated/pp.descriptor.json";
+import { decodePresentation, readPresentation } from "../presentation";
 
 /**
  * A synthetic media-bin document, built rather than committed.
@@ -411,3 +412,23 @@ export const SYNTHETIC = {
   video: 4,
   image: 9,
 };
+
+/**
+ * A minimal RTF document with the header ProPresenter actually writes, for
+ * tests that work on the RTF itself rather than on a presentation.
+ */
+export function rtfWithHeader(body: string, uc = "\\uc1"): string {
+  return (
+    "{\\rtf0\\ansi\\ansicpg1252{\\fonttbl\\f0\\fnil ArialMT;}" +
+    "{\\colortbl;\\red0\\green0\\blue0;}" +
+    "{\\*\\expandedcolortbl;\\csgenericrgb\\c0\\c0\\c0\\c100000;}" +
+    `{\\*\\listtable}{\\*\\listoverridetable}${uc}\\pard\\f0\\fs100` +
+    body +
+    "}"
+  );
+}
+
+/** Every text box's lines in a presentation, as the checker reads them. */
+export function textLines(bytes: Uint8Array): string[][] {
+  return readPresentation(decodePresentation(bytes)).textBoxes.map((box) => box.lines.map((line) => line.text));
+}

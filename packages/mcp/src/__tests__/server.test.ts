@@ -5,22 +5,27 @@ import fsp from "node:fs/promises";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
-import { ElicitRequestSchema, type ElicitRequest, type ElicitResult } from "@modelcontextprotocol/sdk/types.js";
-import { syntheticMediaFile, syntheticTextPresentation, SYNTHETIC } from "@propresenter-garage/core/lib/__tests__/synthetic";
+import {
+  ElicitRequestSchema,
+  type ClientCapabilities,
+  type ElicitRequest,
+  type ElicitResult,
+} from "@modelcontextprotocol/sdk/types.js";
+import {
+  syntheticMediaFile,
+  syntheticTextPresentation,
+  SYNTHETIC,
+  textLines,
+} from "@propresenter-garage/core/lib/__tests__/synthetic";
 import { encodeDocument, messageType } from "@propresenter-garage/core/lib/decode";
 import { decodeMediaDocument, rawItems, walkNodes } from "@propresenter-garage/core/lib/model";
 import { applyOperations } from "@propresenter-garage/core/lib/operations";
 import { decodePlaylistsDocument, headerEntry, mediaEntry, presentationEntry } from "@propresenter-garage/core/lib/playlists";
-import {
-  decodePresentation,
-  encodePresentation,
-  readPresentation,
-  slidesInOrder,
-} from "@propresenter-garage/core/lib/presentation";
+import { decodePresentation, encodePresentation, slidesInOrder } from "@propresenter-garage/core/lib/presentation";
 import { syntheticPresentationFile } from "@propresenter-garage/core/lib/__tests__/synthetic";
 import { findPresentations, openRoots, readFoundFile, readLibraryFile, resolveInRoots } from "@propresenter-garage/node/library";
 import { parseArgs } from "../args";
-import { createServer } from "../server";
+import { createServer, type ServerOptions } from "../server";
 import { auditMediaBin } from "../tools";
 
 /**
@@ -31,10 +36,10 @@ import { auditMediaBin } from "../tools";
  */
 
 /** A server over the given folders, and a client talking to it over an in-memory pipe. */
-async function connect(roots: string[]) {
-  const server = createServer(await openRoots(roots));
+async function connect(roots: string[], options: ServerOptions = {}, capabilities: ClientCapabilities = {}) {
+  const server = createServer(await openRoots(roots), options);
   const [clientSide, serverSide] = InMemoryTransport.createLinkedPair();
-  const client = new Client({ name: "test", version: "0" });
+  const client = new Client({ name: "test", version: "0" }, { capabilities });
   await Promise.all([server.connect(serverSide), client.connect(clientSide)]);
   const call = async (name: string, args: Record<string, unknown> = {}) => {
     const result = await client.callTool({ name, arguments: args });
@@ -136,10 +141,7 @@ describe("the tools offered", () => {
   });
 
   it("are all read-only, with nothing that edits even offered, when started read-only", async () => {
-    const server = createServer(await openRoots([library]), { readOnly: true });
-    const [clientSide, serverSide] = InMemoryTransport.createLinkedPair();
-    const readOnly = new Client({ name: "test", version: "0" });
-    await Promise.all([server.connect(serverSide), readOnly.connect(clientSide)]);
+    const { client: readOnly } = await connect([library], { readOnly: true });
     const { tools } = await readOnly.listTools();
     expect(tools.map((t) => t.name).sort()).toEqual(READING_TOOLS);
     for (const tool of tools) expect(tool.annotations?.readOnlyHint).toBe(true);
@@ -782,10 +784,7 @@ describe("editing slide text", () => {
   const form = (request: ElicitRequest) =>
     request.params as { message: string; requestedSchema: { properties: Record<string, { description: string }> } };
 
-  const lines = () =>
-    readPresentation(decodePresentation(new Uint8Array(fs.readFileSync(file)))).textBoxes.map((b) =>
-      b.lines.map((l) => l.text)
-    );
+  const lines = () => textLines(new Uint8Array(fs.readFileSync(file)));
 
   beforeAll(async () => {
     dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "pp-mcp-edit-")));
@@ -794,19 +793,15 @@ describe("editing slide text", () => {
     file = path.join(songs, "Song.pro");
     backups = path.join(dir, "Backups");
 
-    const server = createServer(await openRoots([path.join(dir, "ProPresenter")]), { backupDir: backups });
-    const [clientSide, serverSide] = InMemoryTransport.createLinkedPair();
-    editor = new Client({ name: "test", version: "0" }, { capabilities: { elicitation: { form: {} } } });
+    ({ client: editor, call: edit } = await connect(
+      [path.join(dir, "ProPresenter")],
+      { backupDir: backups },
+      { elicitation: { form: {} } }
+    ));
     editor.setRequestHandler(ElicitRequestSchema, (request) => {
       asked.push(request);
       return reply(request);
     });
-    await Promise.all([server.connect(serverSide), editor.connect(clientSide)]);
-    edit = async (name, args = {}) => {
-      const result = await editor.callTool({ name, arguments: args });
-      const text = (result.content as { type: string; text: string }[])[0].text;
-      return { isError: !!result.isError, text, json: () => JSON.parse(text) };
-    };
   });
 
   beforeEach(() => {

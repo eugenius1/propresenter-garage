@@ -361,7 +361,8 @@ export interface SourceEdit {
   /** Exclusive. */
   end: number;
   /**
-   * Text to leave in its place, which is only ever a delimiter space.
+   * Text to leave in its place: a delimiter space after a removal, or the new
+   * text of an insertion, which is a zero-width edit.
    *
    * See {@link endsWithControlWord}: removing a run can leave a control word
    * touching what follows it, and a control word with nothing between it and
@@ -610,7 +611,7 @@ function insertionPoint(rtf: string, line: RtfLine, at: number): number {
   // The empty last line of a document, typically a theme's placeholder box:
   // before the brace that closes the document, not after it.
   const close = rtf.lastIndexOf("}", line.sourceEnd - 1);
-  return close >= line.sourceStart ? close : line.sourceEnd;
+  return Math.max(close, line.sourceStart);
 }
 
 /**
@@ -623,12 +624,17 @@ function insertionPoint(rtf: string, line: RtfLine, at: number): number {
  * where it goes -- the character it replaces, or the one before it -- which
  * is what typing at that point in ProPresenter would do.
  *
- * Null for text with a line break or a control character in it, and for
- * emptying the last line of a box when nothing else is left on it. The
+ * Null for text with a line break or a control character in it, and for a
+ * payload that is not an RTF document, which has nowhere to put new text. The
  * common-ends trim never stops inside a surrogate pair, since a splice
  * between its two escapes would read back as two characters.
+ *
+ * Each edit is right on its own; whether a set of them reads back as asked
+ * once composed -- a removed line's break meeting new text on the next, say --
+ * is for the caller to check by reading the result, as `planLineEdits` does.
  */
 export function replaceLineText(rtf: string, line: RtfLine, after: string): SourceEdit[] | null {
+  if (!rtf.startsWith("{\\rtf")) return null;
   const before = line.text;
   let start = 0;
   while (start < before.length && start < after.length && before[start] === after[start]) start++;
@@ -642,7 +648,7 @@ export function replaceLineText(rtf: string, line: RtfLine, after: string): Sour
   }
   // Never stop between the halves of a surrogate pair: an escape stands for
   // one half, and a splice between them would read back as two characters.
-  const high = (s: string, i: number) => /[\uD800-\uDBFF]/.test(s[i] ?? "");
+  const high = (s: string, i: number) => (s.charCodeAt(i) & 0xfc00) === 0xd800;
   if (start > 0 && high(before, start - 1)) start--;
   if (tail > 0 && high(before, before.length - tail - 1)) tail--;
 
@@ -652,12 +658,7 @@ export function replaceLineText(rtf: string, line: RtfLine, after: string): Sour
 
   const edits = start < cutEnd ? cutsToEdits(rtf, line, [{ start, end: cutEnd }]) : [];
   if (edits === null) return null;
-  if (inserted === "") {
-    // A last line left with neither text nor formatting is no line at all to
-    // a reader, so emptying it would read back as removing it.
-    if (line.breakStart === undefined && extractLines(applyEdits(rtf, edits)).length <= line.index) return null;
-    return edits;
-  }
+  if (inserted === "") return edits;
 
   // The new text goes where the removal begins, or where it would be typed.
   const at = edits.length > 0 ? Math.min(...edits.map((e) => e.start)) : insertionPoint(rtf, line, start);

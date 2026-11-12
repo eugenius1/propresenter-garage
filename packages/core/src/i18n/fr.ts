@@ -337,6 +337,22 @@ export const fr: Dictionary = {
         writeFailed: "le dossier a refusé le fichier",
         stale:
           "ce fichier a changé depuis l’analyse : la correction ne lui correspond plus",
+        moved:
+          "ce fichier n’est plus là où il était, ou il est désormais atteint par un lien symbolique",
+        backupFailed:
+          "une sauvegarde n’a pas pu être faite et vérifiée : rien n’a donc été écrit",
+        readBackFailed:
+          "le fichier sur le disque ne contient pas ce qui a été écrit ; restaurez-le depuis la sauvegarde",
+      },
+      editRefusals: {
+        noSuchLine: "il n’y a pas de zone de texte ou de ligne à cette adresse",
+        duplicate: "deux modifications visent la même ligne",
+        unchanged: "la ligne se lit déjà ainsi",
+        notOneLine:
+          "le texte contient un saut de ligne ou un autre caractère de contrôle : il ne tient pas sur une ligne",
+        lastLine: "la dernière ligne d’une zone de texte ne peut pas être supprimée, seulement vidée",
+        unsupported:
+          "la modification ne se relirait pas comme demandé une fois écrite : elle n’est donc pas proposée",
       },
     },
     mediaBin: {

@@ -73,21 +73,22 @@ export async function openBackupDir(dir: string, roots: readonly string[]): Prom
 export interface Replacement {
   /** A real path inside the roots, as `resolveInRoots` gave it. */
   path: string;
-  /** Hash of the bytes the change was planned against. */
-  originalSha256: string;
+  /** The file as the change was planned against it, just read and checked by the caller. This is what is backed up. */
+  original: Uint8Array;
   updated: Uint8Array;
 }
 
 /**
  * Why a file was left alone.
  *
- * - `changed`: it no longer holds what the change was planned against.
+ * - `stale`: it no longer holds what the change was planned against -- the
+ *   same word `applyFixes` uses for the same thing.
  * - `moved`: it is no longer reached without a symlink, or is outside the roots.
  * - `backupFailed`: a backup could not be made and checked, so nothing was written.
  * - `writeFailed`: the folder would not take the new file; the original is untouched.
  * - `readBackFailed`: the file on disk does not hold what was written. The backup has the original.
  */
-export type WriteRefusal = "changed" | "moved" | "backupFailed" | "writeFailed" | "readBackFailed";
+export type WriteRefusal = "stale" | "moved" | "backupFailed" | "writeFailed" | "readBackFailed";
 
 export interface WriteOutcome {
   path: string;
@@ -101,6 +102,7 @@ export interface WriteOutcome {
 export interface WriteRun {
   /** The dated folder this run's backups are in, if any file got that far. */
   backupFolder?: string;
+  /** One per replacement, in the order given. */
   outcomes: WriteOutcome[];
 }
 
@@ -136,23 +138,27 @@ async function writeNew(file: string, bytes: Uint8Array, mode = 0o644): Promise<
   }
 }
 
-function same(a: Uint8Array, b: Uint8Array): boolean {
-  return a.length === b.length && Buffer.compare(Buffer.from(a.buffer, a.byteOffset, a.length), Buffer.from(b.buffer, b.byteOffset, b.length)) === 0;
-}
+const same = (a: Uint8Array, b: Uint8Array) => Buffer.compare(a, b) === 0;
 
-/** Whether the file is still where it was, unlinked, and still holds the planned bytes. */
-async function stillPlanned(roots: readonly string[], r: Replacement): Promise<WriteRefusal | Uint8Array> {
-  if (!roots.some((root) => isInside(root, r.path)) || !(await isUnmoved(r.path))) return "moved";
-  const { bytes } = await readFoundFile(r.path);
-  return sha256(bytes) === r.originalSha256 ? bytes : "changed";
+const errorDetail = (e: unknown) => (e as NodeJS.ErrnoException).code ?? (e as Error).message;
+
+/** Why the file can no longer be replaced as planned, or nothing if it still can. */
+async function stillPlanned(roots: readonly string[], r: Replacement): Promise<Pick<WriteOutcome, "reason" | "detail"> | undefined> {
+  if (!roots.some((root) => isInside(root, r.path)) || !(await isUnmoved(r.path))) return { reason: "moved" };
+  try {
+    return same((await readFoundFile(r.path)).bytes, r.original) ? undefined : { reason: "stale" };
+  } catch (e) {
+    return { reason: "stale", detail: errorDetail(e) };
+  }
 }
 
 /**
  * Back up, then replace, each file.
  *
- * Every file is checked and backed up before any is written, so a run that
- * cannot back up one file writes none: a person told "a backup is made
- * first" should never find a changed song that is not in it.
+ * Every file is backed up before any is written, so a run that cannot back
+ * up one file writes none: a person told "a backup is made first" should
+ * never find a changed song that is not in it. The caller has just read and
+ * checked each `original`; each is checked again right before it is replaced.
  */
 export async function replaceWithBackup(
   roots: readonly string[],
@@ -160,57 +166,39 @@ export async function replaceWithBackup(
   replacements: readonly Replacement[],
   now = new Date()
 ): Promise<WriteRun> {
-  const outcomes = new Map<string, WriteOutcome>();
-  const ready: { r: Replacement; original: Uint8Array }[] = [];
-
-  for (const r of replacements) {
-    try {
-      const state = await stillPlanned(roots, r);
-      if (typeof state === "string") outcomes.set(r.path, { path: r.path, written: false, reason: state });
-      else ready.push({ r, original: state });
-    } catch (e) {
-      outcomes.set(r.path, { path: r.path, written: false, reason: "changed", detail: (e as Error).message });
-    }
-  }
+  if (replacements.length === 0) return { outcomes: [] };
 
   let backupFolder: string | undefined;
-  if (ready.length > 0) {
-    try {
-      backupFolder = await runFolder(backupDir, now);
-      for (const { r, original } of ready) {
-        const copy = backupPath(backupFolder, roots, r.path);
-        await fs.mkdir(path.dirname(copy), { recursive: true });
-        await writeNew(copy, original);
-        if (!same(new Uint8Array(await fs.readFile(copy)), original)) throw new Error(`${copy} did not read back`);
-        outcomes.set(r.path, { path: r.path, written: false, backup: copy });
-      }
-    } catch (e) {
-      const detail = (e as NodeJS.ErrnoException).code ?? (e as Error).message;
-      for (const { r } of ready) outcomes.set(r.path, { path: r.path, written: false, reason: "backupFailed", detail });
-      return { backupFolder, outcomes: replacements.map((r) => outcomes.get(r.path)!) };
+  const backups: string[] = [];
+  try {
+    backupFolder = await runFolder(backupDir, now);
+    for (const r of replacements) {
+      const copy = backupPath(backupFolder, roots, r.path);
+      await fs.mkdir(path.dirname(copy), { recursive: true });
+      await writeNew(copy, r.original);
+      if (!same(await fs.readFile(copy), r.original)) throw new Error(`${copy} did not read back`);
+      backups.push(copy);
     }
+  } catch (e) {
+    const detail = errorDetail(e);
+    return {
+      backupFolder,
+      outcomes: replacements.map((r) => ({ path: r.path, written: false, reason: "backupFailed", detail })),
+    };
   }
 
-  for (const { r } of ready) {
-    const outcome = outcomes.get(r.path)!;
-    Object.assign(outcome, await replaceOne(roots, r));
+  const outcomes: WriteOutcome[] = [];
+  for (const [i, r] of replacements.entries()) {
+    outcomes.push({ path: r.path, backup: backups[i], ...(await replaceOne(roots, r)) });
   }
-
-  return { backupFolder, outcomes: replacements.map((r) => outcomes.get(r.path)!) };
+  return { backupFolder, outcomes };
 }
 
-async function replaceOne(
-  roots: readonly string[],
-  r: Replacement
-): Promise<Pick<WriteOutcome, "written" | "reason" | "detail">> {
+async function replaceOne(roots: readonly string[], r: Replacement): Promise<Pick<WriteOutcome, "written" | "reason" | "detail">> {
   // Again, right before the rename: the backup took time, and ProPresenter
   // saves whenever it likes.
-  try {
-    const state = await stillPlanned(roots, r);
-    if (typeof state === "string") return { written: false, reason: state };
-  } catch (e) {
-    return { written: false, reason: "changed", detail: (e as Error).message };
-  }
+  const refused = await stillPlanned(roots, r);
+  if (refused) return { written: false, ...refused };
 
   const dir = path.dirname(r.path);
   // Hidden, so a listing caught mid-write never shows it as a presentation.
@@ -221,14 +209,13 @@ async function replaceOne(
     await fs.rename(temp, r.path);
   } catch (e) {
     await fs.rm(temp, { force: true });
-    return { written: false, reason: "writeFailed", detail: (e as NodeJS.ErrnoException).code ?? (e as Error).message };
+    return { written: false, reason: "writeFailed", detail: errorDetail(e) };
   }
 
   try {
-    const { bytes } = await readFoundFile(r.path);
-    if (!same(bytes, r.updated)) return { written: true, reason: "readBackFailed" };
+    if (same((await readFoundFile(r.path)).bytes, r.updated)) return { written: true };
+    return { written: true, reason: "readBackFailed" };
   } catch (e) {
-    return { written: true, reason: "readBackFailed", detail: (e as Error).message };
+    return { written: true, reason: "readBackFailed", detail: errorDetail(e) };
   }
-  return { written: true };
 }

@@ -26,10 +26,9 @@ export function parseArgs(argv: readonly string[]): Args {
         throw new Error(`--read-only takes true or false, not ${value}`);
       }
       args.readOnly = value !== "false";
-    } else if (flag === "--backup-dir" && value) {
-      args.backupDir = value;
     } else if (flag === "--backup-dir") {
-      throw new Error("--backup-dir needs a folder: --backup-dir=<folder>");
+      if (!value) throw new Error("--backup-dir needs a folder: --backup-dir=<folder>");
+      args.backupDir = value;
     } else {
       throw new Error(`Unknown option ${arg}`);
     }

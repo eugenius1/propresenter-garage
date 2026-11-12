@@ -1,17 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { extractLines, extractText } from "../rtf";
+import { rtfWithHeader as rtf } from "./synthetic";
 
-/** A minimal document with the header ProPresenter actually writes. */
-function rtf(body: string): string {
-  return (
-    "{\\rtf0\\ansi\\ansicpg1252{\\fonttbl\\f0\\fnil ArialMT;}" +
-    "{\\colortbl;\\red0\\green0\\blue0;}" +
-    "{\\*\\expandedcolortbl;\\csgenericrgb\\c0\\c0\\c0\\c100000;}" +
-    "{\\*\\listtable}{\\*\\listoverridetable}\\uc1\\pard\\f0\\fs100" +
-    body +
-    "}"
-  );
-}
 
 describe("control words are syntax, not text", () => {
   it("does not mistake a control word's terminating space for a leading space", () => {

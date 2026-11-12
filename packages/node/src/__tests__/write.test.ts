@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { openRoots } from "../library";
-import { openBackupDir, replaceWithBackup, sha256, type Replacement } from "../write";
+import { openBackupDir, replaceWithBackup, type Replacement } from "../write";
 
 /**
  * The disk half of the write path, against real files in a temporary folder:
@@ -25,7 +25,7 @@ function song(name: string, content: string): string {
 }
 
 function replacement(file: string, updated: string): Replacement {
-  return { path: file, originalSha256: sha256(new Uint8Array(fs.readFileSync(file))), updated: bytes(updated) };
+  return { path: file, original: new Uint8Array(fs.readFileSync(file)), updated: bytes(updated) };
 }
 
 beforeEach(async () => {
@@ -62,7 +62,7 @@ describe("replaceWithBackup", () => {
     fs.writeFileSync(file, "ProPresenter saved this meanwhile");
 
     const run = await replaceWithBackup(roots, await openBackupDir(backups, roots), [planned]);
-    expect(run.outcomes[0]).toMatchObject({ written: false, reason: "changed" });
+    expect(run.outcomes[0]).toMatchObject({ written: false, reason: "stale" });
     expect(fs.readFileSync(file, "utf8")).toBe("ProPresenter saved this meanwhile");
   });
 
