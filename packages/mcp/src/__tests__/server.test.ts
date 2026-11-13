@@ -2,18 +2,31 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import fsp from "node:fs/promises";
-import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
-import { syntheticMediaFile, syntheticTextPresentation, SYNTHETIC } from "@propresenter-garage/core/lib/__tests__/synthetic";
+import {
+  ElicitRequestSchema,
+  type ClientCapabilities,
+  type ElicitRequest,
+  type ElicitResult,
+} from "@modelcontextprotocol/sdk/types.js";
+import {
+  syntheticMediaFile,
+  syntheticTextPresentation,
+  SYNTHETIC,
+  textLines,
+} from "@propresenter-garage/core/lib/__tests__/synthetic";
 import { encodeDocument, messageType } from "@propresenter-garage/core/lib/decode";
 import { decodeMediaDocument, rawItems, walkNodes } from "@propresenter-garage/core/lib/model";
 import { applyOperations } from "@propresenter-garage/core/lib/operations";
 import { decodePlaylistsDocument, headerEntry, mediaEntry, presentationEntry } from "@propresenter-garage/core/lib/playlists";
 import { decodePresentation, encodePresentation, slidesInOrder } from "@propresenter-garage/core/lib/presentation";
 import { syntheticPresentationFile } from "@propresenter-garage/core/lib/__tests__/synthetic";
-import { findPresentations, openRoots, readFoundFile, readLibraryFile, resolveInRoots } from "../library";
-import { createServer } from "../server";
+import { findPresentations, openRoots, readFoundFile, readLibraryFile, resolveInRoots } from "@propresenter-garage/node/library";
+import { parseArgs } from "../args";
+import { createServer, type ServerOptions } from "../server";
+import { applyPlan, planSlideEdits, PlanStore } from "../edits";
 import { auditMediaBin } from "../tools";
 
 /**
@@ -24,10 +37,10 @@ import { auditMediaBin } from "../tools";
  */
 
 /** A server over the given folders, and a client talking to it over an in-memory pipe. */
-async function connect(roots: string[]) {
-  const server = createServer(await openRoots(roots));
+async function connect(roots: string[], options: ServerOptions = {}, capabilities: ClientCapabilities = {}) {
+  const server = createServer(await openRoots(roots), options);
   const [clientSide, serverSide] = InMemoryTransport.createLinkedPair();
-  const client = new Client({ name: "test", version: "0" });
+  const client = new Client({ name: "test", version: "0" }, { capabilities });
   await Promise.all([server.connect(serverSide), client.connect(clientSide)]);
   const call = async (name: string, args: Record<string, unknown> = {}) => {
     const result = await client.callTool({ name, arguments: args });
@@ -106,21 +119,34 @@ afterAll(async () => {
   fs.rmSync(tmp, { recursive: true, force: true });
 });
 
+const READING_TOOLS = [
+  "audit_media_bin",
+  "check_presentations",
+  "list_presentations",
+  "list_themes",
+  "preview_style",
+  "read_media_bin",
+  "read_playlists",
+  "read_presentation",
+  "search_text",
+];
+
 describe("the tools offered", () => {
-  it("are all read-only", async () => {
+  it("read, except the one that applies a confirmed edit", async () => {
     const { tools } = await client.listTools();
-    expect(tools.map((t) => t.name).sort()).toEqual([
-      "audit_media_bin",
-      "check_presentations",
-      "list_presentations",
-      "list_themes",
-      "preview_style",
-      "read_media_bin",
-      "read_playlists",
-      "read_presentation",
-      "search_text",
-    ]);
+    expect(tools.map((t) => t.name).sort()).toEqual([...READING_TOOLS, "apply_slide_edits", "plan_slide_edits"].sort());
+    for (const tool of tools) {
+      expect(tool.annotations?.readOnlyHint, tool.name).toBe(tool.name !== "apply_slide_edits");
+    }
+    expect(tools.find((t) => t.name === "apply_slide_edits")?.annotations?.destructiveHint).toBe(true);
+  });
+
+  it("are all read-only, with nothing that edits even offered, when started read-only", async () => {
+    const { client: readOnly } = await connect([library], { readOnly: true });
+    const { tools } = await readOnly.listTools();
+    expect(tools.map((t) => t.name).sort()).toEqual(READING_TOOLS);
     for (const tool of tools) expect(tool.annotations?.readOnlyHint).toBe(true);
+    await readOnly.close();
   });
 
   it("are the ones the Claude Desktop extension says it has", async () => {
@@ -742,5 +768,224 @@ describe("playlists and themes", () => {
     expect(await error({ theme: "Broken" })).toMatch(/not a ProPresenter theme/);
     expect(await error({ theme: "White", fromPresentation: "Libraries/Default/Styled.pro" })).toMatch(/exactly one/);
     expect(await error({ fromPresentation: "Libraries/Default/Styled.pro", style: 99 })).toMatch(/no slide 100/);
+  });
+});
+
+describe("editing slide text", () => {
+  let dir: string;
+  let file: string;
+  let backups: string;
+  /** What the person answers when asked; set per test. */
+  let reply: (request: ElicitRequest) => ElicitResult | Promise<ElicitResult>;
+  let asked: ElicitRequest[];
+  let edit: Awaited<ReturnType<typeof connect>>["call"];
+  let editor: Client;
+
+  /** The form a request asks the person to fill in; this server sends nothing else. */
+  const form = (request: ElicitRequest) =>
+    request.params as { message: string; requestedSchema: { properties: Record<string, { description: string }> } };
+
+  const lines = () => textLines(new Uint8Array(fs.readFileSync(file)));
+
+  beforeAll(async () => {
+    dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "pp-mcp-edit-")));
+    const songs = path.join(dir, "ProPresenter", "Libraries", "Default");
+    fs.mkdirSync(songs, { recursive: true });
+    file = path.join(songs, "Song.pro");
+    backups = path.join(dir, "Backups");
+
+    ({ client: editor, call: edit } = await connect(
+      [path.join(dir, "ProPresenter")],
+      { backupDir: backups },
+      { elicitation: { form: {} } }
+    ));
+    editor.setRequestHandler(ElicitRequestSchema, (request) => {
+      asked.push(request);
+      return reply(request);
+    });
+  });
+
+  beforeEach(() => {
+    fs.writeFileSync(file, syntheticTextPresentation("Song"));
+    fs.rmSync(backups, { recursive: true, force: true });
+    asked = [];
+    reply = (request) => ({
+      action: "accept",
+      content: Object.fromEntries(Object.keys(form(request).requestedSchema.properties).map((k) => [k, true])),
+    });
+  });
+
+  afterAll(async () => {
+    await editor?.close();
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  const plan = async (edits: Record<string, unknown>[]) =>
+    (await edit("plan_slide_edits", { edits: edits.map((e) => ({ path: "Libraries/Default/Song.pro", ...e })) })).json();
+
+  it("plans without writing, showing each line as it is and as it would read", async () => {
+    const before = fs.readFileSync(file);
+    const planned = await plan([{ boxIndex: 0, lineIndex: 0, text: "A tidier line" }]);
+    expect(planned.files[0].lines).toEqual([
+      expect.objectContaining({ n: 1, slideIndex: 0, group: "Verse", before: "A tidy line", after: "A tidier line" }),
+    ]);
+    expect(fs.readFileSync(file)).toEqual(before);
+  });
+
+  it("asks the person, then writes what they confirmed and backs up the original first", async () => {
+    const original = fs.readFileSync(file);
+    const { planId } = await plan([
+      { boxIndex: 0, lineIndex: 0, text: "A tidier line" },
+      { boxIndex: 6, lineIndex: 0, text: "Que ton nom" },
+    ]);
+    const result = (await edit("apply_slide_edits", { planId })).json();
+
+    expect(asked).toHaveLength(1);
+    const { message, requestedSchema } = form(asked[0]);
+    expect(message).toContain(backups);
+    expect(requestedSchema.properties.line1.description).toBe("“A tidy line” → “A tidier line”");
+    expect((requestedSchema.properties.line1 as { title?: string }).title).toMatch(/text box 1, line 1/);
+
+    expect(result).toMatchObject({ answer: "accept", files: [{ written: true, lines: 2 }] });
+    expect(lines()[0]).toEqual(["A tidier line", "And another"]);
+    expect(lines()[6][0]).toBe("Que ton nom");
+    expect(fs.readFileSync(result.files[0].backup)).toEqual(original);
+  });
+
+  it("writes only the lines left ticked", async () => {
+    reply = () => ({ action: "accept", content: { line1: false, line2: true } });
+    const { planId } = await plan([
+      { boxIndex: 0, lineIndex: 0, text: "Not this" },
+      { boxIndex: 0, lineIndex: 1, text: "But this" },
+    ]);
+    await edit("apply_slide_edits", { planId });
+    expect(lines()[0]).toEqual(["A tidy line", "But this"]);
+  });
+
+  it("writes nothing when the person declines, and the plan cannot be replayed", async () => {
+    const before = fs.readFileSync(file);
+    reply = () => ({ action: "decline" });
+    const { planId } = await plan([{ boxIndex: 0, lineIndex: 0, text: "Nope" }]);
+    expect((await edit("apply_slide_edits", { planId })).json()).toEqual({ answer: "decline", files: [] });
+    expect(fs.readFileSync(file)).toEqual(before);
+    expect(fs.existsSync(backups)).toBe(false);
+
+    reply = () => ({ action: "accept", content: { line1: true } });
+    const again = await edit("apply_slide_edits", { planId });
+    expect(again.isError).toBe(true);
+    expect(fs.readFileSync(file)).toEqual(before);
+  });
+
+  it("writes nothing when the client gives up on the call before the person answers", async () => {
+    const before = fs.readFileSync(file);
+    const { planId } = await plan([{ boxIndex: 0, lineIndex: 0, text: "Too late" }]);
+    const controller = new AbortController();
+    let answer!: () => void;
+    const answered = new Promise<void>((resolve) => (answer = resolve));
+    reply = () => {
+      // The person is still reading when the client cancels; they accept after.
+      controller.abort();
+      return answered.then(() => ({ action: "accept" as const, content: { line1: true } }));
+    };
+    const call = editor.callTool({ name: "apply_slide_edits", arguments: { planId } }, undefined, {
+      signal: controller.signal,
+    });
+    await expect(call).rejects.toThrow();
+    answer();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(fs.readFileSync(file)).toEqual(before);
+  });
+
+  it("applies two plans for one song one after the other, so the second is refused rather than landing over the first", async () => {
+    const first = await plan([{ boxIndex: 0, lineIndex: 0, text: "From the first plan" }]);
+    const second = await plan([{ boxIndex: 0, lineIndex: 1, text: "From the second plan" }]);
+    const results = await Promise.all([
+      edit("apply_slide_edits", { planId: first.planId }),
+      edit("apply_slide_edits", { planId: second.planId }),
+    ]);
+    const [a, b] = results.map((r) => r.json().files[0]);
+    expect(a).toMatchObject({ written: true });
+    expect(b).toMatchObject({ written: false, reason: "stale" });
+    expect(lines()[0]).toEqual(["From the first plan", "And another"]);
+  });
+
+  it("writes nothing for a confirmed plan whose call was cancelled while it waited its turn", async () => {
+    const before = fs.readFileSync(file);
+    const roots = await openRoots([path.join(dir, "ProPresenter")]);
+    const store = new PlanStore();
+    const { planId } = await planSlideEdits(roots, store, [
+      { path: file, boxIndex: 0, lineIndex: 0, text: "Queued, then cancelled" },
+    ]);
+    const plan = store.take(planId)!;
+    const controller = new AbortController();
+    controller.abort();
+    await expect(applyPlan(roots, plan, new Set([1]), backups, controller.signal)).rejects.toThrow(/cancelled/);
+    expect(fs.readFileSync(file)).toEqual(before);
+    expect(fs.existsSync(backups)).toBe(false);
+  });
+
+  it("leaves alone a file that changed after the plan was made", async () => {
+    const { planId } = await plan([{ boxIndex: 0, lineIndex: 0, text: "Mine" }]);
+    fs.writeFileSync(file, syntheticTextPresentation("Saved by ProPresenter meanwhile"));
+    const changed = fs.readFileSync(file);
+    const result = (await edit("apply_slide_edits", { planId })).json();
+    expect(result.files[0]).toMatchObject({ written: false, reason: "stale" });
+    expect(fs.readFileSync(file)).toEqual(changed);
+  });
+
+  it("refuses to plan the lot when one edit cannot be made", async () => {
+    const result = await edit("plan_slide_edits", {
+      edits: [
+        { path: "Libraries/Default/Song.pro", boxIndex: 0, lineIndex: 0, text: "Fine" },
+        { path: "Libraries/Default/Song.pro", boxIndex: 0, lineIndex: 1, text: "two\nlines" },
+      ],
+    });
+    expect(result.isError).toBe(true);
+    expect(result.text).toMatch(/box 0 line 1: .*line break.*Nothing was planned/);
+  });
+
+  it("refuses to plan a path outside the library", async () => {
+    const result = await edit("plan_slide_edits", { edits: [{ path: "../../secret.pro", boxIndex: 0, lineIndex: 0, text: "x" }] });
+    expect(result.isError).toBe(true);
+  });
+
+  it("refuses to plan a file that is not a presentation", async () => {
+    const playlist = path.join(dir, "ProPresenter", "Libraries", "Default", "Notes.txt");
+    fs.writeFileSync(playlist, "not a song");
+    const result = await edit("plan_slide_edits", { edits: [{ path: playlist, boxIndex: 0, lineIndex: 0, text: "x" }] });
+    expect(result.isError).toBe(true);
+    expect(result.text).toMatch(/Not a presentation/);
+  });
+
+  it("writes nothing through a client that cannot ask its user", async () => {
+    // The shared client declares no elicitation: no person to confirm.
+    const shared = path.join(library, "Libraries", "Default", "Checked Song.pro");
+    const before = fs.readFileSync(shared);
+    const { planId } = (
+      await call("plan_slide_edits", { edits: [{ path: shared, boxIndex: 0, lineIndex: 0, text: "Unconfirmed" }] })
+    ).json();
+    const result = await call("apply_slide_edits", { planId });
+    expect(result.isError).toBe(true);
+    expect(result.text).toMatch(/cannot ask its user/);
+    expect(fs.readFileSync(shared)).toEqual(before);
+  });
+});
+
+describe("the command line", () => {
+  it("takes folders, --read-only and --backup-dir", () => {
+    expect(parseArgs(["/a", "/b"])).toEqual({ folders: ["/a", "/b"], readOnly: false });
+    expect(parseArgs(["--read-only", "/a"])).toMatchObject({ folders: ["/a"], readOnly: true });
+    expect(parseArgs(["--backup-dir=/x=y", "/a"])).toMatchObject({ backupDir: "/x=y" });
+  });
+
+  it("takes the Claude Desktop extension's --read-only=true|false", () => {
+    expect(parseArgs(["--read-only=true"]).readOnly).toBe(true);
+    expect(parseArgs(["--read-only=false"]).readOnly).toBe(false);
+    expect(() => parseArgs(["--read-only=yes"])).toThrow();
+  });
+
+  it("refuses an option it does not know rather than reading it as a folder", () => {
+    expect(() => parseArgs(["--readonly"])).toThrow(/Unknown option/);
+    expect(() => parseArgs(["--backup-dir"])).toThrow(/needs a folder/);
   });
 });

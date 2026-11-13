@@ -51,7 +51,7 @@ import {
   resolveFolder,
   resolveInRoots,
   statFoundFile,
-} from "./library";
+} from "@propresenter-garage/node/library";
 
 /**
  * What each tool returns, as plain data.
@@ -62,10 +62,10 @@ import {
  * `lineIndex`) are the same ones the presentation fixer writes back to, so a
  * later write tool can take exactly what these handed out.
  *
- * Nothing here writes. See `library.ts`.
+ * Nothing here writes; writing is `edits.ts`.
  */
 
-function presentationName(file: string): string {
+export function presentationName(file: string): string {
   return path.basename(file).replace(/\.pro$/i, "");
 }
 
@@ -83,7 +83,7 @@ function explain(problem: ReadProblem, detail = ""): string {
   return problem === "unreadable" ? f(problems.unreadable, { reason: detail }) : problems[problem];
 }
 
-function open(file: string, bytes: Uint8Array) {
+export function open(file: string, bytes: Uint8Array) {
   const opened = openPresentation(bytes);
   if (opened.problem) throw new LibraryError(`${file}: ${explain(opened.problem, opened.detail)}`);
   return opened;

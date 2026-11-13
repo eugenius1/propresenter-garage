@@ -361,7 +361,8 @@ export interface SourceEdit {
   /** Exclusive. */
   end: number;
   /**
-   * Text to leave in its place, which is only ever a delimiter space.
+   * Text to leave in its place: a delimiter space after a removal, or the new
+   * text of an insertion, which is a zero-width edit.
    *
    * See {@link endsWithControlWord}: removing a run can leave a control word
    * touching what follows it, and a control word with nothing between it and
@@ -463,29 +464,46 @@ export function cutsToEdits(
  * trailing space behind it -- and that is agreement, not conflict. A merged
  * range keeps the replacement of the edit that starts it, since that is the
  * one whose left-hand join it inherits.
+ *
+ * A zero-width edit is an insertion, and is never merged: its text is new
+ * content, which no other edit can stand in for. It lands at its own offset,
+ * before any removal starting there, or just after a removal it falls inside.
  */
 export function applyEdits(rtf: string, edits: readonly SourceEdit[]): string {
-  const ordered = [...edits]
-    .filter((e) => e.end > e.start)
+  const ordered = edits
+    .filter((e) => e.end > e.start || (e.end === e.start && e.insert))
     .sort((a, b) => a.start - b.start || a.end - b.end);
   if (ordered.length === 0) return rtf;
 
   let out = "";
   let cursor = 0;
-  let { start: from, end: to, insert } = ordered[0];
+  /** The removal being widened, not yet written out. */
+  let open: SourceEdit | undefined;
+  const flush = () => {
+    if (!open) return;
+    out += rtf.slice(cursor, open.start) + (open.insert ?? "");
+    cursor = open.end;
+    open = undefined;
+  };
 
-  for (const edit of ordered.slice(1)) {
-    if (edit.start <= to) {
-      to = Math.max(to, edit.end);
-      continue;
+  for (const edit of ordered) {
+    if (edit.end === edit.start) {
+      flush();
+      const at = Math.max(cursor, edit.start);
+      out += rtf.slice(cursor, at) + edit.insert;
+      cursor = at;
+    } else if (open && edit.start <= open.end) {
+      open.end = Math.max(open.end, edit.end);
+    } else if (edit.end > cursor) {
+      // A removal partly behind the cursor -- inside one already written out,
+      // with an insertion between -- takes only what is still ahead of it.
+      flush();
+      open = { ...edit, start: Math.max(edit.start, cursor) };
     }
-    out += rtf.slice(cursor, from) + (insert ?? "");
-    cursor = to;
-    ({ start: from, end: to, insert } = edit);
   }
 
-  out += rtf.slice(cursor, from) + (insert ?? "");
-  return out + rtf.slice(to);
+  flush();
+  return out + rtf.slice(cursor);
 }
 
 /**
@@ -512,6 +530,163 @@ export function lineEdit(rtf: string, line: RtfLine): SourceEdit[] | null {
     ? { start, end: line.breakEnd, insert: " " }
     : { start, end: line.breakEnd };
   return [...text, brk];
+}
+
+/**
+ * The `\ucN` in force at a point in the source: how many fallback characters
+ * a `\u` escape written there must carry.
+ *
+ * Inserted text has to match it exactly. Too few, and the reader swallows the
+ * first characters of whatever follows as the escape's fallback; too many, and
+ * a stray "?" shows on the slide. `\ucN` is scoped to its group, so this
+ * tracks the group stack the way {@link extractLines} does.
+ */
+export function unicodeSkipAt(rtf: string, index: number): number {
+  let skip = 1;
+  const stack: number[] = [];
+  let i = 0;
+  while (i < index) {
+    const ch = rtf[i];
+    if (ch === "{") {
+      stack.push(skip);
+      i++;
+    } else if (ch === "}") {
+      skip = stack.pop() ?? 1;
+      i++;
+    } else if (ch === "\\") {
+      CONTROL_WORD.lastIndex = i;
+      const match = CONTROL_WORD.exec(rtf);
+      if (!match) {
+        // A control symbol: two characters, never a group or a \uc.
+        i += 2;
+        continue;
+      }
+      if (match[1] === "uc") skip = match[2] === undefined ? 1 : Number(match[2]);
+      i += match[0].length;
+    } else {
+      i++;
+    }
+  }
+  return skip;
+}
+
+/** Whether a UTF-16 code unit is a control character other than a tab, which cannot sit on one line of a slide. */
+function isLineControl(code: number): boolean {
+  return (code < 0x20 && code !== 0x09) || code === 0x7f;
+}
+
+/** Whether text holds a line break or another control character, so it cannot sit on one line. */
+export function hasLineControl(text: string): boolean {
+  for (let i = 0; i < text.length; i++) if (isLineControl(text.charCodeAt(i))) return true;
+  return false;
+}
+
+/**
+ * Plain text as RTF a slide will read back exactly, or null for text that
+ * cannot sit on one line: a line break, or any other control character.
+ *
+ * Written the way ProPresenter writes: ASCII as itself, everything above it as
+ * a `\uN` escape, never a raw byte, since the payload is read as latin-1 and a
+ * raw "é" would be a different character to another reader. The three
+ * characters RTF reserves are escaped, and a tab is `\tab`.
+ *
+ * Every control word ends with its delimiter space, whatever follows it --
+ * the text after an insertion is the document's, not this function's, and a
+ * `\tab` meeting a letter would be a different control word.
+ *
+ * @param skip The `\ucN` in force where this goes; see {@link unicodeSkipAt}.
+ */
+export function encodeRtfText(text: string, skip: number): string | null {
+  let out = "";
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    const code = text.charCodeAt(i);
+    if (ch === "\\" || ch === "{" || ch === "}") out += "\\" + ch;
+    else if (ch === "\t") out += "\\tab ";
+    else if (isLineControl(code)) return null;
+    else if (code < 0x7f) out += ch;
+    // UTF-16 code units, so a character past the BMP is a surrogate pair of
+    // escapes, which is how RTF spells one; signed, since \u takes a 16-bit
+    // signed number.
+    else out += `\\u${code > 0x7fff ? code - 0x10000 : code} ` + "?".repeat(skip);
+  }
+  return out;
+}
+
+/** Where text typed at `at` on a line goes in the source, keeping the formatting of the character before it. */
+function insertionPoint(rtf: string, line: RtfLine, at: number): number {
+  if (at > 0) {
+    const span = line.spans.find((s) => s.textStart < at && at <= s.textEnd)!;
+    return span.plain ? span.sourceStart + (at - span.textStart) : span.sourceEnd;
+  }
+  if (line.spans.length > 0) return line.spans[0].sourceStart;
+  if (line.breakStart !== undefined) return line.breakStart;
+  // The empty last line of a document, typically a theme's placeholder box:
+  // before the brace that closes the document, not after it.
+  const close = rtf.lastIndexOf("}", line.sourceEnd - 1);
+  return Math.max(close, line.sourceStart);
+}
+
+/**
+ * Splice that makes a line read `after`, or null when that cannot be done.
+ *
+ * Only what differs is touched: the characters the two share at either end
+ * are left where they are, so "Amazing grace" to "Amazing Grace" replaces one
+ * letter, and a bold word elsewhere on the line stays bold because its
+ * formatting is never in the splice. New text takes the formatting in force
+ * where it goes -- the character it replaces, or the one before it -- which
+ * is what typing at that point in ProPresenter would do.
+ *
+ * Null for text with a line break or a control character in it, and for a
+ * payload that is not an RTF document, which has nowhere to put new text. The
+ * common-ends trim never stops inside a surrogate pair, since a splice
+ * between its two escapes would read back as two characters.
+ *
+ * Each edit is right on its own; whether a set of them reads back as asked
+ * once composed -- a removed line's break meeting new text on the next, say --
+ * is for the caller to check by reading the result, as `planLineEdits` does.
+ */
+export function replaceLineText(rtf: string, line: RtfLine, after: string): SourceEdit[] | null {
+  if (!rtf.startsWith("{\\rtf")) return null;
+  const before = line.text;
+  let start = 0;
+  while (start < before.length && start < after.length && before[start] === after[start]) start++;
+  let tail = 0;
+  while (
+    tail < before.length - start &&
+    tail < after.length - start &&
+    before[before.length - 1 - tail] === after[after.length - 1 - tail]
+  ) {
+    tail++;
+  }
+  // Never stop between the halves of a surrogate pair: an escape stands for
+  // one half, and a splice between them would read back as two characters.
+  const high = (s: string, i: number) => (s.charCodeAt(i) & 0xfc00) === 0xd800;
+  if (start > 0 && high(before, start - 1)) start--;
+  if (tail > 0 && high(before, before.length - tail - 1)) tail--;
+
+  const cutEnd = before.length - tail;
+  const inserted = after.slice(start, after.length - tail);
+  if (start === cutEnd && inserted === "") return [];
+
+  const edits = start < cutEnd ? cutsToEdits(rtf, line, [{ start, end: cutEnd }]) : [];
+  if (edits === null) return null;
+  if (inserted === "") return edits;
+
+  // The new text goes where the removal begins, or where it would be typed.
+  const at = edits.length > 0 ? Math.min(...edits.map((e) => e.start)) : insertionPoint(rtf, line, start);
+  // A \ucN no real writer uses -- negative, or large enough to make the
+  // fallback run a denial of service -- is a document this does not write into.
+  const skip = unicodeSkipAt(rtf, at);
+  if (skip < 0 || skip > 8) return null;
+  const encoded = encodeRtfText(inserted, skip);
+  if (encoded === null) return null;
+
+  // A delimiter the removal would have put back belongs before the new text,
+  // not after it; and one is needed anyway where a control word ends at `at`.
+  const removals = edits.map((e) => (e.start === at ? { start: e.start, end: e.end } : e));
+  const delimiter = endsWithControlWord(rtf, at) ? " " : "";
+  return [{ start: at, end: at, insert: delimiter + encoded }, ...removals];
 }
 
 /**

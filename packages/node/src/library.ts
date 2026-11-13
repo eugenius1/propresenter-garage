@@ -12,8 +12,8 @@ import { isPresentationFile } from "@propresenter-garage/core/lib/folder";
  * themselves are resolved once at start-up for the same reason.
  *
  * Read-only by construction: nothing in this module opens a file for writing.
- * The write path for presentations has four guards (AGENTS.md); a server that
- * cannot write needs none of them, and that is the point of this phase.
+ * Writing is `write.ts`, which keeps the guards AGENTS.md lists and leans on
+ * the checks here to know a path is still the one it was given.
  */
 
 /** Larger than any real library file by a wide margin, small enough to refuse a disk image. */
@@ -51,7 +51,7 @@ export async function openRoots(dirs: readonly string[]): Promise<string[]> {
   return roots;
 }
 
-function isInside(root: string, target: string): boolean {
+export function isInside(root: string, target: string): boolean {
   const rel = path.relative(root, target);
   return rel !== ".." && !rel.startsWith(`..${path.sep}`) && !path.isAbsolute(rel);
 }
@@ -89,7 +89,7 @@ export async function resolveInRoots(roots: readonly string[], p: string): Promi
  * resolved roots without following a link, so one that fails this has had a
  * folder or file swapped for a symlink since.
  */
-async function isUnmoved(p: string): Promise<boolean> {
+export async function isUnmoved(p: string): Promise<boolean> {
   return (await fs.realpath(p).catch(() => undefined)) === p;
 }
 

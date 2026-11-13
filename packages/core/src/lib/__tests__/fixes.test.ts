@@ -8,7 +8,7 @@ import {
 } from "../presentation";
 import { extractLines } from "../rtf";
 import { hasRealLibrary, libraryFiles, readLibraryFile } from "./corpus";
-import { syntheticTextPresentation } from "./synthetic";
+import { syntheticTextPresentation, textLines } from "./synthetic";
 
 const ALL: TextIssueKind[] = [
   "leadingSpace",
@@ -25,14 +25,6 @@ function plan(bytes: Uint8Array, kinds: TextIssueKind[] = ALL) {
   const issues = checkPresentation("x.pro", doc).issues.filter((i) => kinds.includes(i.kind));
   return planFixes(doc, issues);
 }
-
-/** Read a file back the way the interface would, for checking what changed. */
-function linesOf(bytes: Uint8Array): string[][] {
-  return readPresentation(decodePresentation(bytes)).textBoxes.map((b) =>
-    b.lines.map((l) => l.text)
-  );
-}
-
 
 /** One text box holding one line, written as RTF and read back. */
 function docOf(body: string) {
@@ -144,9 +136,9 @@ describe("planning", () => {
 describe("applying", () => {
   it("fixes exactly the lines it was given and no others", () => {
     const bytes = synthetic();
-    const before = linesOf(bytes);
+    const before = textLines(bytes);
     const fixes = plan(bytes, ["leadingSpace"]);
-    const after = linesOf(applyFixes(bytes, fixes));
+    const after = textLines(applyFixes(bytes, fixes));
 
     expect(after[1]).toEqual(["Fine here", "leading space"]);
     // Every other box comes back exactly as it was.
@@ -157,8 +149,8 @@ describe("applying", () => {
 
   it("shortens the box when a blank line is removed", () => {
     const bytes = synthetic();
-    expect(linesOf(bytes)[3]).toEqual(["Above", "", "Below"]);
-    const after = linesOf(applyFixes(bytes, plan(bytes, ["blankLine"])));
+    expect(textLines(bytes)[3]).toEqual(["Above", "", "Below"]);
+    const after = textLines(applyFixes(bytes, plan(bytes, ["blankLine"])));
     expect(after[3]).toEqual(["Above", "Below"]);
   });
 
@@ -271,8 +263,8 @@ describe.skipIf(!hasRealLibrary)("a whole real library", () => {
       const fixes = plan(bytes);
       if (fixes.length === 0) continue;
 
-      const before = linesOf(bytes);
-      const after = linesOf(applyFixes(bytes, fixes));
+      const before = textLines(bytes);
+      const after = textLines(applyFixes(bytes, fixes));
       const touched = new Set(fixes.map((f) => f.boxIndex));
 
       before.forEach((box, index) => {
@@ -296,7 +288,7 @@ describe("running over several files", () => {
     expect(outcomes.map((o) => o.path)).toEqual(["a.pro", "Chants/b.pro"]);
     for (const outcome of outcomes) {
       expect(outcome.reason).toBeUndefined();
-      expect(linesOf(outcome.bytes!)[1]).toEqual(["Fine here", "leading space"]);
+      expect(textLines(outcome.bytes!)[1]).toEqual(["Fine here", "leading space"]);
     }
   });
 
@@ -306,7 +298,7 @@ describe("running over several files", () => {
       read,
       write: async (path, bytes) => void written.set(path, bytes),
     });
-    expect(linesOf(written.get("a.pro")!)[1]).toEqual(["Fine here", "leading space"]);
+    expect(textLines(written.get("a.pro")!)[1]).toEqual(["Fine here", "leading space"]);
   });
 
   it("carries on past a file it cannot fix", async () => {

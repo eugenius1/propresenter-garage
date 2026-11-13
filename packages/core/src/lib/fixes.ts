@@ -20,7 +20,10 @@ import {
 import {
   applyEdits,
   cutsToEdits,
+  extractLines,
+  hasLineControl,
   lineEdit,
+  replaceLineText,
   type RtfLine,
   type SourceEdit,
   type TextCut,
@@ -82,6 +85,11 @@ export interface LineFix {
    * offsets into.
    */
   source: string;
+}
+
+/** Box by box, line by line: the order a slide is read in. */
+function byReadingOrder(a: LineFix, b: LineFix): number {
+  return a.boxIndex - b.boxIndex || a.lineIndex - b.lineIndex;
 }
 
 /** An address that names one line, for grouping findings and ticking boxes. */
@@ -192,7 +200,106 @@ export function planFixes(doc: PresentationDoc, issues: readonly TextIssue[]): L
   }
 
   // Back into reading order, which is the order the findings were listed in.
-  return fixes.sort((a, b) => a.boxIndex - b.boxIndex || a.lineIndex - b.lineIndex);
+  return fixes.sort(byReadingOrder);
+}
+
+/** One line as somebody wants it to read, by the address `readPresentation` gives it. */
+export interface LineChange {
+  boxIndex: number;
+  lineIndex: number;
+  /** What the line should read, on one line; null removes the line. */
+  text: string | null;
+}
+
+/**
+ * Why a requested change could not be planned.
+ *
+ * - `noSuchLine`: the file has no such box or line.
+ * - `duplicate`: two changes name the same line.
+ * - `unchanged`: the line already reads that.
+ * - `notOneLine`: the text holds a line break or another control character.
+ * - `lastLine`: removing the last line of a box, which has no break to take with it.
+ * - `unsupported`: the change would not read back as asked once spliced --
+ *   emptying a last line with nothing else on it, which reads as no line at
+ *   all, or a box that is not an RTF document.
+ */
+export type EditRefusal = "noSuchLine" | "duplicate" | "unchanged" | "notOneLine" | "lastLine" | "unsupported";
+
+export class EditError extends Error {
+  readonly reason: EditRefusal;
+  readonly change: LineChange;
+
+  constructor(reason: EditRefusal, change: LineChange) {
+    super(`${reason} at box ${change.boxIndex}, line ${change.lineIndex}`);
+    this.name = "EditError";
+    this.reason = reason;
+    this.change = change;
+  }
+}
+
+/**
+ * Plan line changes asked for in words rather than found by a check.
+ *
+ * The result is the same `LineFix` the checks produce, so it goes through the
+ * same `applyFixes` -- the same fidelity gate, the same staleness check and
+ * the same read-back of every line in the file. There is one write path, and
+ * this is a second way into it rather than a second path. It carries no
+ * `kinds`: nothing was found, somebody asked.
+ *
+ * All or nothing: one change that cannot be planned refuses the lot, since a
+ * half-applied set of edits to a song is worse than none.
+ *
+ * Each box is spliced and read back here too, with every planned change in
+ * it, so a set of edits that would only fail `applyFixes`' read-back is
+ * refused before anybody is asked to approve it rather than after.
+ */
+export function planLineEdits(doc: PresentationDoc, changes: readonly LineChange[]): LineFix[] {
+  const boxes = new Map(doc.textBoxes.map((box) => [box.boxIndex, box]));
+  const seen = new Set<string>();
+  const fixes: LineFix[] = [];
+
+  for (const change of changes) {
+    const box = boxes.get(change.boxIndex);
+    const line = box?.lines[change.lineIndex];
+    if (!box || !line) throw new EditError("noSuchLine", change);
+    const key = fixKey(change);
+    if (seen.has(key)) throw new EditError("duplicate", change);
+    seen.add(key);
+    if (change.text === line.text) throw new EditError("unchanged", change);
+    if (change.text !== null && hasLineControl(change.text)) throw new EditError("notOneLine", change);
+
+    const edits =
+      change.text === null ? lineEdit(box.rtf, line) : replaceLineText(box.rtf, line, change.text);
+    if (edits === null) throw new EditError(change.text === null ? "lastLine" : "unsupported", change);
+
+    fixes.push({
+      boxIndex: box.boxIndex,
+      lineIndex: line.index,
+      slideIndex: box.slideIndex,
+      cueName: box.cueName,
+      groupName: box.groupName,
+      kinds: [],
+      before: line.text,
+      after: change.text,
+      edits,
+      source: box.rtf,
+    });
+  }
+
+  for (const box of doc.textBoxes) {
+    const mine = fixes.filter((fix) => fix.boxIndex === box.boxIndex);
+    if (mine.length === 0) continue;
+    const got = extractLines(applyEdits(box.rtf, mine.flatMap((fix) => fix.edits))).map((line) => line.text);
+    const want = expected(box, mine);
+    if (got.length !== want.length || got.some((text, i) => text !== want[i])) {
+      // Named by the box's first change: which of several broke it cannot be
+      // told from the result.
+      const [first] = mine;
+      throw new EditError("unsupported", { boxIndex: first.boxIndex, lineIndex: first.lineIndex, text: first.after });
+    }
+  }
+
+  return fixes.sort(byReadingOrder);
 }
 
 /** Why a file was not written. Carries a code; the interface supplies the words. */

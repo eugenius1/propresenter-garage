@@ -136,8 +136,10 @@ corpus checked out once — `checkTypeFidelity()` takes the message type, so a
 presentation goes through the same gate as a playlist.
 
 The Media Bin's exports emit a differently named file rather than overwriting.
-The presentation fixer does write in place, under four conditions listed in
-[AGENTS.md](AGENTS.md) — read those before adding anything that writes.
+Presentation text is written in place — by the web app's fixer and the MCP
+server's edit tools, both through `applyFixes()` — under four guards listed
+in [AGENTS.md](AGENTS.md), with where each surface keeps each one. Read those
+before adding anything that writes.
 
 ## Testing against real files
 
@@ -175,6 +177,14 @@ minutes where the work itself takes seconds.
 `packages/core/src/lib/__tests__/fixes.test.ts` then runs the real thing: every findable
 problem in every file fixed, read back, and checked both for being gone and for
 having left every untouched box alone.
+
+`packages/core/src/lib/__tests__/line-edit.test.ts` is the same gate for
+writing text rather than cutting it: for every line of every box, text typed
+at the start, the middle and the end, accented and astral characters, RTF's
+reserved characters and a whole-line rewrite, each read back exactly with
+every other line unchanged. Without a library it runs the same contract
+exhaustively — every insertion, deletion and replacement at every position —
+over hand-written documents built to hit each trap above.
 
 ## Checked against ProPresenter
 
@@ -232,6 +242,19 @@ back, and only where the word has not already got one.
 for one "é": the `?` is there for readers without Unicode and is swallowed on
 the way in. A span covering only `\u233 ` would leave a stray "?" on the slide
 when the é is deleted.
+
+**Writing new text meets the same traps from the other side.** `replaceLineText`
+in `packages/core/src/lib/rtf.ts` splices in only what differs, so formatting
+elsewhere on the line survives, and `encodeRtfText` writes the text the way
+ProPresenter does. Three things it has to get right: an escape written in
+must carry exactly as many fallback characters as the `\ucN` in force there
+(`unicodeSkipAt`), or the reader eats the next real character or shows a
+"?"; text written straight after a control word needs a delimiter space, or
+"x" after `\cb2` becomes `\cb2x`; and an insertion is a zero-width edit that
+`applyEdits` must never merge into a neighbouring removal, or a line edited
+next to a removed one loses its new text. Emptying the last line of a box is
+refused: a last line with neither text nor formatting is no line at all to a
+reader, so it would read back as a removal.
 
 **`instanceof Uint8Array` fails across realms.** The array protobuf.js hands
 back is not always built from the same global as the code reading it, and
@@ -349,9 +372,10 @@ merged there.
   one.
 - **Never write over an original ProPresenter file unguarded.** Media Bin
   exports are always a differently named copy the reader moves into place
-  themselves, via `exportFilename()` in `packages/core/src/lib/operations.ts`. The one path
-  that writes in place is the presentation fixer, under the four conditions
-  set out in [AGENTS.md](AGENTS.md).
+  themselves, via `exportFilename()` in `packages/core/src/lib/operations.ts`. Presentation
+  text is written in place only through `applyFixes()`, by the web app's
+  fixer and the MCP server's edit tools, under the four guards set out in
+  [AGENTS.md](AGENTS.md).
 - **Never commit a real ProPresenter library.** Real `.pro` files, media-bin
   playlists and media folders are somebody's personal data. `private/` at
   the root is gitignored for exactly this; development copies go there, in
@@ -369,27 +393,32 @@ they may never read.
 ## Layout
 
 What other code imports or npm installs lives under `packages/`, and the
-deployed site under `apps/`, one version between all three:
+deployed site under `apps/`, one version between all four:
 
 - **`core`** (`@propresenter-garage/core`, private): reading, checking and
   editing ProPresenter files — `src/lib/`, the vendored schema in `proto/`,
   the descriptor generated from it, and the dictionaries in `src/i18n/`. No
   UI and no Node APIs; its source is typechecked without Node's types so
-  neither creeps in. It is never built on its own: `web` and `mcp` import its
-  TypeScript directly (`@propresenter-garage/core/lib/presentation`) and
-  bundle what they use.
+  neither creeps in. It is never built on its own: `web`, `node` and `mcp`
+  import its TypeScript directly (`@propresenter-garage/core/lib/presentation`)
+  and bundle what they use.
+- **`node`** (`@propresenter-garage/node`, private): the library on disk, for
+  whatever runs under Node — `library.ts` to find and read files without
+  leaving the configured folders, `write.ts` to back them up and replace them.
+  Kept out of `mcp` so a command line can share the one write path rather
+  than grow a second.
 - **`web`** (`@propresenter-garage/web`, private): the installable browser
   app — React, the PWA, its stylesheet and icons, and the two browser-only
   pieces of `lib/`, persistence and routing.
 - **`mcp`** (`propresenter-garage-mcp`, published to npm): the MCP server.
 
-`core` and `mcp` may import only what their own `package.json` declares, and
-`packages/mcp/src/__tests__/workspace.test.ts` fails if either reaches for
+`core`, `node` and `mcp` may import only what their own `package.json` declares, and
+`packages/mcp/src/__tests__/workspace.test.ts` fails if any reaches for
 anything else. npm hoists every dependency to the root, so an undeclared
 import would otherwise resolve quietly, and for `mcp` it would drag the app
 into the server's bundle.
 
-All three carry the root's version, and the same test fails if one drifts.
+All four carry the root's version, and the same test fails if one drifts.
 Bump them together with `npm version <v> --workspaces --include-workspace-root`.
 
 `apps/web/src/App.tsx` is the shell — title, appearance and language
@@ -405,9 +434,11 @@ it exists. Its `vite.config.ts` bundles it into one self-contained file,
 points at it and there are no runtime dependencies, so `npx` starts it with
 nothing to install. npm packs only what is inside the package, so
 `packages/mcp/LICENSE` is a committed copy of the root licence, which the same
-test holds equal. `library.ts` is the only place it touches the disk: every
-path a tool is given is resolved with `realpath` before it is compared with
-the configured folders, and nothing opens a file for writing. Node has no
+test holds equal. It touches the disk only through `packages/node`.
+In `library.ts` there, every path a tool is given is resolved with `realpath`
+before it is compared with the configured folders, and nothing opens a file
+for writing; `write.ts` is the only code that does, and `edits.ts` in the
+server the only caller. Node has no
 `openat`, so an open cannot be anchored to a folder; every file is checked
 again once it is open, and every folder before the walk lists it, so a folder
 swapped for a symlink in between is refused rather than followed out.

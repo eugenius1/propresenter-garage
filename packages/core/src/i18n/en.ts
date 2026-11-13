@@ -325,6 +325,18 @@ export const en = {
         verifyFailed: "the result did not read back as expected, so it was not saved",
         writeFailed: "the folder would not accept the file",
         stale: "this file changed since it was scanned, so the fix no longer fits it",
+        moved: "this file is no longer where it was, or is now reached through a symlink",
+        backupFailed: "a backup could not be made and checked, so nothing was written",
+        readBackFailed: "the file on disk does not hold what was written; restore it from the backup",
+      },
+      // Why a change asked for in words, rather than found by a check, cannot be made.
+      editRefusals: {
+        noSuchLine: "there is no such text box or line",
+        duplicate: "two changes name the same line",
+        unchanged: "the line already reads that",
+        notOneLine: "the text holds a line break or another control character, so it cannot sit on one line",
+        lastLine: "the last line of a text box cannot be removed, only emptied",
+        unsupported: "the change would not read back as asked once written, so it is not offered",
       },
     },
     mediaBin: {

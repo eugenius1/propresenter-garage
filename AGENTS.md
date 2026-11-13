@@ -51,23 +51,31 @@ The Media Bin tool never does it at all: its exports are a differently named
 copy the user moves into place themselves — see `exportFilename()` in
 `packages/core/src/lib/operations.ts`.
 
-The presentation fixer is the one path that does write in place, and it is
-allowed to only because all four of these hold. Do not add a fifth write path
-that keeps fewer of them, and do not quietly drop one from this one:
+Presentation text is written in place, and only through `applyFixes()` in
+`packages/core/src/lib/fixes.ts`. Every surface that writes must keep all four
+of these guards. Each is defined by what it protects, so a new surface keeps
+it in its own form; do not add a write path that keeps fewer, and do not
+quietly drop one from a path that has them:
 
 1. **The fidelity gate passes on that file**, checked as the file is written
    rather than inferred from the corpus. The schema is reverse-engineered and
    protobuf.js silently drops fields it does not declare. See *The export
    safety gate* in CONTRIBUTING.md.
-2. **The user has downloaded a backup** of exactly the files about to change.
-   The button that writes is disabled until they have, and goes back to being
-   disabled if the selection grows past what the backup covers.
-3. **Every line was shown and ticked.** The user sees the line as it is and as
-   it would read before anything happens, and the fix run touches only what is
-   still ticked.
+2. **A backup of exactly the files about to change exists before any of them
+   changes**, and the run stops if it cannot be made.
+3. **A person saw every line and chose it.** They see each line as it is and
+   as it would read before anything happens, and the run touches only what
+   they left chosen. The model never answers for them.
 4. **The result is read back and compared** to what was promised, for every
-   line of every box including the ones no fix touched. A file that comes back
-   saying anything else is not written.
+   line of every box including the ones no change touched. A file that comes
+   back saying anything else is not written.
 
-`applyFixes()` in `packages/core/src/lib/fixes.ts` enforces 1 and 4 and cannot
-be bypassed; 2 and 3 live in `apps/web/src/tools/Presentations.tsx`.
+| Guard | Web app (`apps/web/src/tools/Presentations.tsx`) | MCP server (`packages/mcp/src/edits.ts`) |
+| --- | --- | --- |
+| 1, 4 | `applyFixes()` | `applyFixes()`, run again on the file as read at apply time |
+| 2 | The write button stays disabled until the user downloads a backup zip covering the selection | `replaceWithBackup()` in `packages/node/src/write.ts` copies every file out of the library, reads each copy back, and writes nothing if one fails |
+| 3 | Every line shown with a tick box | `apply_slide_edits` takes only a plan id, and the server asks the person through MCP elicitation, one tick box per line; a client that cannot ask gets nothing written |
+
+A command line, when there is one, uses `packages/node` for 2 and must get 3
+from a person at a terminal, or from a plan file a person reviewed — never
+from a flag a script can pass on its own.
