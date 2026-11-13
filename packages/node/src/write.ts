@@ -212,12 +212,18 @@ async function stillPlanned(roots: readonly string[], r: Replacement): Promise<P
  * up one file writes none: a person told "a backup is made first" should
  * never find a changed song that is not in it. The caller has just read and
  * checked each `original`; each is checked again right before it is replaced.
+ *
+ * `signal` is checked once, at the last moment nothing has changed: after
+ * every backup is made and flushed, before the first original is replaced.
+ * A cancelled run throws there and writes nothing. Past that point it
+ * finishes, since stopping between files would leave some songs changed and
+ * others not, which is harder to reason about than either outcome.
  */
 export async function replaceWithBackup(
   roots: readonly string[],
   backupDir: string,
   replacements: readonly Replacement[],
-  now = new Date()
+  { now = new Date(), signal }: { now?: Date; signal?: AbortSignal } = {}
 ): Promise<WriteRun> {
   if (replacements.length === 0) return { outcomes: [] };
 
@@ -247,6 +253,12 @@ export async function replaceWithBackup(
       backupFolder,
       outcomes: replacements.map((r) => ({ path: r.path, written: false, reason: "backupFailed", detail })),
     };
+  }
+
+  if (signal?.aborted) {
+    throw new LibraryError(
+      `The call was cancelled before any file changed, so nothing was written. Its backups are in ${backupFolder}.`
+    );
   }
 
   const outcomes: WriteOutcome[] = [];

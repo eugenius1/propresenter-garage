@@ -303,7 +303,9 @@ async function applyPlanNow(
   if (replacements.length > 0) {
     // And once more at the last moment before anything on disk changes.
     stopIfCancelled(signal);
-    const run = await replaceWithBackup(roots, await openBackupDir(backupDir, roots), replacements);
+    // And inside, once the backups are made, right before the first original
+    // changes: backing up takes time, and the client can give up during it.
+    const run = await replaceWithBackup(roots, await openBackupDir(backupDir, roots), replacements, { signal });
     backupFolder = run.backupFolder;
     const byPath = new Map(run.outcomes.map((outcome) => [outcome.path, outcome]));
     for (const file of files) Object.assign(file, byPath.get(file.path));

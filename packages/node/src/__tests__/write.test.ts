@@ -76,6 +76,18 @@ describe("replaceWithBackup", () => {
     expect(fs.statSync(run.backupFolder!).mode & 0o777).toBe(0o700);
   });
 
+  it("writes nothing when the call is cancelled while the backups are being made", async () => {
+    const file = song("Song.pro", "before");
+    const controller = new AbortController();
+    const run = replaceWithBackup(roots, await openBackupDir(backups, roots), [replacement(file, "after")], {
+      signal: controller.signal,
+    });
+    // The run is now inside its first await, making the backup.
+    controller.abort();
+    await expect(run).rejects.toThrow(/cancelled before any file changed/);
+    expect(fs.readFileSync(file, "utf8")).toBe("before");
+  });
+
   it("leaves no temporary file beside the original", async () => {
     const file = song("Song.pro", "before");
     await replaceWithBackup(roots, await openBackupDir(backups, roots), [replacement(file, "after")]);
@@ -110,8 +122,8 @@ describe("replaceWithBackup", () => {
     const file = song("Song.pro", "one");
     const dir = await openBackupDir(backups, roots);
     const now = new Date("2026-01-02T03:04:05Z");
-    const first = await replaceWithBackup(roots, dir, [replacement(file, "two")], now);
-    const second = await replaceWithBackup(roots, dir, [replacement(file, "three")], now);
+    const first = await replaceWithBackup(roots, dir, [replacement(file, "two")], { now });
+    const second = await replaceWithBackup(roots, dir, [replacement(file, "three")], { now });
     expect(first.backupFolder).not.toBe(second.backupFolder);
     expect(fs.readFileSync(first.outcomes[0].backup!, "utf8")).toBe("one");
     expect(fs.readFileSync(second.outcomes[0].backup!, "utf8")).toBe("two");
